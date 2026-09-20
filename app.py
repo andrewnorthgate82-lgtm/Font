@@ -1,3 +1,4 @@
+from image_generator import generate_scorecard_png, generate_dashboard_png
 # -*- coding: utf-8 -*-
 import os
 import re
@@ -368,6 +369,59 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             </div>
         </div>
 
+        
+        <div class="card" style="border-top: 5px solid #8E44AD;">
+            <div class="card-header">
+                <h2>📸 دریافت تصویر باکیفیت کارنامه و داشبورد (جهت ارسال در ایتا / بله / واتساپ)</h2>
+            </div>
+            <p style="font-size: 13.5px; line-height: 1.7; color: #444; margin-bottom: 15px;">
+                بدون نیاز به گرفتن اسکرین‌شات یا اجرای ماکرو، می‌توانید تصویر رسمی کارنامه هر شهرستان یا داشبورد کل استان را به صورت فایل عکس (PNG) دانلود فرمایید:
+            </p>
+            <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 15px;">
+                <label style="font-weight: bold; font-size: 14px;">انتخاب شهرستان جهت دریافت کارنامه:</label>
+                <select id="selectDistrict" style="padding: 10px 14px; font-size: 14px; border-radius: 6px; border: 1px solid #BDC3C7; font-weight: bold; color: #1B365D;">
+                    <option value="کاشان">کاشان</option>
+                    <option value="نجف آباد">نجف آباد</option>
+                    <option value="شاهین شهر">شاهین شهر</option>
+                    <option value="لنجان">لنجان</option>
+                    <option value="خمینی شهر">خمینی شهر</option>
+                    <option value="آران و بیدگل">آران و بیدگل</option>
+                    <option value="امام حسین(ع)">امام حسین(ع)</option>
+                    <option value="امام رضا(ع)">امام رضا(ع)</option>
+                    <option value="امام صادق(ع)">امام صادق(ع)</option>
+                    <option value="امام علی(ع)">امام علی(ع)</option>
+                    <option value="اردستان">اردستان</option>
+                    <option value="برخوار">برخوار</option>
+                    <option value="بویین و میاندشت">بویین و میاندشت</option>
+                    <option value="تیران و کرون">تیران و کرون</option>
+                    <option value="جرقویه">جرقویه</option>
+                    <option value="چادگان">چادگان</option>
+                    <option value="خوانسار">خوانسار</option>
+                    <option value="خور و بیابانک">خور و بیابانک</option>
+                    <option value="درچه">درچه</option>
+                    <option value="دهاقان">دهاقان</option>
+                    <option value="سمیرم">سمیرم</option>
+                    <option value="شهرضا">شهرضا</option>
+                    <option value="فریدن">فریدن</option>
+                    <option value="فریدون شهر">فریدون شهر</option>
+                    <option value="فلاورجان">فلاورجان</option>
+                    <option value="کوهپایه">کوهپایه</option>
+                    <option value="گلپایگان">گلپایگان</option>
+                    <option value="مبارکه">مبارکه</option>
+                    <option value="نایین">نایین</option>
+                    <option value="نطنز">نطنز</option>
+                    <option value="ورزنه">ورزنه</option>
+                    <option value="هرند">هرند</option>
+                </select>
+                <button class="btn btn-primary" onclick="downloadSelectedScorecard()" style="background: #8E44AD; box-shadow: 0 3px 8px rgba(142,68,173,0.3);">
+                    📸 دانلود تصویر کارنامه این شهرستان (PNG)
+                </button>
+                <button class="btn btn-success" onclick="downloadDashboardImage()" style="margin-right: auto;">
+                    📊 دانلود تصویر داشبورد مدیریتی کل استان (PNG)
+                </button>
+            </div>
+        </div>
+
         <div class="card">
             <div class="card-header">
                 <h2>🛠️ راهنمای اجرای آفلاین روی کامپیوتر شخصی (بدون نیاز به اینترنت)</h2>
@@ -522,7 +576,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             }
         }
 
-        async function generateAndAnalyzeSampleData() {
+        async 
+        function downloadSelectedScorecard() {
+            const d = document.getElementById('selectDistrict').value;
+            window.location.href = '/image/scorecard?district=' + encodeURIComponent(d);
+        }
+        function downloadDashboardImage() {
+            window.location.href = '/image/dashboard';
+        }
+
+        function generateAndAnalyzeSampleData() {
             const btn = document.getElementById('btn-sample');
             btn.innerText = '⏳ در حال تولید داده‌های ۳۲ ناحیه بر مبنای تعداد نفرات...';
             btn.disabled = true;
@@ -554,6 +617,113 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 def index():
     return render_template_string(HTML_TEMPLATE)
 
+
+
+@app.route('/image/scorecard')
+def get_scorecard_img():
+    d_name = request.args.get('district', 'کاشان')
+    wb = openpyxl.load_workbook(MAIN_EXCEL_PATH, data_only=True)
+    ws_target = wb['پایگاه داده حد انتظار']
+    ws_rep = wb['گزارش عملکرد ماهانه']
+    ws_dash = wb['داشبورد مانیتورینگ نواحی']
+    
+    # Get target
+    t_data = {'branches': 5, 'hozori': 155, 'majazi': 1085, 'khalagh': 310, 'tolid': 15, 'neshast': 1}
+    for r in range(2, 34):
+        if ws_target.cell(r, 1).value == d_name:
+            t_data = {
+                'branches': ws_target.cell(r, 2).value or 0,
+                'hozori': ws_target.cell(r, 3).value or 0,
+                'majazi': ws_target.cell(r, 4).value or 0,
+                'khalagh': ws_target.cell(r, 5).value or 0,
+                'tolid': ws_target.cell(r, 6).value or 0,
+                'neshast': ws_target.cell(r, 7).value or 1
+            }
+            break
+            
+    # Get actual
+    a_data = {'hozori': 0, 'majazi': 0, 'khalagh': 0, 'tolid': 0, 'neshast': 0, 'overall_score': 0}
+    for r in range(2, ws_rep.max_row + 1):
+        if ws_rep.cell(r, 1).value == d_name:
+            a_data['hozori'] = ws_rep.cell(r, 2).value or 0
+            a_data['majazi'] = ws_rep.cell(r, 3).value or 0
+            a_data['khalagh'] = ws_rep.cell(r, 4).value or 0
+            a_data['tolid'] = ws_rep.cell(r, 5).value or 0
+            a_data['neshast'] = ws_rep.cell(r, 6).value or 0
+            break
+            
+    # Calculate score & rank
+    pcts = []
+    for k in ['hozori', 'majazi', 'khalagh', 'tolid', 'neshast']:
+        t_v = t_data.get(k, 1)
+        a_v = a_data.get(k, 0)
+        pcts.append((a_v / t_v * 100) if t_v > 0 else 0)
+    a_data['overall_score'] = sum(pcts) / len(pcts) if pcts else 0
+    
+    tier = "عالی (۱۰۰٪+)" if a_data['overall_score'] >= 100 else ("خوب (۷۵-۹۹٪)" if a_data['overall_score'] >= 75 else ("متوسط (۵۰-۷۴٪)" if a_data['overall_score'] >= 50 else ("ضعیف" if a_data['overall_score'] > 0 else "ثبت نشده")))
+    
+    img_io = io.BytesIO()
+    generate_scorecard_png(d_name, t_data, a_data, rank="۱", tier=tier, output_path=img_io)
+    img_io.seek(0)
+    
+    import urllib.parse
+    ascii_filename = f"Karnameh_{urllib.parse.quote(d_name)}.png"
+    return send_file(img_io, mimetype="image/png", as_attachment=True, download_name=ascii_filename)
+
+@app.route('/image/dashboard')
+def get_dashboard_img():
+    wb = openpyxl.load_workbook(MAIN_EXCEL_PATH, data_only=True)
+    ws_target = wb['پایگاه داده حد انتظار']
+    ws_rep = wb['گزارش عملکرد ماهانه']
+    
+    # Macro data
+    sum_t_hoz = sum(ws_target.cell(r, 3).value or 0 for r in range(2, 34))
+    sum_t_maj = sum(ws_target.cell(r, 4).value or 0 for r in range(2, 34))
+    sum_t_kha = sum(ws_target.cell(r, 5).value or 0 for r in range(2, 34))
+    sum_t_tol = sum(ws_target.cell(r, 6).value or 0 for r in range(2, 34))
+    sum_t_nes = sum(ws_target.cell(r, 7).value or 0 for r in range(2, 34))
+    
+    sum_a_hoz = sum(ws_rep.cell(r, 2).value or 0 for r in range(2, 34))
+    sum_a_maj = sum(ws_rep.cell(r, 3).value or 0 for r in range(2, 34))
+    sum_a_kha = sum(ws_rep.cell(r, 4).value or 0 for r in range(2, 34))
+    sum_a_tol = sum(ws_rep.cell(r, 5).value or 0 for r in range(2, 34))
+    sum_a_nes = sum(ws_rep.cell(r, 6).value or 0 for r in range(2, 34))
+    
+    macro_data = [
+        ('سواد رسانه حضوری و توانمندسازی (۳۱×)', int(sum_t_hoz), int(sum_a_hoz)),
+        ('سواد رسانه مجازی و لایو (۲۱۷×)', int(sum_t_maj), int(sum_a_maj)),
+        ('اقدامات و ابتکارات خلاقانه (۶۲×)', int(sum_t_kha), int(sum_a_kha)),
+        ('تولیدات رسانه‌ای و محتوایی (۳×)', int(sum_t_tol), int(sum_a_tol)),
+        ('نشست با انجمن مدرسان (۱ نشست)', int(sum_t_nes), int(sum_a_nes))
+    ]
+    
+    # Calculate district scores
+    dist_scores = []
+    for r in range(2, 34):
+        dname = ws_target.cell(r, 1).value
+        p_list = []
+        for c_idx in range(2, 7):
+            t_v = ws_target.cell(r, c_idx + 1).value or 1
+            a_v = ws_rep.cell(r, c_idx).value or 0
+            p_list.append((a_v / t_v * 100) if t_v > 0 else 0)
+        s = sum(p_list) / len(p_list)
+        dist_scores.append((dname, s))
+        
+    dist_scores.sort(key=lambda x: x[1], reverse=True)
+    top5 = [(i+1, dist_scores[i][0], dist_scores[i][1]) for i in range(min(5, len(dist_scores)))]
+    bot5 = [(i+1, dist_scores[len(dist_scores)-1-i][0], dist_scores[len(dist_scores)-1-i][1]) for i in range(min(5, len(dist_scores)))]
+    
+    avg_score = sum(x[1] for x in dist_scores) / len(dist_scores) if dist_scores else 0
+    top_d = dist_scores[0][0] if dist_scores and dist_scores[0][1] > 0 else "در انتظار"
+    rep_cnt = sum(1 for x in dist_scores if x[1] > 0)
+    
+    kpi_data = {'avg_score': avg_score, 'top_district': top_d, 'reported_count': rep_cnt}
+    
+    img_io = io.BytesIO()
+    generate_dashboard_png(macro_data, top5, bot5, kpi_data, output_path=img_io)
+    img_io.seek(0)
+    
+    return send_file(img_io, mimetype="image/png", as_attachment=True, download_name="Dashboard_Monitoring_Isfahan.png")
 
 @app.route('/download/zip')
 def download_zip():

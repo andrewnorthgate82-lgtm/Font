@@ -241,3 +241,104 @@ def process_all_reports(reports_folder="گزارشات_ماهانه", master_exc
 
 if __name__ == '__main__':
     process_all_reports()
+    generate_all_images_offline()
+
+def generate_all_images_offline(master_excel="تهیه کارنامه نواحی.xlsx"):
+    try:
+        from image_generator import generate_scorecard_png, generate_dashboard_png
+    except ImportError:
+        print("⚠️ ماژول‌های تولید تصویر نصب نیستند یا یافت نشدند.")
+        return
+        
+    out_dir = "تصاویر_کارنامه‌ها"
+    os.makedirs(out_dir, exist_ok=True)
+    print("-" * 70)
+    print(f"📸 در حال تولید تصاویر کارنامه برای تمامی ۳۲ شهرستان در پوشه '{out_dir}'...")
+    
+    wb = openpyxl.load_workbook(master_excel, data_only=True)
+    ws_target = wb['پایگاه داده حد انتظار']
+    ws_rep = wb['گزارش عملکرد ماهانه']
+    
+    targets = {}
+    for r in range(2, 34):
+        dn = ws_target.cell(r, 1).value
+        targets[dn] = {
+            'branches': ws_target.cell(r, 2).value or 0,
+            'hozori': ws_target.cell(r, 3).value or 0,
+            'majazi': ws_target.cell(r, 4).value or 0,
+            'khalagh': ws_target.cell(r, 5).value or 0,
+            'tolid': ws_target.cell(r, 6).value or 0,
+            'neshast': ws_target.cell(r, 7).value or 1
+        }
+        
+    actuals = {}
+    for r in range(2, ws_rep.max_row + 1):
+        dn = ws_rep.cell(r, 1).value
+        if dn:
+            actuals[dn] = {
+                'hozori': ws_rep.cell(r, 2).value or 0,
+                'majazi': ws_rep.cell(r, 3).value or 0,
+                'khalagh': ws_rep.cell(r, 4).value or 0,
+                'tolid': ws_rep.cell(r, 5).value or 0,
+                'neshast': ws_rep.cell(r, 6).value or 0
+            }
+            
+    # Calculate scores & ranks
+    dist_scores = []
+    for dn, t in targets.items():
+        a = actuals.get(dn, {'hozori': 0, 'majazi': 0, 'khalagh': 0, 'tolid': 0, 'neshast': 0})
+        pcts = []
+        for k in ['hozori', 'majazi', 'khalagh', 'tolid', 'neshast']:
+            tv = t.get(k, 1)
+            av = a.get(k, 0)
+            pcts.append((av / tv * 100) if tv > 0 else 0)
+        sc = sum(pcts) / len(pcts) if pcts else 0
+        a['overall_score'] = sc
+        dist_scores.append((dn, sc))
+        
+    dist_scores.sort(key=lambda x: x[1], reverse=True)
+    rank_map = {item[0]: (idx + 1) for idx, item in enumerate(dist_scores)}
+    
+    count_img = 0
+    for dn in DISTRICTS:
+        t = targets.get(dn, {})
+        a = actuals.get(dn, {'overall_score': 0})
+        sc = a.get('overall_score', 0)
+        rk = rank_map.get(dn, "-") if sc > 0 else "-"
+        tier = "عالی (۱۰۰٪+)" if sc >= 100 else ("خوب (۷۵-۹۹٪)" if sc >= 75 else ("متوسط (۵۰-۷۴٪)" if sc >= 50 else ("ضعیف" if sc > 0 else "ثبت نشده")))
+        
+        out_p = os.path.join(out_dir, f"کارنامه_{dn}.png")
+        generate_scorecard_png(dn, t, a, rank=str(rk), tier=tier, output_path=out_p)
+        count_img += 1
+
+    # Also generate provincial dashboard image
+    sum_t_hoz = sum(targets[d]['hozori'] for d in targets)
+    sum_t_maj = sum(targets[d]['majazi'] for d in targets)
+    sum_t_kha = sum(targets[d]['khalagh'] for d in targets)
+    sum_t_tol = sum(targets[d]['tolid'] for d in targets)
+    sum_t_nes = sum(targets[d]['neshast'] for d in targets)
+    
+    sum_a_hoz = sum(actuals.get(d, {}).get('hozori', 0) for d in targets)
+    sum_a_maj = sum(actuals.get(d, {}).get('majazi', 0) for d in targets)
+    sum_a_kha = sum(actuals.get(d, {}).get('khalagh', 0) for d in targets)
+    sum_a_tol = sum(actuals.get(d, {}).get('tolid', 0) for d in targets)
+    sum_a_nes = sum(actuals.get(d, {}).get('neshast', 0) for d in targets)
+    
+    macro_data = [
+        ('سواد رسانه حضوری و توانمندسازی (۳۱×)', int(sum_t_hoz), int(sum_a_hoz)),
+        ('سواد رسانه مجازی و لایو (۲۱۷×)', int(sum_t_maj), int(sum_a_maj)),
+        ('اقدامات و ابتکارات خلاقانه (۶۲×)', int(sum_t_kha), int(sum_a_kha)),
+        ('تولیدات رسانه‌ای و محتوایی (۳×)', int(sum_t_tol), int(sum_a_tol)),
+        ('نشست با انجمن مدرسان (۱ نشست)', int(sum_t_nes), int(sum_a_nes))
+    ]
+    top5 = [(i+1, dist_scores[i][0], dist_scores[i][1]) for i in range(min(5, len(dist_scores)))]
+    bot5 = [(i+1, dist_scores[len(dist_scores)-1-i][0], dist_scores[len(dist_scores)-1-i][1]) for i in range(min(5, len(dist_scores)))]
+    avg_sc = sum(x[1] for x in dist_scores) / len(dist_scores) if dist_scores else 0
+    top_d = dist_scores[0][0] if dist_scores and dist_scores[0][1] > 0 else "در انتظار"
+    rep_c = sum(1 for x in dist_scores if x[1] > 0)
+    
+    kpi_d = {'avg_score': avg_sc, 'top_district': top_d, 'reported_count': rep_c}
+    dash_path = "تصویر_داشبورد_مدیریتی_استان.png"
+    generate_dashboard_png(macro_data, top5, bot5, kpi_d, output_path=dash_path)
+    
+    print(f"🎉 تعداد {count_img} تصویر کارنامه در پوشه '{out_dir}' و ۱ تصویر داشبورد مدیریتی ذخیره شد!")
