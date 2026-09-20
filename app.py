@@ -381,8 +381,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 <li>روی فایل <code>اجرای_تجمیع_نواحی.bat</code> دوبار کلیک کنید. سیستم تمام ستون‌های «تعداد نفرات» را جمع زده و در ۲ ثانیه کارنامه را تکمیل می‌کند!</li>
             </ol>
             <div>
+                <a href="/download/zip" class="btn btn-success" style="font-size: 14.5px; padding: 11px 22px; margin-left: 10px;">
+                    🎁 دانلود بسته کامل آفلاین (فایل ZIP آماده برای کامپیوتر)
+                </a>
                 <a href="/download/script" class="btn btn-secondary">
-                    🐍 دانلود اسکریپت آفلاین (تجمیع_خودکار_نواحی.py)
+                    🐍 دانلود تکی اسکریپت (تجمیع_خودکار_نواحی.py)
                 </a>
             </div>
         </div>
@@ -550,6 +553,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
+
+
+@app.route('/download/zip')
+def download_zip():
+    p = os.path.join(BASE_DIR, "بسته_آفلاین_مانیتورینگ_نواحی.zip")
+    return send_file(p, as_attachment=True, download_name="بسته_آفلاین_مانیتورینگ_نواحی.zip")
 
 @app.route('/download/master')
 def download_master():
