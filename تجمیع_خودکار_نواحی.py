@@ -6,13 +6,6 @@
 ====================================================================
 مبنای محاسبه: «مجموع تعداد نفرات» ثبت‌شده در ستون‌های نفرات کلاس‌ها
 ====================================================================
-نحوه استفاده در کامپیوتر:
-۱. این فایل و فایل «تهیه کارنامه نواحی.xlsx» را در یک پوشه قرار دهید.
-۲. یک پوشه با نام «گزارشات_ماهانه» در کنار این فایل بسازید.
-۳. فایل‌های اکسل ۳۲ کارمند/ناحیه را داخل پوشه «گزارشات_ماهانه» کپی کنید.
-۴. روی فایل «اجرای_تجمیع_نواحی.bat» دو بار کلیک کنید (یا python تجمیع_خودکار_نواحی.py).
-۵. تمام نفرات از کلاس‌ها جمع زده شده و در «تهیه کارنامه نواحی.xlsx» ثبت می‌شود.
-====================================================================
 """
 
 import os
@@ -123,23 +116,24 @@ def process_all_reports(reports_folder="گزارشات_ماهانه", master_exc
     print("=" * 70)
     
     if not os.path.exists(master_excel):
-        print(f"❌ خطا: فایل مقصد '{master_excel}' یافت نشد!")
-        return
+        print(f"❌ خطا: فایل مقصد '{master_excel}' در این پوشه یافت نشد!")
+        return False
         
     if not os.path.exists(reports_folder):
         print(f"📁 پوشه '{reports_folder}' یافت نشد. در حال ساخت پوشه...")
         os.makedirs(reports_folder, exist_ok=True)
-        print(f"⚠️ لطفاً فایل‌های اکسل ماهانه کارمندان را داخل پوشه '{reports_folder}' قرار دهید و مجدداً اجرا فرمایید.")
-        return
+        print(f"⚠️ لطفاً فایل‌های اکسل ماهانه ۳۲ کارمند را داخل پوشه '{reports_folder}' قرار دهید.")
+        return False
         
     excel_files = glob.glob(os.path.join(reports_folder, "*.xlsx"))
     excel_files = [f for f in excel_files if not os.path.basename(f).startswith("~$")]
     
     if not excel_files:
-        print(f"⚠️ هیچ فایل اکسلی در پوشه '{reports_folder}' یافت نشد.")
-        return
+        print(f"⚠️ هیچ فایل اکسلی داخل پوشه '{reports_folder}' پیدا نشد.")
+        print(f"💡 لطفاً فایل‌های گزارش ماهانه را در پوشه '{reports_folder}' کپی کرده و مجدداً اجرا فرمایید.")
+        return False
         
-    print(f"📋 تعداد {len(excel_files)} فایل اکسل در پوشه شناسایی شد.")
+    print(f"📋 تعداد {len(excel_files)} فایل اکسل در پوشه '{reports_folder}' شناسایی شد.")
     print("-" * 70)
     
     extracted = {}
@@ -164,7 +158,6 @@ def process_all_reports(reports_folder="گزارشات_ماهانه", master_exc
                 elif 'خلاق' in cn: ws_khalagh = wb[sname]
                 elif 'تولید' in cn: ws_tolid = wb[sname]
                 
-            # If not detected from filename, detect from sheets
             if not detected:
                 for ws in [ws_hozori, ws_majazi, ws_khalagh, ws_tavanmand]:
                     if ws is None: continue
@@ -187,7 +180,6 @@ def process_all_reports(reports_folder="گزارشات_ماهانه", master_exc
             m_kha = extract_sheet_metrics(ws_khalagh)
             m_tol = extract_sheet_metrics(ws_tolid)
             
-            # مجموع نفرات حضوری + توانمندسازی گردان
             hoz_tot = m_hoz['people_sum'] + m_tav['people_sum']
             hoz_cls = m_hoz['classes_count'] + m_tav['classes_count']
             metric_hoz = hoz_tot if hoz_tot > 0 else hoz_cls
@@ -235,26 +227,26 @@ def process_all_reports(reports_folder="گزارشات_ماهانه", master_exc
             updated_count += 1
             
     wb_master.save(master_excel)
-    print(f"🎉 عملیات با موفقیت پایان یافت! آمار {updated_count} ناحیه بر اساس مجموع تعداد نفرات ثبت شد.")
-    print("📊 اکنون فایل 'تهیه کارنامه نواحی.xlsx' را باز فرمایید؛ تمام محاسبات، رتبه‌ها و داشبورد مانیتورینگ آماده است.")
-    print("=" * 70)
-
-if __name__ == '__main__':
-    process_all_reports()
-    generate_all_images_offline()
+    print(f"🎉 عملیات درج در اکسل پایان یافت! آمار {updated_count} ناحیه ثبت شد.")
+    return True
 
 def generate_all_images_offline(master_excel="تهیه کارنامه نواحی.xlsx"):
     try:
         from image_generator import generate_scorecard_png, generate_dashboard_png
-    except ImportError:
-        print("⚠️ ماژول‌های تولید تصویر نصب نیستند یا یافت نشدند.")
+    except Exception as e:
+        print("⚠️ ماژول‌های تولید تصویر لود نشدند:", e)
+        print("💡 نکته: برای خروجی تصویر در اکسل می‌توانید از دکمه‌های ماکروی تعبیه شده در شیت‌ها استفاده نمایید.")
         return
         
     out_dir = "تصاویر_کارنامه‌ها"
     os.makedirs(out_dir, exist_ok=True)
     print("-" * 70)
-    print(f"📸 در حال تولید تصاویر کارنامه برای تمامی ۳۲ شهرستان در پوشه '{out_dir}'...")
+    print(f"📸 در حال تولید تصاویر باکیفیت کارنامه ۳۲ شهرستان در پوشه '{out_dir}'...")
     
+    if not os.path.exists(master_excel):
+        print(f"❌ فایل '{master_excel}' یافت نشد.")
+        return
+
     wb = openpyxl.load_workbook(master_excel, data_only=True)
     ws_target = wb['پایگاه داده حد انتظار']
     ws_rep = wb['گزارش عملکرد ماهانه']
@@ -283,7 +275,6 @@ def generate_all_images_offline(master_excel="تهیه کارنامه نواحی
                 'neshast': ws_rep.cell(r, 6).value or 0
             }
             
-    # Calculate scores & ranks
     dist_scores = []
     for dn, t in targets.items():
         a = actuals.get(dn, {'hozori': 0, 'majazi': 0, 'khalagh': 0, 'tolid': 0, 'neshast': 0})
@@ -308,10 +299,12 @@ def generate_all_images_offline(master_excel="تهیه کارنامه نواحی
         tier = "عالی (۱۰۰٪+)" if sc >= 100 else ("خوب (۷۵-۹۹٪)" if sc >= 75 else ("متوسط (۵۰-۷۴٪)" if sc >= 50 else ("ضعیف" if sc > 0 else "ثبت نشده")))
         
         out_p = os.path.join(out_dir, f"کارنامه_{dn}.png")
-        generate_scorecard_png(dn, t, a, rank=str(rk), tier=tier, output_path=out_p)
-        count_img += 1
+        try:
+            generate_scorecard_png(dn, t, a, rank=str(rk), tier=tier, output_path=out_p)
+            count_img += 1
+        except Exception as err:
+            print(f"خطا در تولید تصویر کارنامه {dn}: {err}")
 
-    # Also generate provincial dashboard image
     sum_t_hoz = sum(targets[d]['hozori'] for d in targets)
     sum_t_maj = sum(targets[d]['majazi'] for d in targets)
     sum_t_kha = sum(targets[d]['khalagh'] for d in targets)
@@ -339,6 +332,14 @@ def generate_all_images_offline(master_excel="تهیه کارنامه نواحی
     
     kpi_d = {'avg_score': avg_sc, 'top_district': top_d, 'reported_count': rep_c}
     dash_path = "تصویر_داشبورد_مدیریتی_استان.png"
-    generate_dashboard_png(macro_data, top5, bot5, kpi_d, output_path=dash_path)
+    try:
+        generate_dashboard_png(macro_data, top5, bot5, kpi_d, output_path=dash_path)
+    except Exception as err:
+        print(f"خطا در تولید تصویر داشبورد: {err}")
     
-    print(f"🎉 تعداد {count_img} تصویر کارنامه در پوشه '{out_dir}' و ۱ تصویر داشبورد مدیریتی ذخیره شد!")
+    print(f"🎉 تعداد {count_img} تصویر کارنامه در پوشه '{out_dir}' و تصویر داشبورد با موفقیت ذخیره شد!")
+    print("=" * 70)
+
+if __name__ == '__main__':
+    process_all_reports()
+    generate_all_images_offline()
