@@ -378,7 +378,22 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 بدون نیاز به گرفتن اسکرین‌شات یا اجرای ماکرو، می‌توانید تصویر رسمی کارنامه هر شهرستان یا داشبورد کل استان را به صورت فایل عکس (PNG) دانلود فرمایید:
             </p>
             <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 15px;">
-                <label style="font-weight: bold; font-size: 14px;">انتخاب شهرستان جهت دریافت کارنامه:</label>
+                <label style="font-weight: bold; font-size: 14px;">دوره ارزیابی (ماه):</label>
+                <select id="selectMonth" style="padding: 10px 14px; font-size: 14px; border-radius: 6px; border: 1px solid #BDC3C7; font-weight: bold; color: #8E44AD; margin-left: 15px;">
+                    <option value="فروردین">فروردین</option>
+                    <option value="اردیبهشت">اردیبهشت</option>
+                    <option value="خرداد">خرداد</option>
+                    <option value="تیر">تیر</option>
+                    <option value="مرداد">مرداد</option>
+                    <option value="شهریور" selected>شهریور</option>
+                    <option value="مهر">مهر</option>
+                    <option value="آبان">آبان</option>
+                    <option value="آذر">آذر</option>
+                    <option value="دی">دی</option>
+                    <option value="بهمن">بهمن</option>
+                    <option value="اسفند">اسفند</option>
+                </select>
+                <label style="font-weight: bold; font-size: 14px;">انتخاب شهرستان:</label>
                 <select id="selectDistrict" style="padding: 10px 14px; font-size: 14px; border-radius: 6px; border: 1px solid #BDC3C7; font-weight: bold; color: #1B365D;">
                     <option value="کاشان">کاشان</option>
                     <option value="نجف آباد">نجف آباد</option>
@@ -579,10 +594,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         async 
         function downloadSelectedScorecard() {
             const d = document.getElementById('selectDistrict').value;
-            window.location.href = '/image/scorecard?district=' + encodeURIComponent(d);
+            const m = document.getElementById('selectMonth').value;
+            window.location.href = '/image/scorecard?district=' + encodeURIComponent(d) + '&month=' + encodeURIComponent(m);
         }
         function downloadDashboardImage() {
-            window.location.href = '/image/dashboard';
+            const m = document.getElementById('selectMonth').value;
+            window.location.href = '/image/dashboard?month=' + encodeURIComponent(m);
         }
 
         function generateAndAnalyzeSampleData() {
@@ -622,6 +639,7 @@ def index():
 @app.route('/image/scorecard')
 def get_scorecard_img():
     d_name = request.args.get('district', 'کاشان')
+    month = request.args.get('month', 'شهریور')
     wb = openpyxl.load_workbook(MAIN_EXCEL_PATH, data_only=True)
     ws_target = wb['پایگاه داده حد انتظار']
     ws_rep = wb['گزارش عملکرد ماهانه']
@@ -663,7 +681,7 @@ def get_scorecard_img():
     tier = "عالی (۱۰۰٪+)" if a_data['overall_score'] >= 100 else ("خوب (۷۵-۹۹٪)" if a_data['overall_score'] >= 75 else ("متوسط (۵۰-۷۴٪)" if a_data['overall_score'] >= 50 else ("ضعیف" if a_data['overall_score'] > 0 else "ثبت نشده")))
     
     img_io = io.BytesIO()
-    generate_scorecard_png(d_name, t_data, a_data, rank="۱", tier=tier, output_path=img_io)
+    generate_scorecard_png(d_name, t_data, a_data, rank="۱", tier=tier, month=month, output_path=img_io)
     img_io.seek(0)
     
     import urllib.parse
@@ -672,6 +690,7 @@ def get_scorecard_img():
 
 @app.route('/image/dashboard')
 def get_dashboard_img():
+    month = request.args.get('month', 'شهریور')
     wb = openpyxl.load_workbook(MAIN_EXCEL_PATH, data_only=True)
     ws_target = wb['پایگاه داده حد انتظار']
     ws_rep = wb['گزارش عملکرد ماهانه']
@@ -720,7 +739,7 @@ def get_dashboard_img():
     kpi_data = {'avg_score': avg_score, 'top_district': top_d, 'reported_count': rep_cnt}
     
     img_io = io.BytesIO()
-    generate_dashboard_png(macro_data, top5, bot5, kpi_data, output_path=img_io)
+    generate_dashboard_png(macro_data, top5, bot5, kpi_data, month=month, output_path=img_io)
     img_io.seek(0)
     
     return send_file(img_io, mimetype="image/png", as_attachment=True, download_name="Dashboard_Monitoring_Isfahan.png")

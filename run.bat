@@ -3,20 +3,23 @@ chcp 65001 > nul
 cd /d "%~dp0"
 title Nasra District Performance Aggregator
 
-echo ========================================================
+echo ======================================================================
 echo   Nasra District Performance Aggregator ^& Image Generator
-echo ========================================================
+echo   Monitoring and Scorecard Automation - Isfahan Province
+echo ======================================================================
 echo.
+
+set /p USER_MONTH="Enter evaluation month (Press Enter for Excel setting / Shahrivar): "
 
 where python >nul 2>nul
 if %errorlevel% equ 0 (
-    python run_aggregation.py
+    python run_aggregation.py %USER_MONTH%
     goto finish
 )
 
 where py >nul 2>nul
 if %errorlevel% equ 0 (
-    py run_aggregation.py
+    py run_aggregation.py %USER_MONTH%
     goto finish
 )
 
