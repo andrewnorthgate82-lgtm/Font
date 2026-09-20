@@ -58,16 +58,69 @@ def match_district_name(text):
             
     return None
 
-def count_active_rows(ws, check_cols=None):
-    if ws is None:
+def parse_number(val):
+    if val is None:
         return 0
-    if check_cols is None:
-        check_cols = range(2, ws.max_column + 1)
-    count = 0
+    if isinstance(val, (int, float)):
+        return val
+    s = str(val).strip()
+    if not s:
+        return 0
+    # Replace Persian & Arabic digits
+    p_digits = '۰۱۲۳۴۵۶۷۸۹'
+    a_digits = '٠١٢٣٤٥٦٧٨٩'
+    for i in range(10):
+        s = s.replace(p_digits[i], str(i)).replace(a_digits[i], str(i))
+    s = s.replace(',', '').replace('،', '')
+    match = re.search(r'\d+(\.\d+)?', s)
+    if match:
+        try:
+            return float(match.group()) if '.' in match.group() else int(match.group())
+        except:
+            return 0
+    return 0
+
+def extract_sheet_metrics(ws):
+    if ws is None:
+        return {'people_sum': 0, 'classes_count': 0, 'col_name': None}
+    
+    target_col = None
+    target_col_name = None
+    
+    # Look for 'نفر' or 'بازدید'
+    for c in range(1, ws.max_column + 1):
+        h = str(ws.cell(1, c).value or '')
+        if any(k in h for k in ['نفر', 'بازدید']):
+            target_col = c
+            target_col_name = h
+            break
+            
+    # Fallback to 'تعداد' or 'صفح'
+    if target_col is None:
+        for c in range(1, ws.max_column + 1):
+            h = str(ws.cell(1, c).value or '')
+            if any(k in h for k in ['تعداد', 'صفحه', 'صفحات']):
+                target_col = c
+                target_col_name = h
+                break
+
+    total_people = 0
+    active_classes = 0
+    
     for r in range(2, ws.max_row + 1):
-        if any(ws.cell(r, c).value is not None and str(ws.cell(r, c).value).strip() != '' for c in check_cols):
-            count += 1
-    return count
+        # Check if row has active event
+        has_activity = any(ws.cell(r, c).value is not None and str(ws.cell(r, c).value).strip() != '' for c in range(2, ws.max_column + 1))
+        if has_activity:
+            active_classes += 1
+            if target_col:
+                v = ws.cell(r, target_col).value
+                total_people += parse_number(v)
+                
+    return {
+        'people_sum': int(total_people),
+        'classes_count': active_classes,
+        'col_name': target_col_name
+    }
 
 def analyze_workbook_data(wb, filename_hint=""):
     detected_district = match_district_name(filename_hint)
@@ -92,13 +145,12 @@ def analyze_workbook_data(wb, filename_hint=""):
         elif 'تولید' in c_name:
             ws_tolid = wb[name]
 
-    # If district not matched from filename, try sheets
+    # Detect district from inside sheets if not in filename
     if not detected_district:
         for ws in [ws_hozori, ws_majazi, ws_khalagh, ws_tavanmand]:
             if ws is None:
                 continue
             for r in range(2, min(ws.max_row + 1, 25)):
-                # check col 3 and col 4
                 for c in [3, 4, 2]:
                     val = ws.cell(r, c).value
                     matched = match_district_name(val)
@@ -110,7 +162,6 @@ def analyze_workbook_data(wb, filename_hint=""):
             if detected_district:
                 break
 
-    # If still not detected, check 'اطلاعات پایه'
     if not detected_district and 'اطلاعات پایه' in wb.sheetnames:
         ws_info = wb['اطلاعات پایه']
         for r in range(2, ws_info.max_row + 1):
@@ -120,29 +171,51 @@ def analyze_workbook_data(wb, filename_hint=""):
                 detected_district = matched
                 break
 
-    # Row counts
-    cnt_hozori = count_active_rows(ws_hozori, check_cols=[2, 3, 4, 5])
-    cnt_tavanmand = count_active_rows(ws_tavanmand, check_cols=[2, 3, 4, 5])
-    cnt_majazi = count_active_rows(ws_majazi, check_cols=[2, 3, 4, 5])
-    cnt_khalagh = count_active_rows(ws_khalagh, check_cols=[2, 3, 4, 5])
-    cnt_tolid = count_active_rows(ws_tolid, check_cols=[2, 3, 4, 5, 6])
+    # Extract metrics by SUM OF PEOPLE
+    m_hoz = extract_sheet_metrics(ws_hozori)
+    m_tav = extract_sheet_metrics(ws_tavanmand)
+    m_maj = extract_sheet_metrics(ws_majazi)
+    m_kha = extract_sheet_metrics(ws_khalagh)
+    m_tol = extract_sheet_metrics(ws_tolid)
     
-    # Combined Indicator 1: حضوری + توانمندسازی
-    total_hozori_comb = cnt_hozori + cnt_tavanmand
+    # Combined Indicator 1: مجموع نفرات سواد رسانه حضوری + توانمندسازی گردان
+    hoz_people_total = m_hoz['people_sum'] + m_tav['people_sum']
+    hoz_classes_total = m_hoz['classes_count'] + m_tav['classes_count']
+    # If people column was left empty but classes were held, fallback to class count
+    metric_hozori = hoz_people_total if hoz_people_total > 0 else hoz_classes_total
     
-    # Neshast: default to 1 if district conducted activities, or check
-    neshast = 1 if (total_hozori_comb + cnt_majazi + cnt_khalagh + cnt_tolid) > 0 else 0
+    # Indicator 2: سواد رسانه مجازی
+    metric_majazi = m_maj['people_sum'] if m_maj['people_sum'] > 0 else m_maj['classes_count']
+    
+    # Indicator 3: اقدامات خلاقانه
+    metric_khalagh = m_kha['people_sum'] if m_kha['people_sum'] > 0 else m_kha['classes_count']
+    
+    # Indicator 4: تولیدات رسانه‌ای (اگر تعداد صفحات ذکر شده جمع صفحات وگرنه تعداد آثار)
+    metric_tolid = m_tol['people_sum'] if m_tol['people_sum'] > 0 else m_tol['classes_count']
+    
+    # Indicator 5: نشست انجمن مدرسان
+    neshast = 1 if (metric_hozori + metric_majazi + metric_khalagh + metric_tolid) > 0 else 0
 
     return {
         'filename': filename_hint,
         'district': detected_district,
-        'hozori_pure': cnt_hozori,
-        'tavanmand': cnt_tavanmand,
-        'hozori_total': total_hozori_comb,
-        'majazi': cnt_majazi,
-        'khalagh': cnt_khalagh,
-        'tolid': cnt_tolid,
+        # Metrics for Excel insertion (SUM OF PEOPLE)
+        'hozori_total': metric_hozori,
+        'majazi': metric_majazi,
+        'khalagh': metric_khalagh,
+        'tolid': metric_tolid,
         'neshast': neshast,
+        # Detailed breakdowns for UI display
+        'hoz_people': m_hoz['people_sum'],
+        'hoz_classes': m_hoz['classes_count'],
+        'tav_people': m_tav['people_sum'],
+        'tav_classes': m_tav['classes_count'],
+        'maj_people': m_maj['people_sum'],
+        'maj_classes': m_maj['classes_count'],
+        'kha_people': m_kha['people_sum'],
+        'kha_classes': m_kha['classes_count'],
+        'tol_people': m_tol['people_sum'],
+        'tol_classes': m_tol['classes_count'],
         'status': 'شناسایی شد' if detected_district else 'عدم تشخیص ناحیه'
     }
 
@@ -166,7 +239,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
         * { box-sizing: border-box; font-family: 'Tahoma', 'Segoe UI', sans-serif; }
         body { background-color: var(--bg); color: var(--text); margin: 0; padding: 20px; direction: rtl; }
-        .container { max-width: 1100px; margin: 0 auto; }
+        .container { max-width: 1150px; margin: 0 auto; }
         .header {
             background: linear-gradient(135deg, #1B365D, #2C3E50);
             color: white; padding: 25px; border-radius: 12px;
@@ -205,12 +278,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .btn-primary:hover { background: #1F618D; }
         .btn-warning { background: #F39C12; color: white; }
         .btn-warning:hover { background: #D68910; }
-        .btn-danger { background: #E74C3C; color: white; }
         .btn-secondary { background: #7F8C8D; color: white; }
 
         table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 15px; }
-        th { background: #1B365D; color: white; padding: 9px 8px; font-weight: bold; text-align: center; }
-        td { padding: 8px; border-bottom: 1px solid #EAECEE; text-align: center; }
+        th { background: #1B365D; color: white; padding: 10px 8px; font-weight: bold; text-align: center; }
+        td { padding: 9px 8px; border-bottom: 1px solid #EAECEE; text-align: center; }
         tr:nth-child(even) { background-color: #F8FAFC; }
         
         .badge {
@@ -218,31 +290,32 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
         .badge-success { background: #D4EDDA; color: #155724; }
         .badge-danger { background: #F8D7DA; color: #721C24; }
-        .badge-warning { background: #FFF3CD; color: #856404; }
 
         .spinner {
             display: none; border: 4px solid #f3f3f3; border-top: 4px solid #3498db;
-            border-radius: 50%; width: 26px; height: 26px; animation: spin 1s linear infinite;
-            margin: 10px auto;
+            border-radius: 50%; width: 28px; height: 28px; animation: spin 1s linear infinite;
+            margin: 15px auto;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
-        .guide-box {
-            background: #FEF9E7; border-right: 4px solid #F1C40F; padding: 12px 16px;
-            border-radius: 6px; font-size: 13px; line-height: 1.6; color: #7D6608; margin-bottom: 15px;
+        .alert-box {
+            background: #E8F8F5; border-right: 4px solid #27AE60; padding: 12px 16px;
+            border-radius: 6px; font-size: 13px; line-height: 1.7; color: #0E6251; margin-bottom: 15px;
         }
+        .sub-metric { font-size: 11px; color: #666; display: block; margin-top: 2px; }
+        .main-metric { font-size: 14px; font-weight: bold; color: #1B365D; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🚀 سامانه استخراج و مانیتورینگ خودکار کارنامه نواحی نسرا</h1>
-            <p>نسرا استان اصفهان - سال ارزیابی ۱۴۰۵ | بدون نیاز به ورود دستی اعداد در اکسل</p>
+            <h1>🚀 سامانه استخراج خودکار و مانیتورینگ کارنامه نواحی نسرا</h1>
+            <p>نسرا استان اصفهان - سال ۱۴۰۵ | محاسبه هوشمند بر اساس «مجموع تعداد نفرات» کلاس‌ها</p>
         </div>
 
         <div class="card">
             <div class="card-header">
-                <h2>📥 آپلود و تحلیل مستقیم فایل‌های گزارش ماهانه (۳۲ شهرستان)</h2>
+                <h2>📥 آپلود و تحلیل خودکار فایل‌های گزارش ماهانه (۳۲ شهرستان)</h2>
                 <div>
                     <button class="btn btn-warning" onclick="generateAndAnalyzeSampleData()" id="btn-sample">
                         ⚡ آزمایش با ۳۲ فایل تستی نمونه
@@ -253,14 +326,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 </div>
             </div>
 
-            <div class="guide-box">
-                <strong>نحوه کارکرد خودکار:</strong> کافی است تمامی فایل‌های اکسل دریافتی از کارمندان نواحی (تا ۳۲ فایل، یا فایل ZIP حاوی آنها) را در کادر زیر رها فرمایید. سیستم به طور هوشمند نام هر شهرستان را از نام فایل یا محتوای آن تشخیص داده، آمار شیت‌های حضوری، توانمندسازی، مجازی، خلاقانه و تولیدات را استخراج نموده و با یک کلیک در فایل اصلی درج می‌نماید!
+            <div class="alert-box">
+                <strong>✓ ملاک سنجش (مجموع تعداد نفرات):</strong> در این نسخه طبق دستور شما، سیستم از هر شیت به صورت خودکار <strong>ستون «تعداد نفرات / بازدید»</strong> کلاس‌ها را تجمیع (SUM) می‌کند. در شاخص ۱ نیز مجموع نفرات شیت‌های «سوادرسانه حضوری» و «توانمندسازی گردان» با یکدیگر جمع شده و درج می‌گردد.
             </div>
 
             <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
                 <div class="dropzone-icon">📂</div>
                 <h3>فایل‌های اکسل ماهانه کارمندان (.xlsx) یا فایل ZIP را اینجا بکشید و رها کنید</h3>
-                <p>یا برای انتخاب گروهی فایل‌ها (می‌توانید ۳۲ فایل را همزمان انتخاب فرمایید) کلیک نمایید</p>
+                <p>می‌توانید تمامی ۳۲ فایل را به صورت همزمان انتخاب فرمایید</p>
                 <input type="file" id="fileInput" multiple accept=".xlsx,.zip" style="display:none" onchange="handleFileSelect(this.files)">
             </div>
             
@@ -268,7 +341,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
             <div id="resultsArea" style="display: none; margin-top: 20px;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <h3 style="margin: 0; color: #1B365D;">📊 نتایج استخراج شده از فایل‌های ارسالی (<span id="fileCount">0</span> فایل):</h3>
+                    <h3 style="margin: 0; color: #1B365D;">📊 نتایج استخراج شده بر اساس تعداد نفرات (<span id="fileCount">0</span> فایل):</h3>
                     <button class="btn btn-success" onclick="applyAndDownload()" id="btn-apply" style="font-size: 15px; padding: 12px 24px;">
                         💾 درج در فایل «تهیه کارنامه نواحی» و دانلود اکسل نهایی ⬇️
                     </button>
@@ -281,11 +354,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                                 <th>ردیف</th>
                                 <th>نام فایل ارسالی</th>
                                 <th>شهرستان شناسایی‌شده</th>
-                                <th>حضوری و توانمندسازی (۳۱×)</th>
-                                <th>مجازی و لایو (۲۱۷×)</th>
-                                <th>اقدامات خلاقانه (۶۲×)</th>
-                                <th>تولیدات رسانه‌ای (۳×)</th>
-                                <th>نشست انجمن</th>
+                                <th>۱. حضوری و توانمندسازی (۳۱×)<br><small style="font-weight:normal;">مجموع نفرات شرکت‌کننده</small></th>
+                                <th>۲. مجازی و لایو (۲۱۷×)<br><small style="font-weight:normal;">مجموع نفرات / بازدید</small></th>
+                                <th>۳. اقدامات خلاقانه (۶۲×)<br><small style="font-weight:normal;">مجموع مخاطبان / بازدید</small></th>
+                                <th>۴. تولیدات رسانه‌ای (۳×)<br><small style="font-weight:normal;">تعداد صفحات / آثار</small></th>
+                                <th>۵. نشست انجمن</th>
                                 <th>وضعیت</th>
                             </tr>
                         </thead>
@@ -297,15 +370,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         <div class="card">
             <div class="card-header">
-                <h2>🛠️ راهنمای اجرای آفلاین روی کامپیوتر شخصی (بدون وب‌سایت)</h2>
+                <h2>🛠️ راهنمای اجرای آفلاین روی کامپیوتر شخصی (بدون نیاز به اینترنت)</h2>
             </div>
             <p style="font-size: 13.5px; line-height: 1.7; color: #444;">
-                اگر تمایل دارید این فرآیند را در آینده به صورت آفلاین بر روی کامپیوتر شخصی خودتان اجرا کنید:
+                اگر تمایل دارید این فرآیند را به صورت آفلاین بر روی کامپیوتر شخصی خودتان اجرا کنید:
             </p>
             <ol style="font-size: 13px; line-height: 1.8; color: #333;">
                 <li>در کنار فایل <code>تهیه کارنامه نواحی.xlsx</code> یک پوشه با نام <code>گزارشات_ماهانه</code> ایجاد فرمایید.</li>
                 <li>فایل‌های اکسل ۳۲ کارمند را داخل آن پوشه بریزید.</li>
-                <li>اسکریپت پایتون <code>تجمیع_خودکار_نواحی.py</code> را اجرا کنید. در کمتر از ۲ ثانیه، داده‌های تمامی ۳۲ ناحیه شمارش شده و به طور خودکار در فایل اکسل ثبت می‌شوند!</li>
+                <li>روی فایل <code>اجرای_تجمیع_نواحی.bat</code> دوبار کلیک کنید. سیستم تمام ستون‌های «تعداد نفرات» را جمع زده و در ۲ ثانیه کارنامه را تکمیل می‌کند!</li>
             </ol>
             <div>
                 <a href="/download/script" class="btn btn-secondary">
@@ -380,13 +453,25 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
                 tr.innerHTML = `
                     <td>${idx + 1}</td>
-                    <td style="text-align: right;">${item.filename}</td>
+                    <td style="text-align: right; font-weight: 500;">${item.filename}</td>
                     <td style="font-weight: bold; color: #1B365D;">${item.district || 'تشخیص داده نشد'}</td>
-                    <td><strong>${item.hozori_total}</strong> <span style="font-size:10px; color:#777;">(${item.hozori_pure} حضوری + ${item.tavanmand} گردان)</span></td>
-                    <td><strong>${item.majazi}</strong></td>
-                    <td><strong>${item.khalagh}</strong></td>
-                    <td><strong>${item.tolid}</strong></td>
-                    <td><strong>${item.neshast}</strong></td>
+                    <td>
+                        <span class="main-metric">${item.hozori_total.toLocaleString()} نفر</span>
+                        <span class="sub-metric">${item.hoz_people.toLocaleString()} حضوری (${item.hoz_classes} کلاس) + ${item.tav_people.toLocaleString()} گردان (${item.tav_classes} کلاس)</span>
+                    </td>
+                    <td>
+                        <span class="main-metric">${item.majazi.toLocaleString()} نفر</span>
+                        <span class="sub-metric">${item.maj_classes} برنامه لایو</span>
+                    </td>
+                    <td>
+                        <span class="main-metric">${item.khalagh.toLocaleString()} نفر</span>
+                        <span class="sub-metric">${item.kha_classes} اقدام خلاقانه</span>
+                    </td>
+                    <td>
+                        <span class="main-metric">${item.tolid.toLocaleString()}</span>
+                        <span class="sub-metric">${item.tol_classes} اثر / عنوان</span>
+                    </td>
+                    <td><strong style="color: #27AE60;">${item.neshast} نشست</strong></td>
                     <td>${badge}</td>
                 `;
                 tbody.appendChild(tr);
@@ -419,7 +504,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     document.body.appendChild(a);
                     a.click();
                     a.remove();
-                    btn.innerText = '✅ انجام شد! دانلود فایل تکمیل‌شده مجدد ⬇️';
+                    btn.innerText = '✅ انجام شد! دانلود مجدد فایل ⬇️';
                     btn.disabled = false;
                 } else {
                     const err = await response.json();
@@ -436,7 +521,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         async function generateAndAnalyzeSampleData() {
             const btn = document.getElementById('btn-sample');
-            btn.innerText = '⏳ در حال تولید داده‌های ۳۲ ناحیه...';
+            btn.innerText = '⏳ در حال تولید داده‌های ۳۲ ناحیه بر مبنای تعداد نفرات...';
             btn.disabled = true;
 
             try {
@@ -491,7 +576,6 @@ def api_analyze():
     for f in uploaded_files:
         fname = f.filename
         if fname.endswith('.zip'):
-            # Handle zip archive containing multiple excel files
             try:
                 z = zipfile.ZipFile(f.stream)
                 for member in z.namelist():
@@ -512,14 +596,17 @@ def api_analyze():
                 results.append({
                     'filename': fname,
                     'district': None,
-                    'hozori_pure': 0,
-                    'tavanmand': 0,
                     'hozori_total': 0,
                     'majazi': 0,
                     'khalagh': 0,
                     'tolid': 0,
                     'neshast': 0,
-                    'status': f'خطا در خواندن فایل: {str(e)}'
+                    'hoz_people': 0, 'hoz_classes': 0,
+                    'tav_people': 0, 'tav_classes': 0,
+                    'maj_people': 0, 'maj_classes': 0,
+                    'kha_people': 0, 'kha_classes': 0,
+                    'tol_people': 0, 'tol_classes': 0,
+                    'status': f'خطا: {str(e)}'
                 })
                 
     return jsonify({'success': True, 'data': results})
@@ -534,7 +621,6 @@ def api_apply():
     wb = openpyxl.load_workbook(MAIN_EXCEL_PATH)
     ws_rep = wb['گزارش عملکرد ماهانه']
     
-    # Map district names to row index in 'گزارش عملکرد ماهانه'
     row_map = {}
     for r in range(2, ws_rep.max_row + 1):
         name = ws_rep.cell(r, 1).value
@@ -562,7 +648,6 @@ def api_apply():
     # Save back to file
     wb.save(MAIN_EXCEL_PATH)
     
-    # Also return file directly in response for immediate download
     mem_file = io.BytesIO()
     wb.save(mem_file)
     mem_file.seek(0)
@@ -576,7 +661,6 @@ def api_apply():
 
 @app.route('/api/generate-sample-data', methods=['POST'])
 def api_generate_sample():
-    # Helper to generate realistic test data for all 32 districts
     wb_target = openpyxl.load_workbook(MAIN_EXCEL_PATH, data_only=True)
     ws_target = wb_target['پایگاه داده حد انتظار']
     
@@ -593,33 +677,47 @@ def api_generate_sample():
         }
         
     sample_data = []
-    # Generate realistic percentages between 40% and 115%
     import random
-    random.seed(42) # Consistent sample demonstration
+    random.seed(42)
     
     for idx, d_name in enumerate(DISTRICTS, start=1):
         t = targets.get(d_name, {'branches': 5, 'hozori': 155, 'majazi': 1085, 'khalagh': 310, 'tolid': 15, 'neshast': 1})
-        # Performance factor
-        factor = random.choice([0.45, 0.65, 0.82, 0.95, 1.05, 1.12, 0.78, 0.88])
+        factor = random.choice([0.48, 0.65, 0.82, 0.94, 1.05, 1.15, 0.76, 0.89])
         
         hoz_tot = int(t['hozori'] * factor)
-        hoz_pure = int(hoz_tot * 0.6)
+        hoz_pure = int(hoz_tot * 0.55)
         tavan = hoz_tot - hoz_pure
+        
         maj = int(t['majazi'] * factor)
         khal = int(t['khalagh'] * factor)
         tol = int(t['tolid'] * factor)
         nesh = 1 if factor >= 0.5 else 0
         
+        # Realistic class counts
+        hoz_cls = max(1, int(hoz_pure / 35))
+        tav_cls = max(1, int(tavan / 35))
+        maj_cls = max(1, int(maj / 250))
+        kha_cls = max(1, int(khal / 80))
+        tol_cls = max(1, int(tol / 3))
+        
         sample_data.append({
             'filename': f"گزارش شهریور ماه_{d_name}.xlsx",
             'district': d_name,
-            'hozori_pure': hoz_pure,
-            'tavanmand': tavan,
             'hozori_total': hoz_tot,
             'majazi': maj,
             'khalagh': khal,
             'tolid': tol,
             'neshast': nesh,
+            'hoz_people': hoz_pure,
+            'hoz_classes': hoz_cls,
+            'tav_people': tavan,
+            'tav_classes': tav_cls,
+            'maj_people': maj,
+            'maj_classes': maj_cls,
+            'kha_people': khal,
+            'kha_classes': kha_cls,
+            'tol_people': tol,
+            'tol_classes': tol_cls,
             'status': 'شناسایی شد'
         })
         

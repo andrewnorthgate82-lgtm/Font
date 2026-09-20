@@ -4,12 +4,14 @@
 اسکریپت تجمیع خودکار فایل‌های گزارش ماهانه کارمندان نواحی نسرا
 استان اصفهان - سال ۱۴۰۵
 ====================================================================
+مبنای محاسبه: «مجموع تعداد نفرات» ثبت‌شده در ستون‌های نفرات کلاس‌ها
+====================================================================
 نحوه استفاده در کامپیوتر:
 ۱. این فایل و فایل «تهیه کارنامه نواحی.xlsx» را در یک پوشه قرار دهید.
 ۲. یک پوشه با نام «گزارشات_ماهانه» در کنار این فایل بسازید.
 ۳. فایل‌های اکسل ۳۲ کارمند/ناحیه را داخل پوشه «گزارشات_ماهانه» کپی کنید.
-۴. این اسکریپت را اجرا کنید.
-۵. تمام آمار به صورت خودکار استخراج شده و در «تهیه کارنامه نواحی.xlsx» ثبت می‌شود.
+۴. روی فایل «اجرای_تجمیع_نواحی.bat» دو بار کلیک کنید (یا python تجمیع_خودکار_نواحی.py).
+۵. تمام نفرات از کلاس‌ها جمع زده شده و در «تهیه کارنامه نواحی.xlsx» ثبت می‌شود.
 ====================================================================
 """
 
@@ -55,21 +57,70 @@ def match_district_name(text):
             return d
     return None
 
-def count_active_rows(ws, check_cols=None):
-    if ws is None:
+def parse_number(val):
+    if val is None:
         return 0
-    if check_cols is None:
-        check_cols = range(2, ws.max_column + 1)
-    count = 0
+    if isinstance(val, (int, float)):
+        return val
+    s = str(val).strip()
+    if not s:
+        return 0
+    p_digits = '۰۱۲۳۴۵۶۷۸۹'
+    a_digits = '٠١٢٣٤٥٦٧٨٩'
+    for i in range(10):
+        s = s.replace(p_digits[i], str(i)).replace(a_digits[i], str(i))
+    s = s.replace(',', '').replace('،', '')
+    match = re.search(r'\d+(\.\d+)?', s)
+    if match:
+        try:
+            return float(match.group()) if '.' in match.group() else int(match.group())
+        except:
+            return 0
+    return 0
+
+def extract_sheet_metrics(ws):
+    if ws is None:
+        return {'people_sum': 0, 'classes_count': 0, 'col_name': None}
+    
+    target_col = None
+    target_col_name = None
+    
+    for c in range(1, ws.max_column + 1):
+        h = str(ws.cell(1, c).value or '')
+        if any(k in h for k in ['نفر', 'بازدید']):
+            target_col = c
+            target_col_name = h
+            break
+            
+    if target_col is None:
+        for c in range(1, ws.max_column + 1):
+            h = str(ws.cell(1, c).value or '')
+            if any(k in h for k in ['تعداد', 'صفحه', 'صفحات']):
+                target_col = c
+                target_col_name = h
+                break
+
+    total_people = 0
+    active_classes = 0
+    
     for r in range(2, ws.max_row + 1):
-        if any(ws.cell(r, c).value is not None and str(ws.cell(r, c).value).strip() != '' for c in check_cols):
-            count += 1
-    return count
+        has_act = any(ws.cell(r, c).value is not None and str(ws.cell(r, c).value).strip() != '' for c in range(2, ws.max_column + 1))
+        if has_act:
+            active_classes += 1
+            if target_col:
+                v = ws.cell(r, target_col).value
+                total_people += parse_number(v)
+                
+    return {
+        'people_sum': int(total_people),
+        'classes_count': active_classes,
+        'col_name': target_col_name
+    }
 
 def process_all_reports(reports_folder="گزارشات_ماهانه", master_excel="تهیه کارنامه نواحی.xlsx"):
-    print("=" * 65)
-    print("🚀 آغاز فرآیند استخراج خودکار گزارش‌های ماهانه نواحی نسرا")
-    print("=" * 65)
+    print("=" * 70)
+    print("🚀 سامانه تجمیع خودکار گزارش‌های ماهانه نواحی نسرا (بر مبنای تعداد نفرات)")
+    print("=" * 70)
     
     if not os.path.exists(master_excel):
         print(f"❌ خطا: فایل مقصد '{master_excel}' یافت نشد!")
@@ -78,7 +129,7 @@ def process_all_reports(reports_folder="گزارشات_ماهانه", master_exc
     if not os.path.exists(reports_folder):
         print(f"📁 پوشه '{reports_folder}' یافت نشد. در حال ساخت پوشه...")
         os.makedirs(reports_folder, exist_ok=True)
-        print(f"⚠️ لطفاً فایل‌های اکسل ماهانه کارمندان را در پوشه '{reports_folder}' قرار دهید و مجدداً اجرا فرمایید.")
+        print(f"⚠️ لطفاً فایل‌های اکسل ماهانه کارمندان را داخل پوشه '{reports_folder}' قرار دهید و مجدداً اجرا فرمایید.")
         return
         
     excel_files = glob.glob(os.path.join(reports_folder, "*.xlsx"))
@@ -89,7 +140,7 @@ def process_all_reports(reports_folder="گزارشات_ماهانه", master_exc
         return
         
     print(f"📋 تعداد {len(excel_files)} فایل اکسل در پوشه شناسایی شد.")
-    print("-" * 65)
+    print("-" * 70)
     
     extracted = {}
     
@@ -130,37 +181,41 @@ def process_all_reports(reports_folder="گزارشات_ماهانه", master_exc
                 print(f"⚠️ اخطار: شهرستان مربوط به فایل '{fname}' شناسایی نشد.")
                 continue
                 
-            c_hoz = count_active_rows(ws_hozori, [2, 3, 4, 5])
-            c_tav = count_active_rows(ws_tavanmand, [2, 3, 4, 5])
-            c_maj = count_active_rows(ws_majazi, [2, 3, 4, 5])
-            c_kha = count_active_rows(ws_khalagh, [2, 3, 4, 5])
-            c_tol = count_active_rows(ws_tolid, [2, 3, 4, 5, 6])
+            m_hoz = extract_sheet_metrics(ws_hozori)
+            m_tav = extract_sheet_metrics(ws_tavanmand)
+            m_maj = extract_sheet_metrics(ws_majazi)
+            m_kha = extract_sheet_metrics(ws_khalagh)
+            m_tol = extract_sheet_metrics(ws_tolid)
             
-            hoz_comb = c_hoz + c_tav
-            neshast = 1 if (hoz_comb + c_maj + c_kha + c_tol) > 0 else 0
+            # مجموع نفرات حضوری + توانمندسازی گردان
+            hoz_tot = m_hoz['people_sum'] + m_tav['people_sum']
+            hoz_cls = m_hoz['classes_count'] + m_tav['classes_count']
+            metric_hoz = hoz_tot if hoz_tot > 0 else hoz_cls
+            
+            metric_maj = m_maj['people_sum'] if m_maj['people_sum'] > 0 else m_maj['classes_count']
+            metric_kha = m_kha['people_sum'] if m_kha['people_sum'] > 0 else m_kha['classes_count']
+            metric_tol = m_tol['people_sum'] if m_tol['people_sum'] > 0 else m_tol['classes_count']
+            neshast = 1 if (metric_hoz + metric_maj + metric_kha + metric_tol) > 0 else 0
             
             extracted[detected] = {
-                'hozori_total': hoz_comb,
-                'hozori_pure': c_hoz,
-                'tavanmand': c_tav,
-                'majazi': c_maj,
-                'khalagh': c_kha,
-                'tolid': c_tol,
+                'hozori_total': metric_hoz,
+                'majazi': metric_maj,
+                'khalagh': metric_kha,
+                'tolid': metric_tol,
                 'neshast': neshast,
-                'file': fname
+                'details': f"حضوری و گردان: {metric_hoz} نفر ({hoz_cls} کلاس) | مجازی: {metric_maj} نفر ({m_maj['classes_count']} لایو) | خلاقانه: {metric_kha} نفر | تولیدات: {metric_tol}"
             }
-            print(f"✓ [{detected}]: حضوری و توانمند={hoz_comb} (حضوری:{c_hoz}+گردان:{c_tav}) | مجازی={c_maj} | خلاقانه={c_kha} | تولیدات={c_tol} | نشست={neshast}")
+            print(f"✓ [{detected}]: {extracted[detected]['details']}")
             
         except Exception as e:
             print(f"❌ خطا در خواندن فایل '{fname}': {e}")
 
-    print("-" * 65)
+    print("-" * 70)
     print(f"💾 در حال درج داده‌های {len(extracted)} شهرستان در فایل '{master_excel}'...")
     
     wb_master = openpyxl.load_workbook(master_excel)
     ws_rep = wb_master['گزارش عملکرد ماهانه']
     
-    # Map row
     row_map = {}
     for r in range(2, ws_rep.max_row + 1):
         dname = ws_rep.cell(r, 1).value
@@ -180,9 +235,9 @@ def process_all_reports(reports_folder="گزارشات_ماهانه", master_exc
             updated_count += 1
             
     wb_master.save(master_excel)
-    print(f"🎉 عملیات با موفقیت پایان یافت! اطلاعات {updated_count} ناحیه در فایل ذخیره شد.")
+    print(f"🎉 عملیات با موفقیت پایان یافت! آمار {updated_count} ناحیه بر اساس مجموع تعداد نفرات ثبت شد.")
     print("📊 اکنون فایل 'تهیه کارنامه نواحی.xlsx' را باز فرمایید؛ تمام محاسبات، رتبه‌ها و داشبورد مانیتورینگ آماده است.")
-    print("=" * 65)
+    print("=" * 70)
 
 if __name__ == '__main__':
     process_all_reports()
