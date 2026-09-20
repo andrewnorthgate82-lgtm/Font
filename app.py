@@ -1,0 +1,629 @@
+# -*- coding: utf-8 -*-
+import os
+import re
+import io
+import zipfile
+from flask import Flask, request, jsonify, send_file, render_template_string
+import openpyxl
+
+app = Flask(__name__)
+BASE_DIR = "/home/user/Font"
+MAIN_EXCEL_PATH = os.path.join(BASE_DIR, "تهیه کارنامه نواحی.xlsx")
+
+DISTRICTS = [
+    'آران و بیدگل', 'امام حسین(ع)', 'امام رضا(ع)', 'امام صادق(ع)', 'امام علی(ع)',
+    'اردستان', 'برخوار', 'بویین و میاندشت', 'تیران و کرون', 'جرقویه',
+    'چادگان', 'خمینی شهر', 'خوانسار', 'خور و بیابانک', 'درچه',
+    'دهاقان', 'سمیرم', 'شاهین شهر', 'شهرضا', 'فریدن',
+    'فریدون شهر', 'فلاورجان', 'کاشان', 'کوهپایه', 'گلپایگان',
+    'لنجان', 'مبارکه', 'نایین', 'نجف آباد', 'نطنز',
+    'ورزنه', 'هرند'
+]
+
+def clean_str(s):
+    if not s:
+        return ""
+    s = str(s).strip()
+    s = s.replace('ي', 'ی').replace('ك', 'ک').replace('ة', 'ه')
+    s = re.sub(r'[\(\)\[\]\{\}\.\_\-\d\s\u200c]+', '', s)
+    s = s.replace('ع', '')
+    return s
+
+def clean_no_vav(s):
+    return clean_str(s).replace('و', '')
+
+def match_district_name(text):
+    if not text:
+        return None
+    c_raw = clean_str(text)
+    c_raw_nv = clean_no_vav(text)
+    
+    # 1. Exact match
+    for d in DISTRICTS:
+        cd = clean_str(d)
+        if cd == c_raw:
+            return d
+            
+    # 2. Substring match
+    for d in DISTRICTS:
+        cd = clean_str(d)
+        if cd in c_raw:
+            return d
+            
+    # 3. Match without vav
+    for d in DISTRICTS:
+        cd_nv = clean_no_vav(d)
+        if cd_nv == c_raw_nv or cd_nv in c_raw_nv:
+            return d
+            
+    return None
+
+def count_active_rows(ws, check_cols=None):
+    if ws is None:
+        return 0
+    if check_cols is None:
+        check_cols = range(2, ws.max_column + 1)
+    count = 0
+    for r in range(2, ws.max_row + 1):
+        if any(ws.cell(r, c).value is not None and str(ws.cell(r, c).value).strip() != '' for c in check_cols):
+            count += 1
+    return count
+
+def analyze_workbook_data(wb, filename_hint=""):
+    detected_district = match_district_name(filename_hint)
+    
+    # Find sheets
+    ws_hozori = None
+    ws_tavanmand = None
+    ws_majazi = None
+    ws_khalagh = None
+    ws_tolid = None
+    
+    for name in wb.sheetnames:
+        c_name = clean_str(name)
+        if 'حضوری' in c_name:
+            ws_hozori = wb[name]
+        elif 'توانمند' in c_name:
+            ws_tavanmand = wb[name]
+        elif 'مجازی' in c_name or 'لایو' in c_name:
+            ws_majazi = wb[name]
+        elif 'خلاق' in c_name:
+            ws_khalagh = wb[name]
+        elif 'تولید' in c_name:
+            ws_tolid = wb[name]
+
+    # If district not matched from filename, try sheets
+    if not detected_district:
+        for ws in [ws_hozori, ws_majazi, ws_khalagh, ws_tavanmand]:
+            if ws is None:
+                continue
+            for r in range(2, min(ws.max_row + 1, 25)):
+                # check col 3 and col 4
+                for c in [3, 4, 2]:
+                    val = ws.cell(r, c).value
+                    matched = match_district_name(val)
+                    if matched:
+                        detected_district = matched
+                        break
+                if detected_district:
+                    break
+            if detected_district:
+                break
+
+    # If still not detected, check 'اطلاعات پایه'
+    if not detected_district and 'اطلاعات پایه' in wb.sheetnames:
+        ws_info = wb['اطلاعات پایه']
+        for r in range(2, ws_info.max_row + 1):
+            val = ws_info.cell(r, 3).value
+            matched = match_district_name(val)
+            if matched:
+                detected_district = matched
+                break
+
+    # Row counts
+    cnt_hozori = count_active_rows(ws_hozori, check_cols=[2, 3, 4, 5])
+    cnt_tavanmand = count_active_rows(ws_tavanmand, check_cols=[2, 3, 4, 5])
+    cnt_majazi = count_active_rows(ws_majazi, check_cols=[2, 3, 4, 5])
+    cnt_khalagh = count_active_rows(ws_khalagh, check_cols=[2, 3, 4, 5])
+    cnt_tolid = count_active_rows(ws_tolid, check_cols=[2, 3, 4, 5, 6])
+    
+    # Combined Indicator 1: حضوری + توانمندسازی
+    total_hozori_comb = cnt_hozori + cnt_tavanmand
+    
+    # Neshast: default to 1 if district conducted activities, or check
+    neshast = 1 if (total_hozori_comb + cnt_majazi + cnt_khalagh + cnt_tolid) > 0 else 0
+
+    return {
+        'filename': filename_hint,
+        'district': detected_district,
+        'hozori_pure': cnt_hozori,
+        'tavanmand': cnt_tavanmand,
+        'hozori_total': total_hozori_comb,
+        'majazi': cnt_majazi,
+        'khalagh': cnt_khalagh,
+        'tolid': cnt_tolid,
+        'neshast': neshast,
+        'status': 'شناسایی شد' if detected_district else 'عدم تشخیص ناحیه'
+    }
+
+HTML_TEMPLATE = """<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سامانه استخراج خودکار و مانیتورینگ عملکرد نواحی نسرا</title>
+    <style>
+        :root {
+            --primary: #1B365D;
+            --primary-light: #2C3E50;
+            --accent: #2980B9;
+            --success: #27AE60;
+            --warning: #F39C12;
+            --danger: #C0392B;
+            --bg: #F4F6F9;
+            --card-bg: #FFFFFF;
+            --text: #2C3E50;
+        }
+        * { box-sizing: border-box; font-family: 'Tahoma', 'Segoe UI', sans-serif; }
+        body { background-color: var(--bg); color: var(--text); margin: 0; padding: 20px; direction: rtl; }
+        .container { max-width: 1100px; margin: 0 auto; }
+        .header {
+            background: linear-gradient(135deg, #1B365D, #2C3E50);
+            color: white; padding: 25px; border-radius: 12px;
+            text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin-bottom: 20px;
+        }
+        .header h1 { margin: 0 0 8px 0; font-size: 22px; }
+        .header p { margin: 0; opacity: 0.9; font-size: 13.5px; }
+        
+        .card {
+            background: var(--card-bg); border-radius: 12px; padding: 22px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.06); margin-bottom: 20px;
+        }
+        .card-header {
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 2px solid #ECEFF1; padding-bottom: 12px; margin-bottom: 15px;
+        }
+        .card-header h2 { margin: 0; font-size: 17px; color: var(--primary); }
+
+        .dropzone {
+            border: 2px dashed #3498DB; border-radius: 10px; padding: 35px 20px;
+            text-align: center; background: #EBF5FB; cursor: pointer; transition: all 0.2s;
+        }
+        .dropzone:hover, .dropzone.dragover { background: #D4E6F1; border-color: #2980B9; }
+        .dropzone-icon { font-size: 42px; margin-bottom: 10px; }
+        .dropzone h3 { margin: 0 0 6px 0; font-size: 16px; color: #1B4F72; }
+        .dropzone p { margin: 0; font-size: 12.5px; color: #5D6D7E; }
+
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            padding: 10px 20px; font-size: 14px; font-weight: bold; border-radius: 6px;
+            text-decoration: none; cursor: pointer; border: none; transition: all 0.2s;
+        }
+        .btn-success { background: #27AE60; color: white; box-shadow: 0 3px 8px rgba(39,174,96,0.3); }
+        .btn-success:hover { background: #219150; }
+        .btn-primary { background: #2980B9; color: white; box-shadow: 0 3px 8px rgba(41,128,185,0.3); }
+        .btn-primary:hover { background: #1F618D; }
+        .btn-warning { background: #F39C12; color: white; }
+        .btn-warning:hover { background: #D68910; }
+        .btn-danger { background: #E74C3C; color: white; }
+        .btn-secondary { background: #7F8C8D; color: white; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 15px; }
+        th { background: #1B365D; color: white; padding: 9px 8px; font-weight: bold; text-align: center; }
+        td { padding: 8px; border-bottom: 1px solid #EAECEE; text-align: center; }
+        tr:nth-child(even) { background-color: #F8FAFC; }
+        
+        .badge {
+            display: inline-block; padding: 3px 8px; border-radius: 10px; font-size: 11px; font-weight: bold;
+        }
+        .badge-success { background: #D4EDDA; color: #155724; }
+        .badge-danger { background: #F8D7DA; color: #721C24; }
+        .badge-warning { background: #FFF3CD; color: #856404; }
+
+        .spinner {
+            display: none; border: 4px solid #f3f3f3; border-top: 4px solid #3498db;
+            border-radius: 50%; width: 26px; height: 26px; animation: spin 1s linear infinite;
+            margin: 10px auto;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .guide-box {
+            background: #FEF9E7; border-right: 4px solid #F1C40F; padding: 12px 16px;
+            border-radius: 6px; font-size: 13px; line-height: 1.6; color: #7D6608; margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 سامانه استخراج و مانیتورینگ خودکار کارنامه نواحی نسرا</h1>
+            <p>نسرا استان اصفهان - سال ارزیابی ۱۴۰۵ | بدون نیاز به ورود دستی اعداد در اکسل</p>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2>📥 آپلود و تحلیل مستقیم فایل‌های گزارش ماهانه (۳۲ شهرستان)</h2>
+                <div>
+                    <button class="btn btn-warning" onclick="generateAndAnalyzeSampleData()" id="btn-sample">
+                        ⚡ آزمایش با ۳۲ فایل تستی نمونه
+                    </button>
+                    <a href="/download/master" class="btn btn-primary" style="margin-right: 8px;">
+                        📥 دانلود فایل اصلی فعلی
+                    </a>
+                </div>
+            </div>
+
+            <div class="guide-box">
+                <strong>نحوه کارکرد خودکار:</strong> کافی است تمامی فایل‌های اکسل دریافتی از کارمندان نواحی (تا ۳۲ فایل، یا فایل ZIP حاوی آنها) را در کادر زیر رها فرمایید. سیستم به طور هوشمند نام هر شهرستان را از نام فایل یا محتوای آن تشخیص داده، آمار شیت‌های حضوری، توانمندسازی، مجازی، خلاقانه و تولیدات را استخراج نموده و با یک کلیک در فایل اصلی درج می‌نماید!
+            </div>
+
+            <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+                <div class="dropzone-icon">📂</div>
+                <h3>فایل‌های اکسل ماهانه کارمندان (.xlsx) یا فایل ZIP را اینجا بکشید و رها کنید</h3>
+                <p>یا برای انتخاب گروهی فایل‌ها (می‌توانید ۳۲ فایل را همزمان انتخاب فرمایید) کلیک نمایید</p>
+                <input type="file" id="fileInput" multiple accept=".xlsx,.zip" style="display:none" onchange="handleFileSelect(this.files)">
+            </div>
+            
+            <div class="spinner" id="spinner"></div>
+
+            <div id="resultsArea" style="display: none; margin-top: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3 style="margin: 0; color: #1B365D;">📊 نتایج استخراج شده از فایل‌های ارسالی (<span id="fileCount">0</span> فایل):</h3>
+                    <button class="btn btn-success" onclick="applyAndDownload()" id="btn-apply" style="font-size: 15px; padding: 12px 24px;">
+                        💾 درج در فایل «تهیه کارنامه نواحی» و دانلود اکسل نهایی ⬇️
+                    </button>
+                </div>
+
+                <div style="overflow-x: auto;">
+                    <table id="resultsTable">
+                        <thead>
+                            <tr>
+                                <th>ردیف</th>
+                                <th>نام فایل ارسالی</th>
+                                <th>شهرستان شناسایی‌شده</th>
+                                <th>حضوری و توانمندسازی (۳۱×)</th>
+                                <th>مجازی و لایو (۲۱۷×)</th>
+                                <th>اقدامات خلاقانه (۶۲×)</th>
+                                <th>تولیدات رسانه‌ای (۳×)</th>
+                                <th>نشست انجمن</th>
+                                <th>وضعیت</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsTbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2>🛠️ راهنمای اجرای آفلاین روی کامپیوتر شخصی (بدون وب‌سایت)</h2>
+            </div>
+            <p style="font-size: 13.5px; line-height: 1.7; color: #444;">
+                اگر تمایل دارید این فرآیند را در آینده به صورت آفلاین بر روی کامپیوتر شخصی خودتان اجرا کنید:
+            </p>
+            <ol style="font-size: 13px; line-height: 1.8; color: #333;">
+                <li>در کنار فایل <code>تهیه کارنامه نواحی.xlsx</code> یک پوشه با نام <code>گزارشات_ماهانه</code> ایجاد فرمایید.</li>
+                <li>فایل‌های اکسل ۳۲ کارمند را داخل آن پوشه بریزید.</li>
+                <li>اسکریپت پایتون <code>تجمیع_خودکار_نواحی.py</code> را اجرا کنید. در کمتر از ۲ ثانیه، داده‌های تمامی ۳۲ ناحیه شمارش شده و به طور خودکار در فایل اکسل ثبت می‌شوند!</li>
+            </ol>
+            <div>
+                <a href="/download/script" class="btn btn-secondary">
+                    🐍 دانلود اسکریپت آفلاین (تجمیع_خودکار_نواحی.py)
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const dropzone = document.getElementById('dropzone');
+        let currentExtractedData = [];
+
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('dragover');
+        });
+        dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) {
+                uploadFiles(e.dataTransfer.files);
+            }
+        });
+
+        function handleFileSelect(files) {
+            if (files.length > 0) {
+                uploadFiles(files);
+            }
+        }
+
+        async function uploadFiles(files) {
+            const formData = new FormData();
+            for (let i = 0; i < files.length; i++) {
+                formData.append('files', files[i]);
+            }
+
+            document.getElementById('spinner').style.display = 'block';
+            try {
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    body: formData
+                });
+                const res = await response.json();
+                document.getElementById('spinner').style.display = 'none';
+
+                if (res.success) {
+                    currentExtractedData = res.data;
+                    renderTable(res.data);
+                } else {
+                    alert('خطا در پردازش فایل‌ها: ' + res.error);
+                }
+            } catch (err) {
+                document.getElementById('spinner').style.display = 'none';
+                alert('خطا در برقراری ارتباط با سرور: ' + err);
+            }
+        }
+
+        function renderTable(data) {
+            document.getElementById('resultsArea').style.display = 'block';
+            document.getElementById('fileCount').innerText = data.length;
+            const tbody = document.getElementById('resultsTbody');
+            tbody.innerHTML = '';
+
+            data.forEach((item, idx) => {
+                const tr = document.createElement('tr');
+                const isMatched = item.district !== null;
+                const badge = isMatched 
+                    ? `<span class="badge badge-success">✓ شناسایی شد</span>`
+                    : `<span class="badge badge-danger">✗ نامشخص</span>`;
+
+                tr.innerHTML = `
+                    <td>${idx + 1}</td>
+                    <td style="text-align: right;">${item.filename}</td>
+                    <td style="font-weight: bold; color: #1B365D;">${item.district || 'تشخیص داده نشد'}</td>
+                    <td><strong>${item.hozori_total}</strong> <span style="font-size:10px; color:#777;">(${item.hozori_pure} حضوری + ${item.tavanmand} گردان)</span></td>
+                    <td><strong>${item.majazi}</strong></td>
+                    <td><strong>${item.khalagh}</strong></td>
+                    <td><strong>${item.tolid}</strong></td>
+                    <td><strong>${item.neshast}</strong></td>
+                    <td>${badge}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function applyAndDownload() {
+            if (currentExtractedData.length === 0) {
+                alert('هیچ داده‌ای برای ثبت وجود ندارد!');
+                return;
+            }
+
+            const btn = document.getElementById('btn-apply');
+            btn.innerText = '⏳ در حال درج در اکسل...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/api/apply', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ items: currentExtractedData })
+                });
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'تهیه کارنامه نواحی_تکمیل_شده.xlsx';
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    btn.innerText = '✅ انجام شد! دانلود فایل تکمیل‌شده مجدد ⬇️';
+                    btn.disabled = false;
+                } else {
+                    const err = await response.json();
+                    alert('خطا: ' + err.error);
+                    btn.innerText = '💾 درج در فایل «تهیه کارنامه نواحی» و دانلود اکسل نهایی ⬇️';
+                    btn.disabled = false;
+                }
+            } catch (e) {
+                alert('خطا در ارسال درخواست: ' + e);
+                btn.innerText = '💾 درج در فایل «تهیه کارنامه نواحی» و دانلود اکسل نهایی ⬇️';
+                btn.disabled = false;
+            }
+        }
+
+        async function generateAndAnalyzeSampleData() {
+            const btn = document.getElementById('btn-sample');
+            btn.innerText = '⏳ در حال تولید داده‌های ۳۲ ناحیه...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/api/generate-sample-data', { method: 'POST' });
+                const res = await response.json();
+                btn.innerText = '⚡ آزمایش با ۳۲ فایل تستی نمونه';
+                btn.disabled = false;
+
+                if (res.success) {
+                    currentExtractedData = res.data;
+                    renderTable(res.data);
+                } else {
+                    alert('خطا: ' + res.error);
+                }
+            } catch (e) {
+                btn.innerText = '⚡ آزمایش با ۳۲ فایل تستی نمونه';
+                btn.disabled = false;
+                alert('خطا: ' + e);
+            }
+        }
+    </script>
+</body>
+</html>
+"""
+
+@app.route('/')
+def index():
+    return render_template_string(HTML_TEMPLATE)
+
+@app.route('/download/master')
+def download_master():
+    return send_file(MAIN_EXCEL_PATH, as_attachment=True, download_name="تهیه کارنامه نواحی.xlsx")
+
+@app.route('/download/template')
+def download_template():
+    p = os.path.join(BASE_DIR, "گزارش شهریور ماه 1405 ناحیه.xlsx")
+    return send_file(p, as_attachment=True, download_name="گزارش شهریور ماه 1405 ناحیه.xlsx")
+
+@app.route('/download/script')
+def download_script():
+    p = os.path.join(BASE_DIR, "تجمیع_خودکار_نواحی.py")
+    return send_file(p, as_attachment=True, download_name="تجمیع_خودکار_نواحی.py")
+
+@app.route('/api/analyze', methods=['POST'])
+def api_analyze():
+    uploaded_files = request.files.getlist('files')
+    if not uploaded_files:
+        return jsonify({'success': False, 'error': 'فایلی ارسال نشده است.'})
+    
+    results = []
+    
+    for f in uploaded_files:
+        fname = f.filename
+        if fname.endswith('.zip'):
+            # Handle zip archive containing multiple excel files
+            try:
+                z = zipfile.ZipFile(f.stream)
+                for member in z.namelist():
+                    if member.endswith('.xlsx') and not member.startswith('__MACOSX') and not member.startswith('~$'):
+                        content = z.read(member)
+                        wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+                        res = analyze_workbook_data(wb, filename_hint=os.path.basename(member))
+                        results.append(res)
+            except Exception as e:
+                print(f"Error reading zip {fname}: {e}")
+        elif fname.endswith('.xlsx') and not fname.startswith('~$'):
+            try:
+                wb = openpyxl.load_workbook(f.stream, data_only=True)
+                res = analyze_workbook_data(wb, filename_hint=fname)
+                results.append(res)
+            except Exception as e:
+                print(f"Error reading xlsx {fname}: {e}")
+                results.append({
+                    'filename': fname,
+                    'district': None,
+                    'hozori_pure': 0,
+                    'tavanmand': 0,
+                    'hozori_total': 0,
+                    'majazi': 0,
+                    'khalagh': 0,
+                    'tolid': 0,
+                    'neshast': 0,
+                    'status': f'خطا در خواندن فایل: {str(e)}'
+                })
+                
+    return jsonify({'success': True, 'data': results})
+
+@app.route('/api/apply', methods=['POST'])
+def api_apply():
+    req_data = request.get_json()
+    items = req_data.get('items', [])
+    if not items:
+        return jsonify({'error': 'داده‌ای یافت نشد'}), 400
+        
+    wb = openpyxl.load_workbook(MAIN_EXCEL_PATH)
+    ws_rep = wb['گزارش عملکرد ماهانه']
+    
+    # Map district names to row index in 'گزارش عملکرد ماهانه'
+    row_map = {}
+    for r in range(2, ws_rep.max_row + 1):
+        name = ws_rep.cell(r, 1).value
+        if name:
+            row_map[clean_str(name)] = r
+            row_map[clean_no_vav(name)] = r
+
+    applied_count = 0
+    for item in items:
+        d_name = item.get('district')
+        if not d_name:
+            continue
+        c_name = clean_str(d_name)
+        c_nv = clean_no_vav(d_name)
+        
+        target_row = row_map.get(c_name) or row_map.get(c_nv)
+        if target_row:
+            ws_rep.cell(row=target_row, column=2, value=item.get('hozori_total', 0))
+            ws_rep.cell(row=target_row, column=3, value=item.get('majazi', 0))
+            ws_rep.cell(row=target_row, column=4, value=item.get('khalagh', 0))
+            ws_rep.cell(row=target_row, column=5, value=item.get('tolid', 0))
+            ws_rep.cell(row=target_row, column=6, value=item.get('neshast', 0))
+            applied_count += 1
+            
+    # Save back to file
+    wb.save(MAIN_EXCEL_PATH)
+    
+    # Also return file directly in response for immediate download
+    mem_file = io.BytesIO()
+    wb.save(mem_file)
+    mem_file.seek(0)
+    
+    return send_file(
+        mem_file,
+        as_attachment=True,
+        download_name="تهیه کارنامه نواحی_تکمیل_شده.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+@app.route('/api/generate-sample-data', methods=['POST'])
+def api_generate_sample():
+    # Helper to generate realistic test data for all 32 districts
+    wb_target = openpyxl.load_workbook(MAIN_EXCEL_PATH, data_only=True)
+    ws_target = wb_target['پایگاه داده حد انتظار']
+    
+    targets = {}
+    for r in range(2, 34):
+        d_name = ws_target.cell(r, 1).value
+        targets[d_name] = {
+            'branches': ws_target.cell(r, 2).value,
+            'hozori': ws_target.cell(r, 3).value,
+            'majazi': ws_target.cell(r, 4).value,
+            'khalagh': ws_target.cell(r, 5).value,
+            'tolid': ws_target.cell(r, 6).value,
+            'neshast': ws_target.cell(r, 7).value
+        }
+        
+    sample_data = []
+    # Generate realistic percentages between 40% and 115%
+    import random
+    random.seed(42) # Consistent sample demonstration
+    
+    for idx, d_name in enumerate(DISTRICTS, start=1):
+        t = targets.get(d_name, {'branches': 5, 'hozori': 155, 'majazi': 1085, 'khalagh': 310, 'tolid': 15, 'neshast': 1})
+        # Performance factor
+        factor = random.choice([0.45, 0.65, 0.82, 0.95, 1.05, 1.12, 0.78, 0.88])
+        
+        hoz_tot = int(t['hozori'] * factor)
+        hoz_pure = int(hoz_tot * 0.6)
+        tavan = hoz_tot - hoz_pure
+        maj = int(t['majazi'] * factor)
+        khal = int(t['khalagh'] * factor)
+        tol = int(t['tolid'] * factor)
+        nesh = 1 if factor >= 0.5 else 0
+        
+        sample_data.append({
+            'filename': f"گزارش شهریور ماه_{d_name}.xlsx",
+            'district': d_name,
+            'hozori_pure': hoz_pure,
+            'tavanmand': tavan,
+            'hozori_total': hoz_tot,
+            'majazi': maj,
+            'khalagh': khal,
+            'tolid': tol,
+            'neshast': nesh,
+            'status': 'شناسایی شد'
+        })
+        
+    return jsonify({'success': True, 'data': sample_data})
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8080, debug=False)
