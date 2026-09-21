@@ -433,19 +433,9 @@ def generate_all_images_offline(master_excel="تهیه کارنامه نواحی
         else:
             tier = "فاقد عملکرد (عدم فعالیت)"
         
-        en_name = DISTRICT_EN_NAMES.get(dn, dn)
-        # Save with both Persian and English filenames so it's guaranteed to work
-        out_p_fa = os.path.join(out_dir, f"Scorecard_{dn}.png")
-        out_p_en = os.path.join(out_dir, f"Scorecard_{en_name}.png")
-        
+        out_p = os.path.join(out_dir, f"کارنامه_{dn}.png")
         try:
-            generate_scorecard_png(dn, t, a, rank=rk, tier=tier, month=month, output_path=out_p_en)
-            if out_p_fa != out_p_en:
-                try:
-                    import shutil
-                    shutil.copyfile(out_p_en, out_p_fa)
-                except Exception:
-                    pass
+            generate_scorecard_png(dn, t, a, rank=rk, tier=tier, month=month, output_path=out_p)
             count_img += 1
         except Exception as err:
             print(f"خطا در تولید تصویر کارنامه {dn}: {err}")
@@ -484,16 +474,9 @@ def generate_all_images_offline(master_excel="تهیه کارنامه نواحی
     rep_c = sum(1 for x in dist_scores if x[1] > 0)
     
     kpi_d = {'avg_score': avg_sc, 'top_district': top_d, 'reported_count': rep_c}
-    dash_path_en = os.path.join(out_dir, "Dashboard_Provincial.png")
-    dash_path_fa = os.path.join(out_dir, "تصویر_داشبورد_مدیریتی_استان.png")
-    
+    dash_path = os.path.join(out_dir, "تصویر_داشبورد_مدیریتی_استان.png")
     try:
-        generate_dashboard_png(macro_data, top5, bot5, kpi_d, month=month, output_path=dash_path_en)
-        try:
-            import shutil
-            shutil.copyfile(dash_path_en, dash_path_fa)
-        except Exception:
-            pass
+        generate_dashboard_png(macro_data, top5, bot5, kpi_d, month=month, output_path=dash_path)
     except Exception as err:
         print(f"خطا در تولید تصویر داشبورد: {err}")
     

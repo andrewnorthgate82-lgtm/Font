@@ -684,9 +684,8 @@ def get_scorecard_img():
     generate_scorecard_png(d_name, t_data, a_data, rank="۱", tier=tier, month=month, output_path=img_io)
     img_io.seek(0)
     
-    import urllib.parse
-    ascii_filename = f"Karnameh_{urllib.parse.quote(d_name)}.png"
-    return send_file(img_io, mimetype="image/png", as_attachment=True, download_name=ascii_filename)
+    fa_filename = f"کارنامه_{d_name}_{month}.png"
+    return send_file(img_io, mimetype="image/png", as_attachment=True, download_name=fa_filename)
 
 @app.route('/image/dashboard')
 def get_dashboard_img():
@@ -742,7 +741,8 @@ def get_dashboard_img():
     generate_dashboard_png(macro_data, top5, bot5, kpi_data, month=month, output_path=img_io)
     img_io.seek(0)
     
-    return send_file(img_io, mimetype="image/png", as_attachment=True, download_name="Dashboard_Monitoring_Isfahan.png")
+    fa_dash_filename = f"تصویر_داشبورد_مدیریتی_استان_{month}.png"
+    return send_file(img_io, mimetype="image/png", as_attachment=True, download_name=fa_dash_filename)
 
 @app.route('/download/zip')
 def download_zip():
