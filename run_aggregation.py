@@ -44,22 +44,38 @@ def ensure_dependencies():
             
     if missing:
         print("=" * 75)
-        print(f"📦 در حال نصب خودکار پیش‌نیازها ({', '.join(missing)})...")
+        print(f"📦 Installing required libraries ({', '.join(missing)})...")
         print("=" * 75)
         try:
             subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing + ["--quiet"])
-            print("✓ تمامی پیش‌نیازها با موفقیت نصب شدند.\n")
+            print("✓ Packages installed successfully.\n")
         except Exception as e:
-            print(f"⚠️ امکان نصب خودکار پیش‌نیازها فراهم نبود: {e}\n")
+            print(f"⚠️ Warning: Could not auto-install packages: {e}\n")
 
 ensure_dependencies()
 
 import openpyxl
 
-MONTH_NAMES = [
-    'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
-    'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'
+MONTH_INFO = [
+    (1, "Farvardin", "فروردین"),
+    (2, "Ordibehesht", "اردیبهشت"),
+    (3, "Khordad", "خرداد"),
+    (4, "Tir", "تیر"),
+    (5, "Mordad", "مرداد"),
+    (6, "Shahrivar", "شهریور"),
+    (7, "Mehr", "مهر"),
+    (8, "Aban", "آبان"),
+    (9, "Azar", "آذر"),
+    (10, "Dey", "دی"),
+    (11, "Bahman", "بهمن"),
+    (12, "Esfand", "اسفند")
 ]
+
+MONTH_MAP = {}
+for num, en_name, fa_name in MONTH_INFO:
+    MONTH_MAP[str(num)] = fa_name
+    MONTH_MAP[en_name.lower()] = fa_name
+    MONTH_MAP[fa_name] = fa_name
 
 DISTRICTS = [
     'آران و بیدگل', 'امام حسین(ع)', 'امام رضا(ع)', 'امام صادق(ع)', 'امام علی(ع)',
@@ -193,38 +209,36 @@ def extract_sheet_metrics(ws):
         'col_name': target_col_name
     }
 
-def prompt_month_and_year(default_month='شهریور', default_year='۱۴۰۵'):
+def prompt_month_and_year(default_month='شهریور', default_year='1405'):
     print("=" * 75)
-    print("🚀 سامانه هوشمند تجمیع عملکرد و صدور کارنامه نواحی نسرا - استان اصفهان")
+    print("   NASRA DISTRICT PERFORMANCE MONITORING & SCORECARD SYSTEM")
+    print("   سامانه هوشمند تجمیع عملکرد و صدور کارنامه نواحی نسرا - استان اصفهان")
     print("=" * 75)
-    print("\n📅 لطفاً ماه دوره ارزیابی را انتخاب فرمایید:\n")
-    print("  [1] فروردین     [4] تیر         [7] مهر        [10] دی")
-    print("  [2] اردیبهشت    [5] مرداد       [8] آبان       [11] بهمن")
-    print("  [3] خرداد       [6] شهریور      [9] آذر        [12] اسفند")
+    print("\nSelect Evaluation Month (Shomare Mah ra entekhab konid):\n")
+    print("  [1] Farvardin   (فروردین)      [7]  Mehr        (مهر)")
+    print("  [2] Ordibehesht (اردیبهشت)     [8]  Aban        (آبان)")
+    print("  [3] Khordad     (خرداد)        [9]  Azar        (آذر)")
+    print("  [4] Tir         (تیر)          [10] Dey         (دی)")
+    print("  [5] Mordad      (مرداد)        [11] Bahman      (بهمن)")
+    print("  [6] Shahrivar   (شهریور)       [12] Esfand      (اسفند)")
     print("-" * 75)
     
     selected_m = default_month
     try:
-        user_choice = input(f"👉 شماره ماه را وارد کنید (مثلاً عدد 4 برای تیر، 5 برای مرداد) [پیش‌فرض: {default_month}]: ").strip()
+        user_choice = input(f"Enter month number (e.g. 4 for Tir, 5 for Mordad) [Default: 6 = Shahrivar]: ").strip()
         if user_choice:
-            # Check if user entered a number from 1 to 12
-            if user_choice.isdigit():
-                idx = int(user_choice)
-                if 1 <= idx <= 12:
-                    selected_m = MONTH_NAMES[idx - 1]
-            elif user_choice in MONTH_NAMES:
-                selected_m = user_choice
+            user_choice_lower = user_choice.lower()
+            if user_choice_lower in MONTH_MAP:
+                selected_m = MONTH_MAP[user_choice_lower]
+            elif user_choice.isdigit() and 1 <= int(user_choice) <= 12:
+                selected_m = MONTH_INFO[int(user_choice) - 1][2]
     except (EOFError, KeyboardInterrupt):
         selected_m = default_month
 
     selected_y = default_year
     try:
-        user_year = input(f"📆 سال ارزیابی [پیش‌فرض: {default_year}]: ").strip()
+        user_year = input(f"Enter evaluation year (Sal) [Default: {default_year}]: ").strip()
         if user_year:
-            # Normalize digits
-            p_digits = '۰۱۲۳۴۵۶۷۸۹'
-            for i, d in enumerate(p_digits):
-                user_year = user_year.replace(str(i), d)
             selected_y = user_year
     except (EOFError, KeyboardInterrupt):
         selected_y = default_year
@@ -256,17 +270,17 @@ def find_reports_folder(month_name):
 
 def process_all_reports(master_excel="تهیه کارنامه نواحی.xlsx", selected_month=None, selected_year=None):
     if not os.path.exists(master_excel):
-        print(f"❌ خطا: فایل کارنامه '{master_excel}' یافت نشد!")
-        return False, "شهریور", "۱۴۰۵"
+        print(f"❌ Error: Master Excel file '{master_excel}' not found!")
+        return False, "شهریور", "1405"
         
     wb_master = openpyxl.load_workbook(master_excel)
     ws_card = wb_master['کارنامه هوشمند']
     
     def_month = str(ws_card['C3'].value or 'شهریور').strip()
-    if def_month not in MONTH_NAMES:
+    if def_month not in [m[2] for m in MONTH_INFO]:
         def_month = 'شهریور'
         
-    def_year = str(ws_card['E3'].value or '۱۴۰۵').strip() if 'E3' in ws_card else '۱۴۰۵'
+    def_year = str(ws_card['E3'].value or '1405').strip() if 'E3' in ws_card else '1405'
 
     if selected_month and selected_year:
         month = selected_month
@@ -275,25 +289,24 @@ def process_all_reports(master_excel="تهیه کارنامه نواحی.xlsx", 
         month = selected_month
         year = def_year
     else:
-        # Prompt interactively
         month, year = prompt_month_and_year(default_month=def_month, default_year=def_year)
         
     # Update Excel headers
     ws_card['C3'].value = month
-    ws_card['E3'].value = year
+    ws_card['E3'].value = str(year)
     
     print("-" * 75)
-    print(f"✓ دوره ارزیابی انتخابی: ماه «{month}» سال {year}")
+    print(f"✓ Selected Evaluation Period: Month [{month}] - Year [{year}]")
     
     folder_name, excel_files = find_reports_folder(month)
-    print(f"📁 پوشه گزارش‌ها: '{folder_name}' | تعداد فایل‌های دریافتی: {len(excel_files)}")
+    print(f"📁 Reports folder: '{folder_name}' | Received Excel files: {len(excel_files)}")
     print("-" * 75)
     
     if not excel_files:
-        print(f"⚠️ هیچ فایل اکسلی در پوشه '{folder_name}' یافت نشد.")
-        print(f"💡 لطفاً فایل‌های گزارش ماهانه شهرستان‌ها را داخل پوشه '{folder_name}' قرار دهید.")
+        print(f"⚠️ No employee Excel reports found in '{folder_name}'.")
+        print(f"💡 Please copy the monthly report Excel files into folder '{folder_name}'.")
         wb_master.save(master_excel)
-        return False, month, year
+        return False, month, str(year)
         
     extracted = {}
     
@@ -330,7 +343,7 @@ def process_all_reports(master_excel="تهیه کارنامه نواحی.xlsx", 
                     if detected: break
                     
             if not detected:
-                print(f"⚠️ اخطار: شهرستان مربوط به فایل '{fname}' شناسایی نشد.")
+                print(f"⚠️ Could not detect district for file: '{fname}'")
                 continue
                 
             m_hoz = extract_sheet_metrics(ws_hozori)
@@ -359,10 +372,10 @@ def process_all_reports(master_excel="تهیه کارنامه نواحی.xlsx", 
             print(f"✓ [{detected}]: {extracted[detected]['details']}")
             
         except Exception as e:
-            print(f"❌ خطا در پردازش فایل '{fname}': {e}")
+            print(f"❌ Error processing file '{fname}': {e}")
 
     print("-" * 75)
-    print("💾 در حال ثبت عملکرد در فایل اکسل کارنامه...")
+    print("💾 Updating metrics into master Excel file...")
     
     ws_rep = wb_master['گزارش عملکرد ماهانه']
     row_map = {}
@@ -404,14 +417,14 @@ def process_all_reports(master_excel="تهیه کارنامه نواحی.xlsx", 
     archive_name = f"کارنامه_نواحی_{month}_{year}.xlsx"
     try:
         shutil.copyfile(master_excel, archive_name)
-        print(f"📁 یک نسخه پشتیبان اختصاصی با نام '{archive_name}' ذخیره شد.")
+        print(f"📁 یک نسخه پشتیبان با نام '{archive_name}' ذخیره شد.")
     except Exception:
         pass
         
-    print(f"🎉 ثبت در اکسل کامل شد! {active_count} ناحیه فعال و {inactive_count} ناحیه فاقد فعالیت ثبت گردید.")
-    return True, month, year
+    print(f"🎉 عملیات ثبت در اکسل کامل شد! {active_count} ناحیه فعال و {inactive_count} ناحیه فاقد فعالیت ثبت گردید.")
+    return True, month, str(year)
 
-def generate_all_images_offline(master_excel="تهیه کارنامه نواحی.xlsx", month="شهریور", year="۱۴۰۵"):
+def generate_all_images_offline(master_excel="تهیه کارنامه نواحی.xlsx", month="شهریور", year="1405"):
     try:
         from image_generator import generate_scorecard_png, generate_dashboard_png
     except Exception as e:
@@ -424,7 +437,7 @@ def generate_all_images_offline(master_excel="تهیه کارنامه نواحی
     os.makedirs(out_dir_month, exist_ok=True)
     
     print("-" * 75)
-    print(f"📸 در حال صدور تصاویر کارنامه ۳۲ شهرستان ویژه ماه «{month}» سال {year} در پوشه '{out_dir_month}'...")
+    print(f"📸 Generating mobile scorecards for 32 districts ({month} {year}) in '{out_dir_month}'...")
     
     if not os.path.exists(master_excel):
         print(f"❌ فایل '{master_excel}' یافت نشد.")
@@ -495,11 +508,11 @@ def generate_all_images_offline(master_excel="تهیه کارنامه نواحی
         out_p_month_en = os.path.join(out_dir_month, f"Scorecard_{en_name}.png")
         
         try:
-            generate_scorecard_png(dn, t, a, rank=rk, tier=tier, month=month, year=year, output_path=out_p_month_fa)
+            generate_scorecard_png(dn, t, a, rank=rk, tier=tier, month=month, year=str(year), output_path=out_p_month_fa)
             shutil.copyfile(out_p_month_fa, out_p_month_en)
             count_img += 1
         except Exception as err:
-            print(f"خطا در تولید تصویر کارنامه {dn}: {err}")
+            print(f"Error generating scorecard for {dn}: {err}")
 
     # Provincial Dashboard
     sum_t_hoz = sum(targets[d]['hozori'] for d in targets)
@@ -538,15 +551,14 @@ def generate_all_images_offline(master_excel="تهیه کارنامه نواحی
     dash_path_en = os.path.join(out_dir_month, f"Dashboard_Provincial_{month}.png")
     
     try:
-        generate_dashboard_png(macro_data, top5, bot5, kpi_d, month=month, year=year, output_path=dash_path_fa)
+        generate_dashboard_png(macro_data, top5, bot5, kpi_d, month=month, year=str(year), output_path=dash_path_fa)
         shutil.copyfile(dash_path_fa, dash_path_en)
     except Exception as err:
-        print(f"خطا در تولید تصویر داشبورد: {err}")
+        print(f"Error generating dashboard: {err}")
     
     print("-" * 75)
-    print(f"🎉 تعداد {count_img} تصویر کارنامه عمودی ۱۰۸۰×۱۹۲۰ در پوشه اختصاصی:")
+    print(f"🎉 32 Mobile Scorecards & Provincial Dashboard saved successfully in:")
     print(f"   📁 '{os.path.abspath(out_dir_month)}'")
-    print(f"   به همراه تصویر داشبورد مدیریتی کل استان ذخیره گردید!")
     print("=" * 75)
     
     # Automatically pop up the folder in Windows Explorer
@@ -558,16 +570,16 @@ def generate_all_images_offline(master_excel="تهیه کارنامه نواحی
 
 if __name__ == '__main__':
     # Parse month and year from command line if passed:
-    # e.g.: python run_aggregation.py تیر 1405
-    # or: python run_aggregation.py 4 1405
+    # e.g.: python run_aggregation.py 4 1405
+    # or: python run_aggregation.py tir 1405
     m_arg = None
     y_arg = None
     if len(sys.argv) > 1:
-        raw_m = sys.argv[1].strip()
-        if raw_m.isdigit() and 1 <= int(raw_m) <= 12:
-            m_arg = MONTH_NAMES[int(raw_m) - 1]
-        elif raw_m in MONTH_NAMES:
-            m_arg = raw_m
+        raw_m = sys.argv[1].strip().lower()
+        if raw_m in MONTH_MAP:
+            m_arg = MONTH_MAP[raw_m]
+        elif raw_m.isdigit() and 1 <= int(raw_m) <= 12:
+            m_arg = MONTH_INFO[int(raw_m) - 1][2]
             
     if len(sys.argv) > 2:
         y_arg = sys.argv[2].strip()
