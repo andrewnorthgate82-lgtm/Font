@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 ====================================================================
-سامانه هوشمند تجمیع خودکار فایل‌های گزارش ماهانه کارمندان نواحی نسرا
-استان اصفهان - سال ۱۴۰۵
-پشتیبانی از تفکیک کامل ماه و سال، پوشه‌بندی اختصاصی هر ماه،
-ثبت صفر برای نواحی بدون فعالیت و صدور تصاویر عمودی ۱۰۸۰×۱۹۲۰ موبایل
+سامانه تجمیع خودکار عملکرد ۳ ماهه (فصلی) نواحی نسرا - استان اصفهان
+تجمیع چندین فایل اکسل ماهانه برای هر شهرستان (مثلاً ۳ فایل برای هر ناحیه)
+مقیاس نمره‌دهی رسمی: از ۷۰ (عملکرد صفر) تا ۱۰۰ (عالی)
 ====================================================================
 """
 
@@ -56,26 +55,12 @@ ensure_dependencies()
 
 import openpyxl
 
-MONTH_INFO = [
-    (1, "Farvardin", "فروردین"),
-    (2, "Ordibehesht", "اردیبهشت"),
-    (3, "Khordad", "خرداد"),
-    (4, "Tir", "تیر"),
-    (5, "Mordad", "مرداد"),
-    (6, "Shahrivar", "شهریور"),
-    (7, "Mehr", "مهر"),
-    (8, "Aban", "آبان"),
-    (9, "Azar", "آذر"),
-    (10, "Dey", "دی"),
-    (11, "Bahman", "بهمن"),
-    (12, "Esfand", "اسفند")
+QUARTERS = [
+    (1, "Bahar (Spring)", "بهار (فروردین تا خرداد)"),
+    (2, "Tabestan (Summer)", "تابستان (تیر تا شهریور)"),
+    (3, "Paeiz (Fall)", "پاییز (مهر تا آذر)"),
+    (4, "Zemestan (Winter)", "زمستان (دی تا اسفند)")
 ]
-
-MONTH_MAP = {}
-for num, en_name, fa_name in MONTH_INFO:
-    MONTH_MAP[str(num)] = fa_name
-    MONTH_MAP[en_name.lower()] = fa_name
-    MONTH_MAP[fa_name] = fa_name
 
 DISTRICTS = [
     'آران و بیدگل', 'امام حسین(ع)', 'امام رضا(ع)', 'امام صادق(ع)', 'امام علی(ع)',
@@ -209,105 +194,88 @@ def extract_sheet_metrics(ws):
         'col_name': target_col_name
     }
 
-def prompt_month_and_year(default_month='شهریور', default_year='1405'):
+def prompt_quarter_and_year():
     print("=" * 75)
-    print("   NASRA DISTRICT PERFORMANCE MONITORING & SCORECARD SYSTEM")
-    print("   سامانه هوشمند تجمیع عملکرد و صدور کارنامه نواحی نسرا - استان اصفهان")
+    print("   NASRA 3-MONTH (QUARTERLY) PERFORMANCE SYSTEM - ISFAHAN")
+    print("   سامانه هوشمند تجمیع عملکرد ۳ ماهه (فصلی) نواحی نسرا - استان اصفهان")
     print("=" * 75)
-    print("\nSelect Evaluation Month (Shomare Mah ra entekhab konid):\n")
-    print("  [1] Farvardin   (فروردین)      [7]  Mehr        (مهر)")
-    print("  [2] Ordibehesht (اردیبهشت)     [8]  Aban        (آبان)")
-    print("  [3] Khordad     (خرداد)        [9]  Azar        (آذر)")
-    print("  [4] Tir         (تیر)          [10] Dey         (دی)")
-    print("  [5] Mordad      (مرداد)        [11] Bahman      (بهمن)")
-    print("  [6] Shahrivar   (شهریور)       [12] Esfand      (اسفند)")
+    print("Select Quarter (Fasl):\n")
+    print("  [1] Bahar    - Spring (Farvardin, Ordibehesht, Khordad)")
+    print("  [2] Tabestan - Summer (Tir, Mordad, Shahrivar)")
+    print("  [3] Paeiz    - Fall   (Mehr, Aban, Azar)")
+    print("  [4] Zemestan - Winter (Dey, Bahman, Esfand)")
     print("-" * 75)
     
-    selected_m = default_month
+    sel_period = QUARTERS[0][2]
     try:
-        user_choice = input(f"Enter month number (e.g. 4 for Tir, 5 for Mordad) [Default: 6 = Shahrivar]: ").strip()
-        if user_choice:
-            user_choice_lower = user_choice.lower()
-            if user_choice_lower in MONTH_MAP:
-                selected_m = MONTH_MAP[user_choice_lower]
-            elif user_choice.isdigit() and 1 <= int(user_choice) <= 12:
-                selected_m = MONTH_INFO[int(user_choice) - 1][2]
+        ans = input("Enter Quarter number (1-4) [Default: 1 = Bahar]: ").strip()
+        if ans in ['1', '2', '3', '4']:
+            sel_period = QUARTERS[int(ans) - 1][2]
     except (EOFError, KeyboardInterrupt):
-        selected_m = default_month
+        sel_period = QUARTERS[0][2]
 
-    selected_y = default_year
+    sel_year = "1405"
     try:
-        user_year = input(f"Enter evaluation year (Sal) [Default: {default_year}]: ").strip()
-        if user_year:
-            selected_y = user_year
+        ans_y = input("Enter Year (Sal) [Default: 1405]: ").strip()
+        if ans_y:
+            sel_year = ans_y
     except (EOFError, KeyboardInterrupt):
-        selected_y = default_year
+        sel_year = "1405"
         
-    return selected_m, selected_y
+    return sel_period, sel_year
 
-def find_reports_folder(month_name):
-    # Search priorities:
-    # 1. reports/<month_name>
-    # 2. reports/
-    # 3. گزارشات_ماهانه/<month_name>
-    # 4. گزارشات_ماهانه/
+def find_quarterly_reports_files(quarter_name):
+    # Searches in reports, reports_3months, or subfolder
     candidates = [
-        os.path.join('reports', month_name),
         'reports',
-        os.path.join('گزارشات_ماهانه', month_name),
-        'گزارشات_ماهانه'
+        'reports_3months',
+        'گزارشات_سه_ماهه',
+        os.path.join('reports', quarter_name.split()[0])
     ]
+    all_files = []
+    found_dir = 'reports'
     for c in candidates:
         if os.path.exists(c):
             files = glob.glob(os.path.join(c, '*.xlsx'))
             files = [f for f in files if not os.path.basename(f).startswith('~$')]
             if files:
                 return c, files
-                
-    # If no files found, default to 'reports'
     os.makedirs('reports', exist_ok=True)
     return 'reports', []
 
-def process_all_reports(master_excel="تهیه کارنامه نواحی.xlsx", selected_month=None, selected_year=None):
+def process_quarterly_reports(master_excel="تهیه کارنامه ۳ ماهه نواحی.xlsx", selected_quarter=None, selected_year=None):
     if not os.path.exists(master_excel):
-        print(f"❌ Error: Master Excel file '{master_excel}' not found!")
-        return False, "شهریور", "1405"
+        print(f"❌ Error: Master 3-month Excel file '{master_excel}' not found. Regenerating...")
+        try:
+            import make_quarterly_excel
+        except Exception:
+            pass
+            
+    if selected_quarter and selected_year:
+        quarter = selected_quarter
+        year = selected_year
+    else:
+        quarter, year = prompt_quarter_and_year()
         
     wb_master = openpyxl.load_workbook(master_excel)
-    ws_card = wb_master['کارنامه هوشمند']
-    
-    def_month = str(ws_card['C3'].value or 'شهریور').strip()
-    if def_month not in [m[2] for m in MONTH_INFO]:
-        def_month = 'شهریور'
-        
-    def_year = str(ws_card['E3'].value or '1405').strip() if 'E3' in ws_card else '1405'
-
-    if selected_month and selected_year:
-        month = selected_month
-        year = selected_year
-    elif selected_month:
-        month = selected_month
-        year = def_year
-    else:
-        month, year = prompt_month_and_year(default_month=def_month, default_year=def_year)
-        
-    # Update Excel headers
-    ws_card['C3'].value = month
+    ws_card = wb_master['کارنامه هوشمند ۳ ماهه']
+    ws_card['C3'].value = quarter
     ws_card['E3'].value = str(year)
     
     print("-" * 75)
-    print(f"✓ Selected Evaluation Period: Month [{month}] - Year [{year}]")
+    print(f"✓ Selected Evaluation Period: [{quarter}] - Year [{year}]")
     
-    folder_name, excel_files = find_reports_folder(month)
-    print(f"📁 Reports folder: '{folder_name}' | Received Excel files: {len(excel_files)}")
+    folder_name, excel_files = find_quarterly_reports_files(quarter)
+    print(f"📁 Reports Folder: '{folder_name}' | Total Files Detected: {len(excel_files)}")
     print("-" * 75)
     
     if not excel_files:
         print(f"⚠️ No employee Excel reports found in '{folder_name}'.")
-        print(f"💡 Please copy the monthly report Excel files into folder '{folder_name}'.")
+        print(f"💡 Place your 3 monthly files per district into '{folder_name}' and run again.")
         wb_master.save(master_excel)
-        return False, month, str(year)
+        return False, quarter, year
         
+    # Accumulate data per district across all files!
     extracted = {}
     
     for fpath in excel_files:
@@ -361,23 +329,34 @@ def process_all_reports(master_excel="تهیه کارنامه نواحی.xlsx", 
             metric_tol = m_tol['people_sum'] if m_tol['people_sum'] > 0 else m_tol['classes_count']
             neshast = 1 if (metric_hoz + metric_maj + metric_kha + metric_tol) > 0 else 0
             
-            extracted[detected] = {
-                'hozori_total': metric_hoz,
-                'majazi': metric_maj,
-                'khalagh': metric_kha,
-                'tolid': metric_tol,
-                'neshast': neshast,
-                'details': f"حضوری: {metric_hoz} نفر | مجازی: {metric_maj} نفر | خلاقانه: {metric_kha} نفر | تولیدات: {metric_tol}"
-            }
-            print(f"✓ [{detected}]: {extracted[detected]['details']}")
+            if detected not in extracted:
+                extracted[detected] = {
+                    'files_count': 0,
+                    'files': [],
+                    'hozori_total': 0,
+                    'majazi': 0,
+                    'khalagh': 0,
+                    'tolid': 0,
+                    'neshast': 0
+                }
+                
+            extracted[detected]['files_count'] += 1
+            extracted[detected]['files'].append(fname)
+            extracted[detected]['hozori_total'] += metric_hoz
+            extracted[detected]['majazi'] += metric_maj
+            extracted[detected]['khalagh'] += metric_kha
+            extracted[detected]['tolid'] += metric_tol
+            extracted[detected]['neshast'] += neshast
+            
+            print(f"✓ [{detected}] (فایل {extracted[detected]['files_count']}: {fname}): +{metric_hoz} نفر حضوری | +{metric_maj} مجازی | +{metric_kha} خلاقانه")
             
         except Exception as e:
             print(f"❌ Error processing file '{fname}': {e}")
 
     print("-" * 75)
-    print("💾 Updating metrics into master Excel file...")
+    print("💾 Updating 3-month cumulative metrics into Excel...")
     
-    ws_rep = wb_master['گزارش عملکرد ماهانه']
+    ws_rep = wb_master['گزارش عملکرد ۳ ماهه']
     row_map = {}
     for r in range(2, ws_rep.max_row + 1):
         dname = ws_rep.cell(r, 1).value
@@ -400,52 +379,48 @@ def process_all_reports(master_excel="تهیه کارنامه نواحی.xlsx", 
             ws_rep.cell(row=r, column=4, value=data['khalagh'])
             ws_rep.cell(row=r, column=5, value=data['tolid'])
             ws_rep.cell(row=r, column=6, value=data['neshast'])
+            ws_rep.cell(row=r, column=7, value=data['files_count'])
             active_count += 1
         else:
-            # District had no file in this month -> zero performance!
+            # No files -> zero performance
             ws_rep.cell(row=r, column=2, value=0)
             ws_rep.cell(row=r, column=3, value=0)
             ws_rep.cell(row=r, column=4, value=0)
             ws_rep.cell(row=r, column=5, value=0)
             ws_rep.cell(row=r, column=6, value=0)
+            ws_rep.cell(row=r, column=7, value=0)
             inactive_count += 1
-            print(f"⭕ [{dname}]: گزارشی ارسال نشده (عملکرد ماه {month} صفر ثبت گردید)")
+            print(f"⭕ [{dname}]: گزارشی ارسال نشده (عملکرد ۳ ماهه ۰ منظور شد - نمره ۷۰)")
 
     wb_master.save(master_excel)
     
-    # Save a dedicated monthly archive copy
-    archive_name = f"کارنامه_نواحی_{month}_{year}.xlsx"
+    archive_name = f"کارنامه_۳ماهه_نواحی_{quarter.split()[0]}_{year}.xlsx"
     try:
         shutil.copyfile(master_excel, archive_name)
-        print(f"📁 یک نسخه پشتیبان با نام '{archive_name}' ذخیره شد.")
+        print(f"📁 پشتیبان فصلی با نام '{archive_name}' ذخیره شد.")
     except Exception:
         pass
         
-    print(f"🎉 عملیات ثبت در اکسل کامل شد! {active_count} ناحیه فعال و {inactive_count} ناحیه فاقد فعالیت ثبت گردید.")
-    return True, month, str(year)
+    print(f"🎉 عملیات با موفقیت پایان یافت! آمار {active_count} ناحیه فعال و {inactive_count} ناحیه فاقد فعالیت ثبت شد.")
+    return True, quarter, str(year)
 
-def generate_all_images_offline(master_excel="تهیه کارنامه نواحی.xlsx", month="شهریور", year="1405"):
+def generate_all_quarterly_images(master_excel="تهیه کارنامه ۳ ماهه نواحی.xlsx", quarter="بهار (فروردین تا خرداد)", year="1405"):
     try:
-        from image_generator import generate_scorecard_png, generate_dashboard_png
+        from image_generator import generate_quarterly_scorecard_png, generate_quarterly_dashboard_png
     except Exception as e:
         print("⚠️ ماژول‌های تولید تصویر در دسترس نیستند:", e)
         return
         
-    # Main folder and month-dedicated folder
-    out_dir_main = "output_cards"
-    out_dir_month = os.path.join(out_dir_main, f"{month}_{year}")
-    os.makedirs(out_dir_month, exist_ok=True)
+    quarter_slug = quarter.split()[0]
+    out_dir = os.path.join("output_cards_3months", f"{quarter_slug}_{year}")
+    os.makedirs(out_dir, exist_ok=True)
     
     print("-" * 75)
-    print(f"📸 Generating mobile scorecards for 32 districts ({month} {year}) in '{out_dir_month}'...")
+    print(f"📸 در حال تولید کارنامه‌های ۳ ماهه (مقیاس ۷۰ تا ۱۰۰) در پوشه '{out_dir}'...")
     
-    if not os.path.exists(master_excel):
-        print(f"❌ فایل '{master_excel}' یافت نشد.")
-        return
-
     wb = openpyxl.load_workbook(master_excel, data_only=True)
-    ws_target = wb['پایگاه داده حد انتظار']
-    ws_rep = wb['گزارش عملکرد ماهانه']
+    ws_target = wb['پایگاه داده حد انتظار ۳ ماهه']
+    ws_rep = wb['گزارش عملکرد ۳ ماهه']
     
     targets = {}
     for r in range(2, 34):
@@ -456,7 +431,7 @@ def generate_all_images_offline(master_excel="تهیه کارنامه نواحی
             'majazi': ws_target.cell(r, 4).value or 0,
             'khalagh': ws_target.cell(r, 5).value or 0,
             'tolid': ws_target.cell(r, 6).value or 0,
-            'neshast': ws_target.cell(r, 7).value or 1
+            'neshast': ws_target.cell(r, 7).value or 3
         }
         
     actuals = {}
@@ -468,51 +443,80 @@ def generate_all_images_offline(master_excel="تهیه کارنامه نواحی
                 'majazi': ws_rep.cell(r, 3).value or 0,
                 'khalagh': ws_rep.cell(r, 4).value or 0,
                 'tolid': ws_rep.cell(r, 5).value or 0,
-                'neshast': ws_rep.cell(r, 6).value or 0
+                'neshast': ws_rep.cell(r, 6).value or 0,
+                'files_count': ws_rep.cell(r, 7).value or 0
             }
             
+    # Calculate Realization and 70-100 Score!
+    # Formula: Score = 70.0 + (30.0 * min(1.0, max(0.0, realization_pct / 100.0)))
     dist_scores = []
     for dn, t in targets.items():
-        a = actuals.get(dn, {'hozori': 0, 'majazi': 0, 'khalagh': 0, 'tolid': 0, 'neshast': 0})
+        a = actuals.get(dn, {'hozori': 0, 'majazi': 0, 'khalagh': 0, 'tolid': 0, 'neshast': 0, 'files_count': 0})
         pcts = []
         for k in ['hozori', 'majazi', 'khalagh', 'tolid', 'neshast']:
             tv = t.get(k, 1)
             av = a.get(k, 0)
             pcts.append((av / tv * 100) if tv > 0 else 0)
-        sc = sum(pcts) / len(pcts) if pcts else 0
-        a['overall_score'] = sc
-        dist_scores.append((dn, sc))
+        avg_realization = sum(pcts) / len(pcts) if pcts else 0
+        a['overall_realization'] = avg_realization
         
-    dist_scores.sort(key=lambda x: x[1], reverse=True)
+        # 70 to 100 Scale:
+        # Zero performance -> 70.0
+        # 100% performance -> 100.0
+        sc_70_100 = round(70.0 + 30.0 * min(1.0, max(0.0, avg_realization / 100.0)), 1)
+        a['score_70_100'] = sc_70_100
+        dist_scores.append((dn, sc_70_100, avg_realization))
+        
+    dist_scores.sort(key=lambda x: (x[1], x[2]), reverse=True)
     
     rank_map = {}
     current_rank = 1
-    for dn, sc in dist_scores:
-        if sc > 0:
+    for dn, sc, real in dist_scores:
+        if real > 0:
             rank_map[dn] = str(current_rank)
             current_rank += 1
         else:
             rank_map[dn] = "عدم فعالیت"
-    
+            
     count_img = 0
     for dn in DISTRICTS:
         t = targets.get(dn, {})
-        a = actuals.get(dn, {'overall_score': 0})
-        sc = a.get('overall_score', 0)
+        a = actuals.get(dn, {'overall_realization': 0, 'score_70_100': 70.0, 'files_count': 0})
+        sc = a.get('score_70_100', 70.0)
+        real = a.get('overall_realization', 0.0)
         rk = rank_map.get(dn, "عدم فعالیت")
         
-        tier = "عالی" if sc >= 100 else ("خوب" if sc >= 75 else ("متوسط" if sc >= 50 else ("ضعیف" if sc > 0 else "فاقد عملکرد")))
+        if sc >= 99.9:
+            tier = "عالی (پیشتاز)"
+        elif sc >= 92.5:
+            tier = "خوب"
+        elif sc >= 85.0:
+            tier = "متوسط"
+        elif sc > 70.0:
+            tier = "ضعیف"
+        else:
+            tier = "فاقد عملکرد"
+            
         en_name = DISTRICT_EN_NAMES.get(dn, dn)
-        
-        out_p_month_fa = os.path.join(out_dir_month, f"کارنامه_{dn}.png")
-        out_p_month_en = os.path.join(out_dir_month, f"Scorecard_{en_name}.png")
+        out_p_fa = os.path.join(out_dir, f"کارنامه_{dn}.png")
+        out_p_en = os.path.join(out_dir, f"Scorecard_{en_name}.png")
         
         try:
-            generate_scorecard_png(dn, t, a, rank=rk, tier=tier, month=month, year=str(year), output_path=out_p_month_fa)
-            shutil.copyfile(out_p_month_fa, out_p_month_en)
+            generate_quarterly_scorecard_png(
+                district_name=dn,
+                target_dict=t,
+                actual_dict=a,
+                rank=rk,
+                tier=tier,
+                period=quarter,
+                year=year,
+                files_count=a.get('files_count', 0),
+                output_path=out_p_fa
+            )
+            shutil.copyfile(out_p_fa, out_p_en)
             count_img += 1
         except Exception as err:
-            print(f"Error generating scorecard for {dn}: {err}")
+            print(f"Error generating 3-month card for {dn}: {err}")
 
     # Provincial Dashboard
     sum_t_hoz = sum(targets[d]['hozori'] for d in targets)
@@ -528,61 +532,57 @@ def generate_all_images_offline(master_excel="تهیه کارنامه نواحی
     sum_a_nes = sum(actuals.get(d, {}).get('neshast', 0) for d in targets)
     
     macro_data = [
-        ('سواد رسانه حضوری و توانمندسازی (ضریب ۳۱)', int(sum_t_hoz), int(sum_a_hoz)),
-        ('سواد رسانه مجازی و لایو (ضریب ۲۱۷)', int(sum_t_maj), int(sum_a_maj)),
-        ('اقدامات و ابتکارات خلاقانه (ضریب ۶۲)', int(sum_t_kha), int(sum_a_kha)),
-        ('تولیدات رسانه‌ای و محتوایی (ضریب ۳)', int(sum_t_tol), int(sum_a_tol)),
-        ('نشست با انجمن مدرسان (۱ نشست)', int(sum_t_nes), int(sum_a_nes))
+        ('سواد رسانه حضوری و توانمندسازی (ضریب ۹۳)', int(sum_t_hoz), int(sum_a_hoz)),
+        ('سواد رسانه مجازی و لایو (ضریب ۶۵۱)', int(sum_t_maj), int(sum_a_maj)),
+        ('اقدامات و ابتکارات خلاقانه (ضریب ۱۸۶)', int(sum_t_kha), int(sum_a_kha)),
+        ('تولیدات رسانه‌ای و محتوایی (ضریب ۹)', int(sum_t_tol), int(sum_a_tol)),
+        ('نشست با انجمن مدرسان (۳ نشست)', int(sum_t_nes), int(sum_a_nes))
     ]
     
-    active_dists = [x for x in dist_scores if x[1] > 0]
-    inactive_dists = [x for x in dist_scores if x[1] == 0]
+    top5 = [(i+1, dist_scores[i][0], dist_scores[i][1]) for i in range(min(5, len(dist_scores)))]
+    bot5 = [(i+1, dist_scores[len(dist_scores)-1-i][0], dist_scores[len(dist_scores)-1-i][1]) for i in range(min(5, len(dist_scores)))]
     
-    top5 = [(i+1, active_dists[i][0], active_dists[i][1]) for i in range(min(5, len(active_dists)))]
-    all_sorted = active_dists + inactive_dists
-    bot5 = [(i+1, all_sorted[len(all_sorted)-1-i][0], all_sorted[len(all_sorted)-1-i][1]) for i in range(min(5, len(all_sorted)))]
+    avg_score = sum(x[1] for x in dist_scores) / len(dist_scores) if dist_scores else 70.0
+    top_d = dist_scores[0][0] if dist_scores and dist_scores[0][1] > 70.0 else "در انتظار"
+    rep_c = sum(1 for x in dist_scores if x[1] > 70.0)
     
-    avg_sc = sum(x[1] for x in dist_scores) / len(dist_scores) if dist_scores else 0
-    top_d = dist_scores[0][0] if dist_scores and dist_scores[0][1] > 0 else "در انتظار"
-    rep_c = sum(1 for x in dist_scores if x[1] > 0)
-    
-    kpi_d = {'avg_score': avg_sc, 'top_district': top_d, 'reported_count': rep_c}
-    dash_path_fa = os.path.join(out_dir_month, f"تصویر_داشبورد_مدیریتی_استان_{month}_{year}.png")
-    dash_path_en = os.path.join(out_dir_month, f"Dashboard_Provincial_{month}.png")
+    kpi_d = {'avg_score': avg_score, 'top_district': top_d, 'reported_count': rep_c}
+    dash_path_fa = os.path.join(out_dir, f"تصویر_داشبورد_مدیریتی_۳ماهه_{quarter_slug}_{year}.png")
+    dash_path_en = os.path.join(out_dir, f"Dashboard_3Months_Provincial_{quarter_slug}.png")
     
     try:
-        generate_dashboard_png(macro_data, top5, bot5, kpi_d, month=month, year=str(year), output_path=dash_path_fa)
+        generate_quarterly_dashboard_png(macro_data, top5, bot5, kpi_d, period=quarter, year=year, output_path=dash_path_fa)
         shutil.copyfile(dash_path_fa, dash_path_en)
     except Exception as err:
-        print(f"Error generating dashboard: {err}")
-    
+        print(f"Error generating 3-month dashboard: {err}")
+        
     print("-" * 75)
-    print(f"🎉 32 Mobile Scorecards & Provincial Dashboard saved successfully in:")
-    print(f"   📁 '{os.path.abspath(out_dir_month)}'")
+    print(f"🎉 تعداد {count_img} تصویر کارنامه ۳ ماهه (نمره ۷۰ تا ۱۰۰) در پوشه:")
+    print(f"   📁 '{os.path.abspath(out_dir)}'")
+    print("   به همراه تصویر داشبورد فصلی کل استان ذخیره گردید!")
     print("=" * 75)
     
-    # Automatically pop up the folder in Windows Explorer
     if sys.platform == 'win32':
         try:
-            os.system(f'explorer "{os.path.abspath(out_dir_month)}"')
+            os.system(f'explorer "{os.path.abspath(out_dir)}"')
         except Exception:
             pass
 
 if __name__ == '__main__':
-    # Parse month and year from command line if passed:
-    # e.g.: python run_aggregation.py 4 1405
-    # or: python run_aggregation.py tir 1405
-    m_arg = None
+    q_arg = None
     y_arg = None
     if len(sys.argv) > 1:
-        raw_m = sys.argv[1].strip().lower()
-        if raw_m in MONTH_MAP:
-            m_arg = MONTH_MAP[raw_m]
-        elif raw_m.isdigit() and 1 <= int(raw_m) <= 12:
-            m_arg = MONTH_INFO[int(raw_m) - 1][2]
-            
+        raw_q = sys.argv[1].strip()
+        if raw_q in ['1', '2', '3', '4']:
+            q_arg = QUARTERS[int(raw_q) - 1][2]
+        else:
+            for q_num, q_en, q_fa in QUARTERS:
+                if raw_q.lower() in q_en.lower() or raw_q in q_fa:
+                    q_arg = q_fa
+                    break
+                    
     if len(sys.argv) > 2:
         y_arg = sys.argv[2].strip()
         
-    success, sel_month, sel_year = process_all_reports(selected_month=m_arg, selected_year=y_arg)
-    generate_all_images_offline(month=sel_month, year=sel_year)
+    success, sel_quarter, sel_year = process_quarterly_reports(selected_quarter=q_arg, selected_year=y_arg)
+    generate_all_quarterly_images(quarter=sel_quarter, year=sel_year)

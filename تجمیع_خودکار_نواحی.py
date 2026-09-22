@@ -179,7 +179,7 @@ def extract_sheet_metrics(ws):
     
     for c in range(1, ws.max_column + 1):
         h = str(ws.cell(1, c).value or '')
-        if any(k in h for k in ['نفر', 'بازدید']):
+        if any(k in h for k in ['نفر', 'بازدید', 'مخاطب', 'شرکت', 'تیراژ', 'مجموع']):
             target_col = c
             target_col_name = h
             break
@@ -187,7 +187,7 @@ def extract_sheet_metrics(ws):
     if target_col is None:
         for c in range(1, ws.max_column + 1):
             h = str(ws.cell(1, c).value or '')
-            if any(k in h for k in ['تعداد', 'صفحه', 'صفحات']):
+            if any(k in h for k in ['تعداد', 'صفحه', 'صفحات', 'میزان']):
                 target_col = c
                 target_col_name = h
                 break
