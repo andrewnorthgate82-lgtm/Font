@@ -640,6 +640,8 @@ def index():
 def get_scorecard_img():
     d_name = request.args.get('district', 'کاشان')
     month = request.args.get('month', 'شهریور')
+    year = request.args.get('year', '۱۴۰۵')
+    year = request.args.get('year', '۱۴۰۵')
     wb = openpyxl.load_workbook(MAIN_EXCEL_PATH, data_only=True)
     ws_target = wb['پایگاه داده حد انتظار']
     ws_rep = wb['گزارش عملکرد ماهانه']
@@ -681,7 +683,7 @@ def get_scorecard_img():
     tier = "عالی (۱۰۰٪+)" if a_data['overall_score'] >= 100 else ("خوب (۷۵-۹۹٪)" if a_data['overall_score'] >= 75 else ("متوسط (۵۰-۷۴٪)" if a_data['overall_score'] >= 50 else ("ضعیف" if a_data['overall_score'] > 0 else "ثبت نشده")))
     
     img_io = io.BytesIO()
-    generate_scorecard_png(d_name, t_data, a_data, rank="۱", tier=tier, month=month, output_path=img_io)
+    generate_scorecard_png(d_name, t_data, a_data, rank="۱", tier=tier, month=month, year=year, output_path=img_io)
     img_io.seek(0)
     
     fa_filename = f"کارنامه_{d_name}_{month}.png"
@@ -690,6 +692,8 @@ def get_scorecard_img():
 @app.route('/image/dashboard')
 def get_dashboard_img():
     month = request.args.get('month', 'شهریور')
+    year = request.args.get('year', '۱۴۰۵')
+    year = request.args.get('year', '۱۴۰۵')
     wb = openpyxl.load_workbook(MAIN_EXCEL_PATH, data_only=True)
     ws_target = wb['پایگاه داده حد انتظار']
     ws_rep = wb['گزارش عملکرد ماهانه']
@@ -738,7 +742,7 @@ def get_dashboard_img():
     kpi_data = {'avg_score': avg_score, 'top_district': top_d, 'reported_count': rep_cnt}
     
     img_io = io.BytesIO()
-    generate_dashboard_png(macro_data, top5, bot5, kpi_data, month=month, output_path=img_io)
+    generate_dashboard_png(macro_data, top5, bot5, kpi_data, month=month, year=year, output_path=img_io)
     img_io.seek(0)
     
     fa_dash_filename = f"تصویر_داشبورد_مدیریتی_استان_{month}.png"

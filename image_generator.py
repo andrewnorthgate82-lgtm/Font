@@ -3,7 +3,8 @@
 ========================================================================
 ماژول تولید تصاویر بهینه‌شده ویژه تلفن همراه (1080 × 1920 ایستاده - عمودی)
 کارنامه هوشمند و داشبورد مانیتورینگ عملکرد نواحی نسرا - استان اصفهان
-طراحی مدرن، چینش استاندارد فارسی (RTL)، تایپوگرافی شفاف و بدون تداخل
+پشتیبانی کامل از انتخاب پویای ماه و سال ارزیابی (تیر، مرداد، شهریور و...)
+طراحی مدرن، بدون تداخل و توهم‌رفتگی متن، فونت استاندارد IRANSans
 ========================================================================
 """
 
@@ -72,7 +73,7 @@ def draw_progressbar(draw, x, y, w, h, pct, fill_color, bg_color=(235, 238, 242)
     if fill_w > 4:
         draw.rounded_rectangle([x, y, x + fill_w, y + h], radius=radius, fill=fill_color)
 
-def generate_scorecard_png(district_name, target_dict, actual_dict, rank="۱", tier="عالی", month="شهریور", output_path="scorecard.png"):
+def generate_scorecard_png(district_name, target_dict, actual_dict, rank="۱", tier="عالی", month="شهریور", year="۱۴۰۵", output_path="scorecard.png"):
     from PIL import Image, ImageDraw
     
     # 1080 x 1920 Mobile Portrait (Vertical)
@@ -86,7 +87,7 @@ def generate_scorecard_png(district_name, target_dict, actual_dict, rank="۱", t
     
     draw.text((width//2, 45), fa("نهضت سواد رسانه‌ای انقلاب اسلامی (نسرا) - استان اصفهان"), fill=(191, 219, 254), font=load_font(21), anchor="mm")
     draw.text((width//2, 108), fa("کارنامه هوشمند ارزیابی عملکرد ماهانه"), fill=(255, 255, 255), font=load_font(38), anchor="mm")
-    sub_title = f"شهرستان: {district_name}   |   دوره ارزیابی: ماه {month} ۱۴۰۵"
+    sub_title = f"شهرستان: {district_name}   |   دوره ارزیابی: ماه {month} سال {year}"
     draw.text((width//2, 172), fa(sub_title), fill=(254, 240, 138), font=load_font(26), anchor="mm")
 
     score_val = actual_dict.get('overall_score', 0)
@@ -216,7 +217,7 @@ def generate_scorecard_png(district_name, target_dict, actual_dict, rank="۱", t
     draw.rectangle([55, prof_y + 25, 1025, prof_y + 50], fill=(241, 245, 249))
     draw.text((995, prof_y + 25), fa("مشخصات تشکیلاتی و مبانی سنجش کارنامه ناحیه:"), fill=(20, 38, 68), font=load_font(22), anchor="rm")
 
-    b_status = "عدم ارسال گزارش در این ماه - عملکرد صفر منظور شد" if is_zero else "گزارش ماهانه رسمی دریافت و در سامانه ثبت شد"
+    b_status = f"عدم ارسال گزارش در ماه {month} - عملکرد صفر منظور شد" if is_zero else f"گزارش ماه {month} دریافت و در سامانه ثبت شد"
     profile_bullets = [
         f"• تعداد حوزه‌های مقاومت تابعه: {target_dict.get('branches', 0)} حوزه مقاومت",
         "• حد انتظار اعضای انجمن مدرسان شهرستان: ۲۲ نفر",
@@ -238,7 +239,7 @@ def generate_scorecard_png(district_name, target_dict, actual_dict, rank="۱", t
     draw.text((235, foot_y + 114), fa("[ مورد تأیید مراجع استانی ]"), fill=(51, 65, 85), font=load_font(16), anchor="mm")
 
     # Explanatory text on the right
-    draw.text((995, foot_y + 45), fa(f"کارنامه رسمی ارزیابی عملکرد ماه «{month}» سال ۱۴۰۵"), fill=(20, 38, 68), font=load_font(21), anchor="rm")
+    draw.text((995, foot_y + 45), fa(f"کارنامه رسمی ارزیابی عملکرد ماه «{month}» سال {year}"), fill=(20, 38, 68), font=load_font(21), anchor="rm")
     draw.text((995, foot_y + 85), fa("صادره از سامانه جامع مانیتورینگ عملکرد ۳۲ شهرستان استان اصفهان"), fill=(71, 85, 105), font=load_font(18), anchor="rm")
     draw.text((995, foot_y + 122), fa("• بهینه‌شده با ابعاد ایستاده (۱۰۸۰×۱۹۲۰) جهت مطالعه آسان در گوشی و پیام‌رسان‌ها"), fill=(100, 116, 139), font=load_font(16), anchor="rm")
 
@@ -249,7 +250,7 @@ def generate_scorecard_png(district_name, target_dict, actual_dict, rank="۱", t
     img.save(output_path, "PNG", dpi=(150, 150))
     return img
 
-def generate_dashboard_png(macro_data, top5_data, bottom5_data, kpi_data, month="شهریور", output_path="dashboard.png"):
+def generate_dashboard_png(macro_data, top5_data, bottom5_data, kpi_data, month="شهریور", year="۱۴۰۵", output_path="dashboard.png"):
     from PIL import Image, ImageDraw
     
     # 1080 x 1920 Mobile Portrait (Vertical)
@@ -263,7 +264,7 @@ def generate_dashboard_png(macro_data, top5_data, bottom5_data, kpi_data, month=
     
     draw.text((width//2, 45), fa("نهضت سواد رسانه‌ای انقلاب اسلامی (نسرا) - استان اصفهان"), fill=(191, 219, 254), font=load_font(21), anchor="mm")
     draw.text((width//2, 108), fa("داشبورد مدیریتی مانیتورینگ عملکرد نواحی"), fill=(255, 255, 255), font=load_font(38), anchor="mm")
-    dash_sub = f"دوره ارزیابی: ماه {month} ۱۴۰۵   |   پایش جامع ۳۲ شهرستان و ۲۲۹ حوزه مقاومت"
+    dash_sub = f"دوره ارزیابی: ماه {month} سال {year}   |   پایش جامع ۳۲ شهرستان و ۲۲۹ حوزه مقاومت"
     draw.text((width//2, 172), fa(dash_sub), fill=(254, 240, 138), font=load_font(25), anchor="mm")
 
     # 2. Executive KPI Cards (2x2 Grid) (Y: 255 to 515) - RTL arranged
@@ -297,7 +298,7 @@ def generate_dashboard_png(macro_data, top5_data, bottom5_data, kpi_data, month=
     # 3. Macro Indicators Section (Y: 535 to 1180)
     sec_y = 535
     draw.rectangle([55, sec_y, 1025, sec_y + 50], fill=(24, 43, 73))
-    draw.text((width//2, sec_y + 25), fa(f"۱. جدول و نمودار تحقق شاخص‌های کلان در کل استان اصفهان - {month} ۱۴۰۵"), fill=(255, 255, 255), font=load_font(23), anchor="mm")
+    draw.text((width//2, sec_y + 25), fa(f"۱. جدول و نمودار تحقق شاخص‌های کلان در کل استان اصفهان - {month} {year}"), fill=(255, 255, 255), font=load_font(23), anchor="mm")
 
     m_start_y = sec_y + 65
     m_h = 108
@@ -382,7 +383,7 @@ def generate_dashboard_png(macro_data, top5_data, bottom5_data, kpi_data, month=
     draw.text((235, foot_y + 76), fa("استان اصفهان - گزارش مدیریتی"), fill=(4, 120, 87), font=load_font(19), anchor="mm")
     draw.text((235, foot_y + 106), fa("[ نسخه رسمی ویژه مسئولین ]"), fill=(51, 65, 85), font=load_font(16), anchor="mm")
 
-    draw.text((995, foot_y + 45), fa(f"داشبورد رسمی مانیتورینگ عملکرد ۳۲ شهرستان نسرا - ماه «{month}» ۱۴۰۵"), fill=(20, 38, 68), font=load_font(21), anchor="rm")
+    draw.text((995, foot_y + 45), fa(f"داشبورد رسمی مانیتورینگ عملکرد ۳۲ شهرستان نسرا - ماه «{month}» {year}"), fill=(20, 38, 68), font=load_font(21), anchor="rm")
     draw.text((995, foot_y + 82), fa("ملاک ارزیابی: مجموع تعداد نفرات شرکت‌کننده در کلاس‌ها و لایوها"), fill=(71, 85, 105), font=load_font(18), anchor="rm")
     draw.text((995, foot_y + 116), fa("• طراحی‌شده با سایز عمودی ایستاده (۱۰۸۰×۱۹۲۰) جهت مطالعه آسان در موبایل"), fill=(100, 116, 139), font=load_font(16), anchor="rm")
 
@@ -393,4 +394,4 @@ def generate_dashboard_png(macro_data, top5_data, bottom5_data, kpi_data, month=
     img.save(output_path, "PNG", dpi=(150, 150))
     return img
 
-print("image_generator.py ready (clean typography, no stroke distortion, 1080x1920 mobile optimized)")
+print("image_generator.py ready (dynamic month and year supported)")
