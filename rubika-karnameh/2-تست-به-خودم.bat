@@ -6,10 +6,11 @@ echo ==========================================================
 echo   TEST - sends ONE test message to YOURSELF. Very safe.
 echo.
 echo   BEFORE you continue:
-echo   Save your OWN mobile number in your phone contacts
-echo   with the special TEST name - the exact Persian name
-echo   is written in the chat guide and in SETUP.md
-echo   You can delete this contact after testing.
+echo   1. Open the Excel file in this folder
+echo      (the only .xlsx file - name means Contacts).
+echo   2. In the row of the TEST district, write YOUR OWN
+echo      mobile number in the FIRST phone-number column.
+echo   3. Save and close Excel.
 echo ==========================================================
 echo.
 echo   WHAT HAPPENS NEXT (after you press a key):

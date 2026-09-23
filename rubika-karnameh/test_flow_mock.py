@@ -215,6 +215,55 @@ class _FileInputs:
         return _FI()
 
 
+class _PhoneList:
+    """نتیجه‌های جستجوی شماره: متنِ نتیجه شامل شماره است"""
+
+    def __init__(self, page, phones):
+        self.page, self.phones = page, phones
+
+    def count(self):
+        return len(self.phones)
+
+    def nth(self, i):
+        page, ph = self.page, self.phones[i]
+
+        def open_chat():
+            page.state = "chat_open"
+            page.chat_with = ph
+            page.search_text = ""
+
+        return _ResultItem(f"{page.contacts[ph]} — {ph}", open_chat)
+
+
+class MockPagePhone(MockPage):
+    """مثل روبیکا واقعی وقتی شماره را جستجو می‌کنیم: نتیجه شامل شماره است"""
+
+    def __init__(self, phone_headers):  # {شماره: نام هدر چت}
+        self.numbers = phone_headers
+        super().__init__(dict(phone_headers))  # chat_with=شماره → هدر
+
+    def locator(self, sel):
+        s = sel.lower()
+        if "placeholder*='جستجو'" in sel and self.state == "main":
+            return _Single(self._search_box())
+        if ("پیام" in sel or "contenteditable" in sel or s == "textarea") and self.state == "chat_open":
+            return _Single(self._composer())
+        if ("ارسال" in sel or "send" in s) and self.state == "chat_open" and self.attached_file:
+            el = El("button")
+            el._click = self._send
+            return _Single(el)
+        if "result" in s or "option" in s or sel.startswith("li"):
+            if self.state == "main" and self.search_text:
+                d = sw.digits_only(self.search_text)
+                tail = d[-10:] if len(d) >= 10 else d
+                hits = [ph for ph in self.numbers if sw.phone_tail(ph) == tail]
+                return _PhoneList(self, hits)
+            return _List(self, [])
+        if sel == "input[type='file']" and self.state == "chat_open":
+            return _FileInputs(self)
+        return _Single(None)
+
+
 # ---------------------------------------------------------------- سناریوها
 
 CONTACTS = {
@@ -282,12 +331,100 @@ def test_verify_chat_title_mismatch():
     print("✅ verify_chat_title: ناهمخوانی عنوان گفتگو ← جلوگیری از ارسال اشتباه")
 
 
+
+def test_normalize_phone():
+    assert sw.normalize_phone("۰۹۱۲ ۳۴۵ ۶۷۸۹") == "09123456789"
+    assert sw.normalize_phone("+98 912 345 6789") == "09123456789"
+    assert sw.normalize_phone("00989123456789") == "09123456789"
+    assert sw.normalize_phone("98-912-345-6789") == "09123456789"
+    assert sw.normalize_phone(9123456789) == "09123456789"          # عددی (اکسل)
+    assert sw.normalize_phone(9123456789.0) == "09123456789"        # اعشاریِ اکسل
+    assert sw.normalize_phone("۰۹۱۲۳۴۵۶۷۸۹") == "09123456789"
+    assert sw.normalize_phone("") is None
+    assert sw.normalize_phone(None) is None
+    assert sw.normalize_phone("بدون شماره") is None
+    print("✅ normalize_phone: همه‌ی شکل‌های شماره درست خوانده می‌شوند")
+
+
+def test_xlsx_loading():
+    from openpyxl import Workbook
+    tmp = Path(tempfile.mkdtemp(prefix="karnameh_xlsx_"))
+    wb = Workbook(); ws = wb.active
+    ws.append(["نام ناحیه", "نام ۱", "شماره ۱", "نام ۲", "شماره ۲", "نام ۳", "شماره ۳"])
+    ws.append(["ناحیه تست", "خودم", "۰۹۱۲۱۱۱۲۲۳۳", "خودم", "09121112233", "", ""])
+    ws.append(["آران و بیدگل", "علی", 9121112244, "رضا", "+98 912 111 2255", "سعید", "۰۰۹۸۹۱۲ ۱۱۱ ۲۲۶۶"])
+    ws.append(["ناحیه خالی", "", "", "", "", "", ""])
+    xlsx = tmp / "مخاطبین.xlsx"
+    wb.save(xlsx)
+    cfg = {"roles": ["مسئول نسرا", "فرمانده گردان", "مسئول فضای مجازی"]}
+    data = sw.load_recipients_xlsx(xlsx, cfg)
+    # شماره‌ی تکراری در یک ناحیه = یک مخاطب
+    assert len(data["ناحیه تست"]) == 1 and data["ناحیه تست"][0]["phone"] == "09121112233"
+    assert len(data["آران و بیدگل"]) == 3
+    assert data["آران و بیدگل"][0]["phone"] == "09121112244"
+    assert data["آران و بیدگل"][1]["phone"] == "09121112255"
+    assert data["آران و بیدگل"][2]["phone"] == "09121112266"
+    assert data["آران و بیدگل"][0]["name"] == "علی"
+    # ردیفِ بدون شماره = ناحیه‌ی ردشده
+    assert data["ناحیه خالی"] == []
+    print("✅ load_recipients_xlsx: اکسل درست خوانده می‌شود (تکراری‌ها یکی می‌شوند)")
+
+
+def test_build_tasks_with_xlsx():
+    from openpyxl import Workbook
+    tmp = Path(tempfile.mkdtemp(prefix="karnameh_task_"))
+    img_dir = tmp / "کارنامه‌ها"; img_dir.mkdir()
+    (img_dir / "کارنامه_ناحیه تست.png").write_bytes(b"img")
+    (img_dir / "کارنامه_کاشان.png").write_bytes(b"img")
+    wb = Workbook(); ws = wb.active
+    ws.append(["نام ناحیه", "نام ۱", "شماره ۱", "نام ۲", "شماره ۲", "نام ۳", "شماره ۳"])
+    ws.append(["ناحیه تست", "خودم", "09120000000", "", "", "", ""])
+    ws.append(["ناحیه بی‌تصویر", "", "09120000001", "", "", "", ""])
+    xlsx = tmp / "m.xlsx"; wb.save(xlsx)
+    cfg = {"images_dir": str(img_dir), "filename_prefix": "کارنامه_",
+           "roles": ["مسئول نسرا", "فرمانده گردان", "مسئول فضای مجازی"],
+           "image_extensions": [".jpg", ".jpeg", ".png", ".webp", ".bmp"],
+           "overrides_csv": "overrides.csv", "recipients_xlsx": str(xlsx)}
+    tasks = sw.build_tasks(cfg)
+    assert "ناحیه تست" in tasks
+    c = tasks["ناحیه تست"]["contacts"][0]
+    assert c["phone"] == "09120000000" and c["key"] == "09120000000"
+    # ناحیه‌ای که در اکسل نیست → جستجو با نام
+    c2 = tasks["کاشان"]["contacts"][0]
+    assert c2["phone"] is None and c2["key"] == "مسئول نسرا کاشان"
+    print("✅ build_tasks: اکسل اولویت دارد؛ ناحیه‌های بدون اکسل با نام جستجو می‌شوند")
+
+
+def test_open_chat_by_phone_found():
+    page = MockPagePhone({"09121112233": "علی محمدی"})
+    ok, err = sw.open_chat_by_phone(page, "09121112233", S)
+    assert ok, err
+    assert page.chat_with == "09121112233"
+    ok2, err2 = sw.send_image(page, IMG, "کپشن تست شماره‌ای", S)
+    assert ok2, err2
+    assert page.sent and page.sent[0][1] == "کپشن تست شماره‌ای"
+    print("✅ open_chat_by_phone: جستجوی شماره ← باز شدن چت ← ارسال تصویر")
+
+
+def test_open_chat_by_phone_not_found():
+    page = MockPagePhone({"09121112233": "علی محمدی"})
+    ok, err = sw.open_chat_by_phone(page, "09998887777", S)
+    assert not ok and "پیدا نشد" in err, (ok, err)
+    assert not page.sent
+    print("✅ open_chat_by_phone: شماره‌ی ناموجود ← خطا، بدون ارسال اشتباه")
+
+
 if __name__ == "__main__":
+    test_normalize_phone()
+    test_xlsx_loading()
+    test_build_tasks_with_xlsx()
     test_open_chat_success()
     test_open_chat_not_found()
     test_send_image()
     test_send_image_enter_fallback()
     test_verify_chat_title_mismatch()
+    test_open_chat_by_phone_found()
+    test_open_chat_by_phone_not_found()
     print("\n🎉 همه سناریوهای شبیه‌سازی‌شده پاس شدند!")
     print()
     print("=" * 60)

@@ -23,7 +23,7 @@ echo [OK] Python is ready.
 echo.
 echo [1/3] Installing libraries - takes a few minutes, please wait...
 echo ----------------------------------------------------------
-python -m pip install -U playwright
+python -m pip install -U playwright openpyxl
 if errorlevel 1 (
     echo.
     echo [ERROR] Installing libraries failed.

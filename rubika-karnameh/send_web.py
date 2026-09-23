@@ -76,6 +76,7 @@ DEFAULT_CONFIG = {
     "session_dir": "rubika_session",
     "sent_log": "sent_log.json",
     "overrides_csv": "overrides.csv",
+    "recipients_xlsx": "مخاطبین.xlsx",
     # سلکتورهای صفحه (در صورت تغییر رابط روبیکا، اینجا را ویرایش کنید)
     "selectors": {},
 }
@@ -205,6 +206,102 @@ def load_config(path: Path) -> dict:
     return cfg
 
 
+# ----------------------------------------------------------------------------- دفترچه‌ی اکسل (ناحیه‌ها و شماره‌ها)
+
+FA_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+
+
+def digits_only(text) -> str:
+    """فقط ارقامِ متن (ارقام فارسی/عربی هم به انگلیسی تبدیل می‌شوند)"""
+    return "".join(ch for ch in str(text).translate(FA_DIGITS) if ch.isdigit())
+
+
+def normalize_phone(raw):
+    """تبدیل هر شکلی از شماره (ارقام فارسی/انگلیسی، +۹۸ / ۰۰۹۸ / ۹۸ / بدون صفر)
+    به شکل استاندارد ۰۹xxxxxxxxx — اگر هیچ رقمی نبود None."""
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None
+    if isinstance(raw, float) and raw.is_integer():
+        raw = int(raw)  # اکسل شماره‌ها را عددی (اعشاری) ذخیره می‌کند
+    d = digits_only(raw)
+    if not d:
+        return None
+    if d.startswith("0098"):
+        d = d[4:]
+    elif d.startswith("98") and len(d) > 10:
+        d = d[2:]
+    if len(d) == 10 and d.startswith("9"):
+        d = "0" + d
+    return d or None
+
+
+def phone_tail(phone: str) -> str:
+    """آخرین ۱۰ رقم شماره (بدون صفر ابتدایی) برای تطبیق مطمئن در نتایج جستجو"""
+    d = digits_only(phone)
+    return d[-10:] if len(d) >= 10 else d
+
+
+def load_recipients_xlsx(path: Path, cfg: dict) -> dict:
+    """خواندن فایل اکسلِ ناحیه‌ها و شماره‌ها.
+    خروجی: {نام ناحیه: [مخاطب‌ها]} که مخاطب dict با کلیدهای
+    key/label/phone/name/role است. ناحیه‌ای که ردیفش هست ولی شماره‌ی
+    معتبری ندارد با فهرستِ خالی برمی‌گردد (یعنی آن ناحیه رد می‌شود)."""
+    if not path.exists():
+        return {}
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        sys.exit("❌ کتابخانه‌ی خواندن اکسل (openpyxl) نصب نیست.\n"
+                 "   یک بار فایل 1-نصب.bat را اجرا کنید.")
+    try:
+        wb = load_workbook(path, read_only=True, data_only=True)
+    except PermissionError:
+        sys.exit(f"❌ فایل «{path.name}» در اکسل باز است.\n"
+                 "   آن را ذخیره کنید، ببندید و دوباره این فایل را اجرا کنید.")
+    ws = wb.active
+    rows = [list(r) for r in ws.iter_rows(values_only=True)]
+    wb.close()
+
+    # پیدا کردن سطرِ عنوان (سلولی که «نام ناحیه» در آن است)
+    header_idx = 0
+    for i, row in enumerate(rows[:10]):
+        if any(isinstance(c, str) and "نام ناحیه" in c for c in row):
+            header_idx = i
+            break
+
+    roles = cfg["roles"]
+    data = {}
+    for row in rows[header_idx + 1:]:
+        if not row or not any(c not in (None, "") for c in row):
+            continue
+        city = normalize(str(row[0]).strip()) if row[0] is not None else ""
+        if not city or city.startswith("#"):
+            continue
+        contacts = []
+        for ri, role in enumerate(roles):
+            name_i, phone_i = 1 + ri * 2, 2 + ri * 2
+            name = (normalize(str(row[name_i]).strip())
+                    if len(row) > name_i and row[name_i] is not None else "")
+            raw = row[phone_i] if len(row) > phone_i else None
+            phone = normalize_phone(raw)
+            if raw not in (None, "") and not phone:
+                print(f"   ⚠️ در اکسل، شماره‌ی «{role} {city}» خوانا نیست («{raw}») — نادیده گرفته شد")
+            if phone:
+                label = f"{role} {city}" + (f" — {name}" if name else "")
+                contacts.append({"key": phone, "phone": phone, "name": name,
+                                 "role": role, "label": label})
+        # شماره‌ی تکراری در یک ناحیه = یک پیام (وقتی یک نفر دو نقش دارد)
+        seen, uniq = set(), []
+        for c in contacts:
+            if c["phone"] in seen:
+                print(f"   ℹ️ شماره‌ی «{c['label']}» تکراری است — فقط یک بار ارسال می‌شود")
+                continue
+            seen.add(c["phone"])
+            uniq.append(c)
+        data[city] = uniq
+    return data
+
+
 # ----------------------------------------------------------------------------- ساخت فهرست کارها
 
 
@@ -247,21 +344,46 @@ def build_tasks(cfg: dict, only=None) -> dict:
     if not files:
         sys.exit(f"❌ هیچ تصویری با پسوندهای {sorted(exts)} در «{folder}» پیدا نشد.")
     overrides = load_overrides(BASE / cfg["overrides_csv"])
+    xlsx_path = BASE / cfg.get("recipients_xlsx", "مخاطبین.xlsx")
+    xlsx = load_recipients_xlsx(xlsx_path, cfg)
+    xlsx_lookup = {flat(k): v for k, v in xlsx.items()}
+    if xlsx:
+        print(f"📘 فایل اکسلِ مخاطبین خوانده شد: {xlsx_path.name} ({len(xlsx)} ردیف ناحیه)")
     tasks = {}
     for f in files:
         custom = overrides.get(f.name) or overrides.get(f.stem)
         if custom:
-            city, contacts = f.stem, list(custom)
+            city, names = f.stem, list(custom)
         else:
             city = city_from_stem(f.stem, cfg["filename_prefix"])
-            contacts = [f"{role} {city}".strip() for role in cfg["roles"]]
+            names = [f"{role} {city}".strip() for role in cfg["roles"]]
         if only:
             wanted = [flat(o) for o in only]
             c = flat(city)
             if not any(w in c or c in w for w in wanted):
                 continue
-        g = tasks.setdefault(city, {"images": [], "contacts": contacts})
+        g = tasks.setdefault(city, {"images": [], "contacts": None})
         g["images"].append(f)
+        if g["contacts"] is None:
+            xc = xlsx_lookup.get(flat(city))
+            if xc is not None:
+                # اکسل اولویت دارد: ارسال مستقیم با شماره تلفن
+                g["contacts"] = xc
+                if not xc:
+                    print(f"   ⚠️ ناحیه «{city}» در اکسل هست ولی شماره‌ای برایش ثبت نشده — رد می‌شود")
+            else:
+                # بدون اکسل: جستجو با نام مخاطب (نیازمند مخاطبِ ذخیره‌شده در گوشی)
+                g["contacts"] = [{"key": n, "phone": None, "name": None, "role": None, "label": n}
+                                 for n in names]
+    # ناحیه‌هایی که در اکسل هستند ولی تصویرِ متناظر ندارند
+    if only is None:
+        matched = {flat(c) for c in tasks}
+        for city, cs in xlsx.items():
+            if cs and flat(city) not in matched:
+                print(f"   ⚠️ ناحیه «{city}» در اکسل هست ولی تصویری با نام «کارنامه_{city}» پیدا نشد")
+    # ناحیه‌های بدون مخاطب را حذف کن
+    for city in [c for c, g in tasks.items() if not g["contacts"]]:
+        del tasks[city]
     return tasks
 
 
@@ -289,7 +411,11 @@ def print_dry_run(cfg: dict, tasks: dict):
         print(f"\n {i}) ناحیه: «{city}»")
         print(f"    تصویر(ها): {imgs}")
         for c in g["contacts"]:
-            print(f"    ✉ {c}")
+            if c["phone"]:
+                nm = f" ({c['name']})" if c["name"] else ""
+                print(f"    ✉ {c['role']}{nm} → 📱 {c['phone']}")
+            else:
+                print(f"    ✉ {c['label']} — جستجو با نام (شماره‌ای در اکسل ثبت نشده)")
     if total_msgs > 60:
         print(f"\n⚠️ {total_msgs} پیام ارسال می‌شود؛ با تأخیر پیش‌فرض حدوداً "
               f"{total_msgs * (cfg['min_delay_seconds'] + cfg['max_delay_seconds']) // 2 // 60} دقیقه طول می‌کشد.")
@@ -436,27 +562,33 @@ def verify_chat_title(page, contact, S):
     return None, None
 
 
+def get_search_box(page, S):
+    """پیدا کردن باکس جستجو (اگر لازم بود دکمه‌ی جستجو/بازگشت را می‌زند)"""
+    box = find_locator(page, S["search_input"], timeout=6000)
+    if box:
+        return box
+    # شاید اول باید دکمه‌ی جستجو را زد
+    btn = find_locator(page, S["search_open_button"], timeout=1500)
+    if btn:
+        try:
+            btn.click()
+            page.wait_for_timeout(500)
+        except Exception:
+            pass
+    # در چیدمان تک‌ستونه شاید لازم باشد اول «بازگشت» بزنیم
+    back = find_locator(page, S["back_button"], timeout=1000)
+    if back:
+        try:
+            back.click()
+            page.wait_for_timeout(500)
+        except Exception:
+            pass
+    return find_locator(page, S["search_input"], timeout=4000)
+
+
 def open_chat(page, contact, S, cfg) -> tuple:
     """جستجوی مخاطب و باز کردن گفتگو با او. خروجی: (موفق؟, پیام خطا)"""
-    box = find_locator(page, S["search_input"], timeout=6000)
-    if not box:
-        # شاید اول باید دکمه‌ی جستجو را زد
-        btn = find_locator(page, S["search_open_button"], timeout=1500)
-        if btn:
-            try:
-                btn.click()
-                page.wait_for_timeout(500)
-            except Exception:
-                pass
-        # در چیدمان تک‌ستونه شاید لازم باشد اول «بازگشت» بزنیم
-        back = find_locator(page, S["back_button"], timeout=1000)
-        if back:
-            try:
-                back.click()
-                page.wait_for_timeout(500)
-            except Exception:
-                pass
-        box = find_locator(page, S["search_input"], timeout=4000)
+    box = get_search_box(page, S)
     if not box:
         return False, "باکس جستجو پیدا نشد (سلکتور search_input را در config.json اصلاح کنید — از --inspect کمک بگیرید)"
 
@@ -508,6 +640,93 @@ def open_chat(page, contact, S, cfg) -> tuple:
         elif ok is None:
             print("   ℹ️ عنوان گفتگو پیدا نشد؛ بدون بررسی عنوان ادامه می‌دهیم")
     return True, None
+
+
+def search_results(page, S, limit=30):
+    """فهرستِ نتایجِ قابلِ دیدنِ جستجو: [(locator, متن)]"""
+    out = []
+    for sel in S["search_result_item"]:
+        try:
+            items = page.locator(sel)
+            count = min(items.count(), limit)
+        except Exception:
+            continue
+        for i in range(count):
+            it = items.nth(i)
+            try:
+                if not it.is_visible():
+                    continue
+                txt = normalize(it.inner_text(timeout=700))
+            except Exception:
+                continue
+            if txt:
+                out.append((it, txt))
+        if out:
+            break  # اولین سلکتوری که نتیجه داد کافی است
+    return out
+
+
+def pick_result_by_phone(page, phone, S):
+    """نتیجه‌ی جستجو که «شماره» در متنش هست را برمی‌گرداند (یا None)"""
+    tail = phone_tail(phone)
+    if not tail:
+        return None
+    for it, txt in search_results(page, S):
+        if tail in digits_only(txt):
+            return it
+    return None
+
+
+def open_chat_by_phone(page, phone, S) -> tuple:
+    """باز کردن گفتگو با «جستجوی شماره تلفن» — بدون نیاز به مخاطب ذخیره‌شده.
+    خروجی: (موفق؟, پیام خطا)"""
+    box = get_search_box(page, S)
+    if not box:
+        return False, "باکس جستجو پیدا نشد (سلکتور search_input را در config.json اصلاح کنید — از --inspect کمک بگیرید)"
+
+    variants = [phone, "98" + phone[1:], "+98" + phone[1:]]
+    for v in variants:
+        try:
+            box.click()
+            page.wait_for_timeout(300)
+            clear_input(box)
+            print(f"   ↻ جستجوی شماره {v} ...")
+            type_text(box, v)
+            page.wait_for_timeout(1700)  # منتظر بارگذاری نتیجه‌ها
+        except Exception as e:
+            return False, f"خطا در تایپ در جستجو: {e}"
+
+        # راه ۱: نتیجه‌ای که شماره در متنش هست (مطمئن‌ترین)
+        item = pick_result_by_phone(page, phone, S)
+        if item:
+            try:
+                print("   ✅ شماره در نتیجه‌های جستجو پیدا شد")
+                item.click()
+                page.wait_for_timeout(1000)
+            except Exception as e:
+                return False, f"کلیک روی نتیجه ناموفق بود: {e}"
+        else:
+            results = search_results(page, S)
+            if len(results) == 1:
+                # جستجوی یک شماره‌ی کامل که فقط یک نتیجه دارد = همان شخص
+                it, txt = results[0]
+                print(f"   ⚠️ فقط یک نتیجه دیده شد («{txt[:40]}…»)؛ همان باز می‌شود")
+                try:
+                    it.click()
+                    page.wait_for_timeout(1000)
+                except Exception as e:
+                    return False, f"کلیک روی نتیجه ناموفق بود: {e}"
+            else:
+                continue  # شکلِ دیگر شماره را امتحان کن
+
+        # آیا گفتگویی باز شد؟ (باید ورودی پیام دیده شود)
+        if not find_locator(page, S["message_input"], timeout=6000):
+            return False, f"نتیجه کلیک شد ولی گفتگوی شماره {phone} باز نشد"
+        print("   ✅ گفتگو باز شد")
+        return True, None
+
+    return False, (f"شماره {phone} در نتیجه‌های جستجوی روبیکا پیدا نشد "
+                   "(شماره را در اکسل چک کنید)")
 
 
 def find_attach_input_index(page, S):
@@ -810,23 +1029,28 @@ def run_sending(cfg, S, tasks, args):
                 for contact in g["contacts"]:
                     if stop:
                         break
-                    todo = [im for im in g["images"] if (im.name, contact) not in sent]
+                    ckey = contact["key"]
+                    todo = [im for im in g["images"] if (im.name, ckey) not in sent]
                     if not todo:
                         stats["skip"] += 1
-                        print(f"   ↷ {contact} — قبلاً ارسال شده، رد شد")
+                        print(f"   ↷ {contact['label']} — قبلاً ارسال شده، رد شد")
                         continue
                     if budget is not None and stats["ok"] >= budget:
                         stop = True
                         print(f"   ⏹ به سقف --limit ({budget} پیام) رسیدیم؛ ادامه با اجرای دوباره")
                         break
                     seq += 1
-                    print(f"   [{seq}] {contact}")
-                    ok, err = open_chat(page, contact, S, cfg)
+                    how = contact["phone"] if contact["phone"] else "جستجو با نام"
+                    print(f"   [{seq}] {contact['label']} — {how}")
+                    if contact["phone"]:
+                        ok, err = open_chat_by_phone(page, contact["phone"], S)
+                    else:
+                        ok, err = open_chat(page, contact["label"], S, cfg)
                     if not ok:
                         stats["fail"] += 1
-                        failures.append({"contact": contact, "stage": "باز کردن گفتگو", "error": err})
-                        log.error("   ❌ %s | %s", contact, err)
-                        screenshot(page, f"{seq:03d}_open_fail_{contact}")
+                        failures.append({"contact": contact["label"], "stage": "باز کردن گفتگو", "error": err})
+                        log.error("   ❌ %s | %s", contact["label"], err)
+                        screenshot(page, f"{seq:03d}_open_fail_{safe_name(contact['label'])}")
                         page.wait_for_timeout(1500)
                         continue
                     for im in todo:
@@ -836,20 +1060,20 @@ def run_sending(cfg, S, tasks, args):
                         cap = make_caption(cfg, city)
                         ok2, err2 = send_image(page, im, cap, S)
                         if ok2:
-                            sent.add((im.name, contact))
+                            sent.add((im.name, ckey))
                             records.append({
-                                "image": im.name, "contact": contact,
+                                "image": im.name, "contact": contact["label"],
                                 "time": datetime.now().isoformat(timespec="seconds"),
                             })
                             save_sent(cfg, records)
                             stats["ok"] += 1
-                            log.info("   ✅ %s → %s", im.name, contact)
+                            log.info("   ✅ %s → %s", im.name, contact["label"])
                         else:
                             stats["fail"] += 1
-                            failures.append({"contact": contact, "image": im.name,
+                            failures.append({"contact": contact["label"], "image": im.name,
                                              "stage": "ارسال تصویر", "error": err2})
-                            log.error("   ❌ %s → %s | %s", im.name, contact, err2)
-                            screenshot(page, f"{seq:03d}_send_fail_{contact}")
+                            log.error("   ❌ %s → %s | %s", im.name, contact["label"], err2)
+                            screenshot(page, f"{seq:03d}_send_fail_{safe_name(contact['label'])}")
                         page.wait_for_timeout(random.randint(2500, 4500))
                     if not stop:
                         page.wait_for_timeout(random.randint(
@@ -908,9 +1132,8 @@ def main():
 
     if args.self_test:
         print("\n🧪 حالت تست — یک پیام آزمایشی برای «ناحیه تست» ارسال می‌شود")
-        print("   اگر هنوز مخاطب تست ندارید: در دفترچه تلفن گوشی، شماره‌ی خودتان را")
-        print("   با نام «مسئول نسرا ناحیه تست» ذخیره کنید (بعد از تست می‌توانید حذفش کنید)")
-        print("   بعد Ctrl+C بزنید و این فایل را دوباره اجرا کنید.\n")
+        print("   گیرنده: شماره‌ای که در فایل اکسلِ «مخاطبین.xlsx» برای «ناحیه تست» نوشته‌اید")
+        print("   (اگر آن ردیف خالی باشد، با نام مخاطبِ ذخیره‌شده در گوشی جستجو می‌شود)\n")
         args.only = ["ناحیه تست"]
         if not args.limit:
             args.limit = 1
@@ -927,7 +1150,22 @@ def main():
 
     tasks = build_tasks(cfg, only=args.only)
     if not tasks:
+        if args.self_test:
+            sys.exit("هیچ ناحیه‌ای مطابق فیلتر انتخابی پیدا نشد.\n"
+                     "💡 برای تست: فایل مخاطبین.xlsx را باز کنید و در ردیفِ «ناحیه تست»،\n"
+                     "   شماره‌ی موبایل خودتان را در ستون «شماره روبیکای مسئول نسرا» بنویسید،\n"
+                     "   ذخیره کنید، ببندید و دوباره این فایل را اجرا کنید.")
         sys.exit("هیچ ناحیه‌ای مطابق فیلتر انتخابی پیدا نشد.")
+
+    if args.self_test:
+        g = next(iter(tasks.values()))
+        c = g["contacts"][0]
+        if c["phone"]:
+            print(f"   📱 گیرنده‌ی تست: شماره {c['phone']}")
+        else:
+            print(f"   ⚠️ در اکسل شماره‌ای برای «ناحیه تست» نیست؛ با نام «{c['label']}» جستجو می‌شود")
+            print("      💡 بهتر است شماره‌ی خودتان را در فایل مخاطبین.xlsx وارد کنید")
+        print()
 
     if args.dry_run:
         print_dry_run(cfg, tasks)

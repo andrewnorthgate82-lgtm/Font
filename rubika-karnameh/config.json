@@ -1,11 +1,21 @@
 {
   "images_dir": "کارنامه‌ها",
   "filename_prefix": "کارنامه_",
-  "roles": ["مسئول نسرا", "فرمانده گردان", "مسئول فضای مجازی"],
+  "roles": [
+    "مسئول نسرا",
+    "فرمانده گردان",
+    "مسئول فضای مجازی"
+  ],
   "month": "شهریور ۱۴۰۵",
   "caption_template": "کارنامه عملکرد {month} ناحیه {city}",
   "send_caption": true,
-  "image_extensions": [".jpg", ".jpeg", ".png", ".webp", ".bmp"],
+  "image_extensions": [
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+    ".bmp"
+  ],
   "min_delay_seconds": 8,
   "max_delay_seconds": 18,
   "extra_delay_between_contacts_seconds": 5,
@@ -16,6 +26,7 @@
   "session_dir": "rubika_session",
   "sent_log": "sent_log.json",
   "overrides_csv": "overrides.csv",
+  "recipients_xlsx": "مخاطبین.xlsx",
   "bot_token": "",
   "bot_users_file": "bot_users.json",
   "bot_sent_log": "sent_log_bot.json",
