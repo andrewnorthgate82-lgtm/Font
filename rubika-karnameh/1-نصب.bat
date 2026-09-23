@@ -43,8 +43,8 @@ python -m playwright install chromium
 if errorlevel 1 (
     echo.
     echo [NOTICE] Browser download failed - but do not worry!
-    echo          The script will use Microsoft Edge AUTOMATICALLY.
-    echo          No action needed.
+    echo          The script will use Google Chrome or Microsoft Edge
+    echo          AUTOMATICALLY. No action needed.
     echo.
 )
 echo.

@@ -12,7 +12,7 @@
   "headless": false,
   "login_timeout_seconds": 900,
   "verify_chat_title": true,
-  "browser_channel": "",
+  "browser_channel": "chrome",
   "session_dir": "rubika_session",
   "sent_log": "sent_log.json",
   "overrides_csv": "overrides.csv",
