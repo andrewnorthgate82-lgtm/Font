@@ -12,14 +12,24 @@ echo   is written in the chat guide and in SETUP.md
 echo   You can delete this contact after testing.
 echo ==========================================================
 echo.
+echo   WHAT HAPPENS NEXT (after you press a key):
+echo   1. A Google Chrome window opens with Rubika.
+echo   2. FIRST TIME ONLY: you log in yourself -
+echo      Iran + your mobile number + the SMS code.
+echo   3. Do NOT close the Chrome window.
+echo   4. Do NOT close this black window.
+echo   5. After login, sending starts automatically.
+echo      Wait - it takes a minute.
+echo ==========================================================
+echo.
 pause
 python send_web.py --self-test
 echo.
 echo ==========================================================
-echo   A browser window opens. The FIRST time you must log in
-echo   to Rubika yourself - phone number + SMS code.
-echo   After login, the script sends the message automatically.
-echo   Then check Rubika on your phone: the message must arrive.
+echo   FINISHED. Now check Rubika ON YOUR PHONE:
+echo   the test message must arrive.
+echo   If it did NOT arrive: please TYPE into the chat
+echo   the Persian lines you see above in this window.
 echo ==========================================================
 echo.
 pause
