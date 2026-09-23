@@ -1,0 +1,11 @@
+# داده‌های شخصی و خروجی‌های زمان اجرا — نباید در گیت ذخیره شوند
+rubika_session/
+کارنامه‌ها/
+debug/
+__pycache__/
+*.log
+sent_log.json
+sent_log_bot.json
+bot_users.json
+overrides.csv
+recipients.csv
