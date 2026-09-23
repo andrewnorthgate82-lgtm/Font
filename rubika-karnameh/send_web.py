@@ -845,6 +845,8 @@ def run_sending(cfg, S, tasks, args):
 
     print("\n" + "═" * 60)
     print(f"📊 نتیجه: ✅ {stats['ok']} ارسال شد | ❌ {stats['fail']} ناموفق | ↷ {stats['skip']} رد شد")
+    # خط انگلیسی برای وقتی که کنسول فارسی را درست نشان نمی‌دهد
+    print(f"RESULT: sent={stats['ok']}  failed={stats['fail']}  skipped={stats['skip']}")
     if failures:
         (BASE / "debug").mkdir(exist_ok=True)
         (BASE / "debug" / "failures.json").write_text(
@@ -877,8 +879,19 @@ def main():
     ap.add_argument("--limit", type=int, metavar="N", help="حداکثر N پیام در این اجرا (برای تست)")
     ap.add_argument("--force", action="store_true", help="بی‌توجه به سابقه، همه دوباره ارسال شود")
     ap.add_argument("--month", metavar="نام‌ماه", help="ماه را برای کپشن بازنویسی کند")
+    ap.add_argument("--self-test", action="store_true",
+                    help="حالت تست: فقط یک پیام آزمایشی برای «ناحیه تست» می‌فرستد")
     ap.add_argument("--headless", action="store_true", help="بدون پنجره‌ی مرورگر (پیشنهاد نمی‌شود)")
     args = ap.parse_args()
+
+    if args.self_test:
+        print("\n🧪 حالت تست — یک پیام آزمایشی برای «ناحیه تست» ارسال می‌شود")
+        print("   اگر هنوز مخاطب تست ندارید: در دفترچه تلفن گوشی، شماره‌ی خودتان را")
+        print("   با نام «مسئول نسرا ناحیه تست» ذخیره کنید (بعد از تست می‌توانید حذفش کنید)")
+        print("   بعد Ctrl+C بزنید و این فایل را دوباره اجرا کنید.\n")
+        args.only = ["ناحیه تست"]
+        if not args.limit:
+            args.limit = 1
 
     cfg = load_config(BASE / args.config)
     if args.month:

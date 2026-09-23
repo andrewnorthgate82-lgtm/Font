@@ -1,20 +1,16 @@
 @echo off
 chcp 65001 >nul
 cd /d "%~dp0"
-title ارسال کارنامه ها
+title SEND - Rubika Report Card Sender
 echo ==========================================================
-echo   ارسال کارنامه ها به مسئولان نواحی
-echo.
-echo   قبل از شروع مطمئن شوید:
-echo    1- تصاویر کارنامه در پوشه «کارنامه ها» هستند
-echo    2- نام ماه در فایل config.json درست است
-echo.
-echo   مدت زمان: حدود 25 تا 40 دقیقه - مرورگر را نبندید
+echo   SENDING report cards to managers.
+echo   Before starting, check:
+echo    1- images are inside the karnameh folder
+echo    2- month is correct in config.json
+echo   Time: about 25 to 40 minutes - do not close the browser!
 echo ==========================================================
 echo.
-echo برای شروع، هر کلیدی را بزنید...
-pause >nul
+pause
 python send_web.py
 echo.
-echo برای بستن این پنجره هر کلیدی را بزنید...
-pause >nul
+pause

@@ -1,9 +1,9 @@
 @echo off
 chcp 65001 >nul
 cd /d "%~dp0"
-title عیب یابی
+title Debug helper
 python send_web.py --inspect
 echo.
-echo فایل های پوشه debug را برای پشتیبان بفرستید
-echo برای بستن این پنجره هر کلیدی را بزنید...
-pause >nul
+echo Send the files inside the  debug  folder to your helper.
+echo.
+pause

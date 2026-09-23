@@ -289,3 +289,7 @@ if __name__ == "__main__":
     test_send_image_enter_fallback()
     test_verify_chat_title_mismatch()
     print("\n🎉 همه سناریوهای شبیه‌سازی‌شده پاس شدند!")
+    print()
+    print("=" * 60)
+    print("*** ALL TESTS PASSED - SUCCESS ***")
+    print("=" * 60)

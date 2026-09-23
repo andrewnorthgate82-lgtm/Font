@@ -1,59 +1,61 @@
 @echo off
 chcp 65001 >nul
 cd /d "%~dp0"
-title نصب اولیه - ارسال کارنامه روبیکا
+title Install - Rubika Report Card Sender
 echo ==========================================================
-echo    نصب اولیه اسکریپت ارسال کارنامه
-echo    فقط همین یک بار لازم است - چند دقیقه صبر کنید
+echo   INSTALLER - needed only ONCE - please wait
+echo   DO NOT close this window until it finishes!
 echo ==========================================================
 echo.
-python --version >nul 2>&1
+echo Checking Python...
+python --version
 if errorlevel 1 (
-    echo [X] پایتون روی این کامپیوتر پیدا نشد!
-    echo     پایتون را از سایت python.org نصب کنید و هنگام نصب حتما تیک
-    echo     «Add python.exe to PATH» را بزنید.
     echo.
-    echo برای بستن این پنجره هر کلیدی را بزنید...
-    pause >nul
+    echo [ERROR] Python was NOT found on this computer.
+    echo         Install Python from python.org and be sure to tick
+    echo         the box: Add python.exe to PATH  during install.
+    echo         Then run this file again.
+    echo.
+    pause
     exit /b 1
 )
+echo [OK] Python is ready.
 echo.
-echo [1 از 3] نصب کتابخانه های لازم - چند دقیقه طول می کشد...
+echo [1/3] Installing libraries - takes a few minutes, please wait...
 echo ----------------------------------------------------------
 python -m pip install -U playwright
 if errorlevel 1 (
     echo.
-    echo [X] نصب کتابخانه ناموفق بود. اتصال اینترنت را چک کنید
-    echo     و این فایل را دوباره اجرا کنید. اگر باز خطا داد،
-    echo     چند خط آخر متن این پنجره را برای پشتیبان بفرستید.
+    echo [ERROR] Installing libraries failed.
+    echo         Check your internet, then run this file again.
+    echo         If it fails again, type the last lines of this window
+    echo         and send them to your helper.
     echo.
-    echo برای بستن این پنجره هر کلیدی را بزنید...
-    pause >nul
+    pause
     exit /b 1
 )
 echo.
-echo [2 از 3] دانلود مرورگر - حدود 150 مگابایت، فقط همین یک بار...
+echo [OK] Libraries installed.
+echo.
+echo [2/3] Downloading browser - about 150 MB - one time only...
 echo ----------------------------------------------------------
 python -m playwright install chromium
 if errorlevel 1 (
     echo.
-    echo [!] دانلود مرورگر ناموفق بود - اما اشکالی ندارد!
-    echo     اسکریپت می تواند از مرورگر Edge خود ویندوز استفاده کند.
-    echo     فقط فایل config.json را با Notepad باز کنید، در آن عبارت
-    echo     browser_channel را پیدا کنید و مقدارش را از خالی به msedge
-    echo     تغییر دهید و ذخیره کنید. همین!
+    echo [NOTICE] Browser download failed - but it is OK!
+    echo          FIX: open the file config.json with Notepad,
+    echo          find the word  browser_channel  and change its
+    echo          value to  msedge  then save. That is all.
     echo.
 )
 echo.
-echo [3 از 3] تست سلامت اسکریپت...
+echo [3/3] Running the self test...
 echo ----------------------------------------------------------
 python test_flow_mock.py
 echo.
 echo ==========================================================
-echo   اگر چند خط بالاتر نوشته «همه سناریوها پاس شدند»
-echo   یعنی نصب کامل و سالم است!
-echo   قدم بعدی: فایل «2-تست-به-خودم.bat» را اجرا کنید
+echo   If you see  ALL TESTS PASSED  above, install is DONE!
+echo   Next step: double-click file number 2 - test to yourself
 echo ==========================================================
 echo.
-echo برای بستن این پنجره هر کلیدی را بزنید...
-pause >nul
+pause

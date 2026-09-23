@@ -1,25 +1,25 @@
 @echo off
 chcp 65001 >nul
 cd /d "%~dp0"
-title تست - یک پیام آزمایشی به خودتان
+title Test - send ONE test message to yourself
 echo ==========================================================
-echo   ارسال یک پیام آزمایشی به خودتان - کاملا بی خطر
+echo   TEST - sends ONE test message to YOURSELF. Very safe.
 echo.
-echo   قبل از ادامه مطمئن شوید:
-echo   شماره همراه خودتان را در دفترچه تلفن گوشی با نام
-echo   «مسئول نسرا ناحیه تست» ذخیره کرده اید
-echo   (مثل یک مخاطب معمولی ذخیره می شود - بعدا می توانید حذفش کنید)
-echo ==========================================================
-echo.
-echo برای شروع، هر کلیدی را بزنید...
-pause >nul
-python send_web.py --only "ناحیه تست" --limit 1
-echo.
-echo ==========================================================
-echo   مرورگر باز شد؟ بار اول خودتان وارد روبیکا شوید
-echo   بعد از ورود، اسکریپت خودش پیام را می فرستد
-echo   در پایان، روبیکای گوشی خودتان را چک کنید که پیام رسیده باشد
+echo   BEFORE you continue:
+echo   Save your OWN mobile number in your phone contacts
+echo   with the special TEST name - the exact Persian name
+echo   is written in the chat guide and in SETUP.md
+echo   You can delete this contact after testing.
 echo ==========================================================
 echo.
-echo برای بستن این پنجره هر کلیدی را بزنید...
-pause >nul
+pause
+python send_web.py --self-test
+echo.
+echo ==========================================================
+echo   A browser window opens. The FIRST time you must log in
+echo   to Rubika yourself - phone number + SMS code.
+echo   After login, the script sends the message automatically.
+echo   Then check Rubika on your phone: the message must arrive.
+echo ==========================================================
+echo.
+pause
