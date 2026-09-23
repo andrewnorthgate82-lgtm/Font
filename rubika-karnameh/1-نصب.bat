@@ -42,10 +42,9 @@ echo ----------------------------------------------------------
 python -m playwright install chromium
 if errorlevel 1 (
     echo.
-    echo [NOTICE] Browser download failed - but it is OK!
-    echo          FIX: open the file config.json with Notepad,
-    echo          find the word  browser_channel  and change its
-    echo          value to  msedge  then save. That is all.
+    echo [NOTICE] Browser download failed - but do not worry!
+    echo          The script will use Microsoft Edge AUTOMATICALLY.
+    echo          No action needed.
     echo.
 )
 echo.

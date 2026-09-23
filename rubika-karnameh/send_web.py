@@ -184,7 +184,7 @@ def load_config(path: Path) -> dict:
     cfg = dict(DEFAULT_CONFIG)
     if path.exists():
         try:
-            user = json.loads(path.read_text(encoding="utf-8"))
+            user = json.loads(path.read_text(encoding="utf-8-sig"))
             cfg.update(user)
         except Exception as e:
             sys.exit(f"خطا در خواندن {path}: {e}")
@@ -709,8 +709,9 @@ def run_inspect(cfg, S):
 
 def launch(p, cfg):
     """راه‌اندازی مرورگر.
-    اگر در config.json مقدار browser_channel تنظیم شده باشد (مثلاً "msedge")،
-    از مرورگرِ خودِ ویندوز استفاده می‌شود و نیازی به دانلود Chromium نیست."""
+    ترتیب تلاش: کانالِ تنظیم‌شده در config.json ← Chromiumِ دانلودیِ playwright
+    ← Edge خودِ ویندوز ← Chrome.
+    (اگر دانلود Chromium در نصب ناموفق بوده باشد، خودکار از Edge استفاده می‌شود.)"""
     common = dict(
         user_data_dir=str(BASE / cfg["session_dir"]),
         headless=cfg.get("headless", False),
@@ -720,26 +721,28 @@ def launch(p, cfg):
         args=["--disable-blink-features=AutomationControlled"],
     )
     channel = (cfg.get("browser_channel") or "").strip()
-    try:
-        if channel:
-            return p.chromium.launch_persistent_context(channel=channel, **common)
-        return p.chromium.launch_persistent_context(**common)
-    except Exception as e:
-        msg = str(e)
-        if channel:
-            raise SystemExit(
-                f"❌ مرورگر «{channel}» روی این سیستم پیدا نشد.\n"
-                "   در config.json مقدار browser_channel را خالی کنید و بعد این دستور را اجرا کنید:\n"
-                "       playwright install chromium"
-            )
-        if "Executable doesn't exist" in msg or "playwright install" in msg.lower():
-            raise SystemExit(
-                "❌ مرورگرِ لازم برای playwright نصب نیست. یکی از این دو راه را انتخاب کنید:\n"
-                "   راه ۱) این دستور را اجرا کنید:   playwright install chromium\n"
-                "   راه ۲) در config.json مقدار browser_channel را \"msedge\" بگذارید تا\n"
-                "         از مرورگر Edge خودِ ویندوز استفاده شود (بدون هیچ دانلودی)."
-            )
-        raise
+    attempts = ([channel] if channel else []) + [None, "msedge", "chrome"]
+    attempts = [a for i, a in enumerate(attempts) if a not in attempts[:i]]  # بدون تکرار
+    last_err = None
+    for ch in attempts:
+        try:
+            if ch:
+                print(f"   ↻ تلاش برای باز کردن مرورگر {ch} ...")
+                ctx = p.chromium.launch_persistent_context(channel=ch, **common)
+            else:
+                ctx = p.chromium.launch_persistent_context(**common)
+            if ch:
+                log.info("مرورگر %s با موفقیت باز شد", ch)
+            return ctx
+        except Exception as e:
+            last_err = e
+            continue  # مرورگر بعدی را امتحان کن
+    raise SystemExit(
+        "❌ هیچ مرورگری برای اجرای اسکریپت پیدا نشد.\n"
+        "   - مطمئن شوید مرورگر Edge یا Chrome روی ویندوز نصب است، یا\n"
+        "   - این دستور را اجرا کنید:  playwright install chromium\n"
+        f"   جزئیات خطا: {str(last_err)[:150]}"
+    )
 
 
 def run_sending(cfg, S, tasks, args):
