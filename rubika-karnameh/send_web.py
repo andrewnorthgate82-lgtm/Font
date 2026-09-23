@@ -418,7 +418,8 @@ def pick_result(page, contact, S, min_score=0.55):
 
 
 def verify_chat_title(page, contact, S):
-    """بررسی اینکه گفتگوی بازشده همان مخاطب است (True/False) یا None یعنی عنوانی پیدا نشد."""
+    """بررسی اینکه گفتگوی بازشده همان مخاطب است.
+    خروجی: (True/False/None، متنِ عنوانِ پیدا‌شده) — None یعنی عنوانی پیدا نشد."""
     want = flat(contact)
     for sel in S["chat_title"]:
         try:
@@ -429,10 +430,10 @@ def verify_chat_title(page, contact, S):
                     continue
                 t = normalize(el.inner_text(timeout=700))
                 if t and len(t) < 80:  # عنوان باید کوتاه باشد، نه کل هدر
-                    return want in flat(t)
+                    return (want in flat(t)), t
         except Exception:
             continue
-    return None
+    return None, None
 
 
 def open_chat(page, contact, S, cfg) -> tuple:
@@ -463,6 +464,7 @@ def open_chat(page, contact, S, cfg) -> tuple:
         box.click()
         page.wait_for_timeout(300)
         clear_input(box)
+        print(f"   ↻ جستجوی «{contact}» ...")
         type_text(box, contact)
         page.wait_for_timeout(1700)  # منتظر بارگذاری نتیجه‌ها
     except Exception as e:
@@ -472,12 +474,14 @@ def open_chat(page, contact, S, cfg) -> tuple:
     item = pick_result(page, contact, S)
     if item:
         try:
+            print("   ✅ مخاطب در نتیجه‌های جستجو پیدا شد")
             item.click()
             page.wait_for_timeout(1000)
         except Exception as e:
             return False, f"کلیک روی نتیجه ناموفق بود: {e}"
     else:
         # راه ۲: زدن Enter (اولین نتیجه باز می‌شود) — فقط وقتی نتایج هست
+        print("   ↻ نتیجه‌ی دقیق پیدا نشد؛ اولین نتیجه را باز می‌کنیم")
         try:
             box.press("Enter")
             page.wait_for_timeout(1200)
@@ -487,12 +491,22 @@ def open_chat(page, contact, S, cfg) -> tuple:
     # آیا گفتگویی باز شد؟ (باید ورودی پیام دیده شود)
     if not find_locator(page, S["message_input"], timeout=6000):
         return False, "مخاطب در نتیجه‌های جستجو پیدا نشد (نام ذخیره‌شده در دفترچه تلفن را چک کنید)"
+    print("   ✅ گفتگو باز شد")
 
     # بررسی ایمنی: عنوان گفتگو باید شامل نام مخاطب باشد
     if cfg.get("verify_chat_title", True):
-        ok = verify_chat_title(page, contact, S)
+        ok, seen_title = verify_chat_title(page, contact, S)
         if ok is False:
-            return False, "عنوان گفتگوی بازشده با نام مخاطب نمی‌خواند (برای اطمینان ارسال نشد)"
+            if cfg.get("_self_test"):
+                # در حالت تست، مخاطبِ شماره‌ی خودِ کاربر است؛ روبیکا ممکن است عنوان را
+                # با نام پروفایل نشان دهد نه نام دفترچه تلفن — ادامه می‌دهیم.
+                print(f"   ⚠️ عنوان گفتگو «{seen_title}» با نام مخاطب نمی‌خواند — "
+                      "چون حالت تست است، ادامه می‌دهیم")
+            else:
+                return False, (f"عنوان گفتگوی بازشده «{seen_title}» با نام مخاطب "
+                               f"«{contact}» نمی‌خواند (برای اطمینان ارسال نشد)")
+        elif ok is None:
+            print("   ℹ️ عنوان گفتگو پیدا نشد؛ بدون بررسی عنوان ادامه می‌دهیم")
     return True, None
 
 
@@ -575,9 +589,11 @@ def attach_file(page, image: Path, S) -> tuple:
 
 def send_image(page, image: Path, caption, S) -> tuple:
     """ارسال یک تصویر (با کپشن) در گفتگوی باز. خروجی: (موفق؟, پیام خطا)"""
+    print(f"   ↻ پیوست تصویر «{image.name}» ...")
     ok, err = attach_file(page, image, S)
     if not ok:
         return False, err
+    print("   ✅ تصویر پیوست شد")
 
     cap = find_locator(page, S["message_input"], timeout=10000)
     if not cap:
@@ -585,12 +601,14 @@ def send_image(page, image: Path, caption, S) -> tuple:
     try:
         clear_input(cap)
         if caption:
+            print("   ↻ نوشتن متن زیر عکس ...")
             type_text(cap, caption, delay=25)
             page.wait_for_timeout(400)
     except Exception as e:
         return False, f"تایپ کپشن ناموفق بود: {e}"
 
     # ارسال: اول دکمه، در غیر این صورت Enter
+    print("   ↻ ارسال ...")
     btn = find_locator(page, S["send_button"], timeout=2500)
     sent_via = None
     if btn:
@@ -605,6 +623,7 @@ def send_image(page, image: Path, caption, S) -> tuple:
             sent_via = "Enter"
         except Exception as e:
             return False, f"نه دکمه ارسال پیدا شد نه Enter کار کرد: {e}"
+    print(f"   ✅ ارسال شد (با {sent_via})")
 
     page.wait_for_timeout(2500)
 
@@ -901,6 +920,8 @@ def main():
         cfg["month"] = args.month
     if args.headless:
         cfg["headless"] = True
+    if args.self_test:
+        cfg["_self_test"] = True  # در حالت تست، بررسی عنوان گفتگو سخت‌گیرانه نیست
     S = cfg["selectors"]
     setup_logging("karnameh_send.log")
 
