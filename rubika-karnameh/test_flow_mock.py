@@ -414,6 +414,36 @@ def test_open_chat_by_phone_not_found():
     print("✅ open_chat_by_phone: شماره‌ی ناموجود ← خطا، بدون ارسال اشتباه")
 
 
+
+def test_ensure_test_image_and_placeholder():
+    tmp = Path(tempfile.mkdtemp(prefix="karnameh_selfheal_"))
+    cfg = {"images_dir": str(tmp / "کارنامه‌ها"), "filename_prefix": "کارنامه_"}
+    folder = sw.ensure_test_image(cfg)
+    assert folder.is_dir()
+    img = folder / "کارنامه_ناحیه تست.png"
+    assert img.exists()
+    data = img.read_bytes()
+    assert data[:8] == b"\x89PNG\r\n\x1a\n" and data[12:16] == b"IHDR", "PNG نامعتبر!"
+    assert len(data) > 500
+    # دوباره صدا بزنیم → نباید خراب کند یا دوباره بسازد
+    before = img.stat().st_mtime_ns
+    sw.ensure_test_image(cfg)
+    assert img.stat().st_mtime_ns == before
+    print("✅ ensure_test_image: پوشه و تصویر تست در صورت نبود ساخته می‌شوند (PNG سالم)")
+
+
+def test_recipients_xlsx_autocreate():
+    tmp = Path(tempfile.mkdtemp(prefix="karnameh_xlsxauto_"))
+    path = tmp / "مخاطبین.xlsx"
+    cfg = {"roles": ["مسئول نسرا", "فرمانده گردان", "مسئول فضای مجازی"]}
+    data = sw.load_recipients_xlsx(path, cfg)
+    assert data == {} and path.exists()
+    # فایل ساخته‌شده باید با فایل قالب اصلی خوانا باشد
+    data2 = sw.load_recipients_xlsx(path, cfg)
+    assert data2 == {"ناحیه تست": []}
+    print("✅ load_recipients_xlsx: اگر فایل نباشد، قالب خالی خودکار ساخته می‌شود")
+
+
 if __name__ == "__main__":
     test_normalize_phone()
     test_xlsx_loading()
@@ -425,6 +455,8 @@ if __name__ == "__main__":
     test_verify_chat_title_mismatch()
     test_open_chat_by_phone_found()
     test_open_chat_by_phone_not_found()
+    test_ensure_test_image_and_placeholder()
+    test_recipients_xlsx_autocreate()
     print("\n🎉 همه سناریوهای شبیه‌سازی‌شده پاس شدند!")
     print()
     print("=" * 60)

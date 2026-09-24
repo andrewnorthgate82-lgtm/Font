@@ -247,6 +247,10 @@ def load_recipients_xlsx(path: Path, cfg: dict) -> dict:
     key/label/phone/name/role است. ناحیه‌ای که ردیفش هست ولی شماره‌ی
     معتبری ندارد با فهرستِ خالی برمی‌گردد (یعنی آن ناحیه رد می‌شود)."""
     if not path.exists():
+        # فایل نیست؛ قالب خالی بساز تا کاربر پرش کند (اگر ممکن باشد)
+        if make_recipients_xlsx(path):
+            print(f"📘 فایل «{path.name}» پیدا نشد؛ یک نسخه‌ی خالی ساخته شد.")
+            print("   برای ارسال واقعی، شماره‌ی مسئولان را داخلش بنویسید.")
         return {}
     try:
         from openpyxl import load_workbook
@@ -300,6 +304,92 @@ def load_recipients_xlsx(path: Path, cfg: dict) -> dict:
             uniq.append(c)
         data[city] = uniq
     return data
+
+
+def make_placeholder_png(path: Path, w=480, h=320, rgb=(96, 140, 190)):
+    """ساختن یک تصویر PNG ساده برای تست (بدون نیاز به کتابخانه‌ی تصویری)"""
+    import struct, zlib
+
+    def chunk(tag, data):
+        return (struct.pack(">I", len(data)) + tag + data
+                + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF))
+
+    ihdr = struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)  # 8bit، رنگ واقعی
+    raw = b"".join(b"\x00" + bytes(rgb) * w for _ in range(h))
+    png = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr)
+           + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
+    path.write_bytes(png)
+
+
+def ensure_test_image(cfg: dict) -> Path:
+    """مطمئن شدن از وجود پوشه‌ی تصاویر و تصویرِ «ناحیه تست».
+    اگر نباشند، ساخته می‌شوند تا حالت تست همیشه کار کند. خروجی: مسیر پوشه."""
+    folder = Path(cfg["images_dir"])
+    if not folder.is_absolute():
+        folder = BASE / folder
+    if not folder.is_dir():
+        # شاید پوشه با کمی تفاوت در نام هست (نیم‌فاصله/فاصله)
+        want = flat(folder.name)
+        if folder.parent.is_dir():
+            for cand in sorted(folder.parent.iterdir()):
+                if cand.is_dir() and flat(cand.name) == want:
+                    folder = cand
+                    print(f"   ℹ️ پوشه‌ی «{cand.name}» به‌عنوان پوشه‌ی تصاویر شناخته شد")
+                    break
+    if not folder.is_dir():
+        folder.mkdir(parents=True, exist_ok=True)
+        print(f"📁 پوشه‌ی تصاویر پیدا نشد؛ ساخته شد: {folder.name}")
+    prefix = cfg.get("filename_prefix", "کارنامه_")
+    img = folder / f"{prefix}ناحیه تست.png"
+    if not img.exists():
+        make_placeholder_png(img)
+        print(f"🖼 تصویر تست ساخته شد: {img.name}")
+    return folder
+
+
+def make_recipients_xlsx(path: Path):
+    """ساختن قالبِ خالیِ فایل مخاطبین (وقتی فایل پیدا نشد)"""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+    except ImportError:
+        return False
+    try:
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "ناحیه‌ها"
+        ws.sheet_view.rightToLeft = True
+        headers = [
+            "نام ناحیه",
+            "نام و نام خانوادگی مسئول نسرا (اختیاری)",
+            "شماره روبیکای مسئول نسرا",
+            "نام و نام خانوادگی فرمانده گردان (اختیاری)",
+            "شماره روبیکای فرمانده گردان",
+            "نام و نام خانوادگی مسئول فضای مجازی (اختیاری)",
+            "شماره روبیکای مسئول فضای مجازی",
+        ]
+        thin = Side(style="thin", color="BBBBBB")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        for col, h in enumerate(headers, 1):
+            c = ws.cell(row=1, column=col, value=h)
+            c.fill = PatternFill("solid", fgColor="1F4E79")
+            c.font = Font(bold=True, color="FFFFFF", size=11)
+            c.border = border
+            c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        a2 = ws.cell(row=2, column=1, value="ناحیه تست")
+        a2.font = Font(bold=True)
+        for col in range(1, 8):
+            ws.cell(row=2, column=col).border = border
+            ws.cell(row=2, column=col).fill = PatternFill("solid", fgColor="FFF2CC")
+        for i, w in enumerate([22, 26, 22, 26, 22, 26, 22], 1):
+            ws.column_dimensions[get_column_letter(i)].width = w
+        ws.freeze_panes = "A2"
+        ws.row_dimensions[1].height = 40
+        wb.save(path)
+        return True
+    except Exception:
+        return False
 
 
 # ----------------------------------------------------------------------------- ساخت فهرست کارها
@@ -1190,6 +1280,8 @@ def main():
         cfg["headless"] = True
     if args.self_test:
         cfg["_self_test"] = True  # در حالت تست، بررسی عنوان گفتگو سخت‌گیرانه نیست
+        # پوشه‌ی تصاویر و تصویر تست در صورت نبود، خودکار ساخته می‌شوند
+        cfg["images_dir"] = str(ensure_test_image(cfg))
     S = cfg["selectors"]
     setup_logging("karnameh_send.log")
 
