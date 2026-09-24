@@ -108,7 +108,12 @@ DEFAULT_SELECTORS = {
         "[class*='chatItem' i]",
         "[class*='chat-item' i]",
         "[class*='listItem' i]",
+        "[class*='contact' i]",
+        "[class*='dialog' i]",
+        "[class*='conversation' i]",
+        "[role='listitem']",
         "li[class]",
+        "li",
     ],
     # عنوان گفتگوی باز‌شده (برای اطمینان از اینکه گفتگوی درست باز شده)
     "chat_title": [
@@ -689,7 +694,7 @@ def open_chat(page, contact, S, cfg) -> tuple:
         clear_input(box)
         print(f"   ↻ جستجوی «{contact}» ...")
         type_text(box, contact)
-        page.wait_for_timeout(1700)  # منتظر بارگذاری نتیجه‌ها
+        page.wait_for_timeout(2200)  # منتظر بارگذاری نتیجه‌ها
     except Exception as e:
         return False, f"خطا در تایپ در جستجو: {e}"
 
@@ -717,7 +722,7 @@ def open_chat(page, contact, S, cfg) -> tuple:
         print(f"   🔎 عیب‌یابی: بعد از تایپ نام، {len(results)} مورد در فهرست نتیجه‌ها دیده شد")
         for it, txt in results[:3]:
             print(f"      • «{txt[:60]}»")
-        dump_search_dom(page, contact, "dom_search_name.json")
+        print_page_snapshot(dump_search_dom(page, contact, "dom_search_name.json"))
         print("   💾 گزارش کامل در debug/dom_search_name.json ذخیره شد")
         return False, "مخاطب در نتیجه‌های جستجو پیدا نشد (نام ذخیره‌شده در دفترچه تلفن را چک کنید)"
     print("   ✅ گفتگو باز شد")
@@ -803,11 +808,24 @@ def dump_search_dom(page, term, fname="dom_search_number.json"):
         )
         (d / fname).write_text(
             json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+        return data
     except Exception as e:
         print(f"   ⚠️ استخراج DOM ناموفق: {e}")
+        return None
 
 
-def open_chat_by_phone(page, phone, S) -> tuple:
+def print_page_snapshot(data, max_items=6):
+    """چاپِ خلاصه‌ی همان لحظه‌ی صفحه در کنسول — برای عیب‌یابی بدون نیاز به فایل"""
+    if not data:
+        return
+    txt = (data.get("anyText") or "").replace("\n", " | ")
+    if txt:
+        print(f"   📄 متنِ صفحه در همان لحظه: «{txt[:280]}»")
+    for it in (data.get("items") or [])[:max_items]:
+        print(f"      • ({it['sel']}) «{it['text'][:60]}»")
+
+
+def open_chat_by_phone(page, phone, S, self_test=False) -> tuple:
     """باز کردن گفتگو با «جستجوی شماره تلفن» — بدون نیاز به مخاطب ذخیره‌شده.
     خروجی: (موفق؟, پیام خطا)"""
     box = get_search_box(page, S)
@@ -837,7 +855,7 @@ def open_chat_by_phone(page, phone, S) -> tuple:
                 return False, f"کلیک روی نتیجه ناموفق بود: {e}"
         else:
             results = search_results(page, S)
-            if len(results) == 1:
+            if len(results) == 1 and self_test:
                 # جستجوی یک شماره‌ی کامل که فقط یک نتیجه دارد = همان شخص
                 it, txt = results[0]
                 print(f"   ⚠️ فقط یک نتیجه دیده شد («{txt[:40]}…»)؛ همان باز می‌شود")
@@ -860,7 +878,7 @@ def open_chat_by_phone(page, phone, S) -> tuple:
     print(f"   🔎 عیب‌یابی: اسکریپت بعد از تایپ شماره، {len(results)} مورد در فهرست نتیجه‌ها دید")
     for it, txt in results[:3]:
         print(f"      • «{txt[:60]}»")
-    dump_search_dom(page, phone)
+    print_page_snapshot(dump_search_dom(page, phone))
     print("   💾 گزارش کامل در debug/dom_search_number.json ذخیره شد")
     return False, (f"شماره {phone} در نتیجه‌های جستجوی روبیکا پیدا نشد "
                    "(شماره را در اکسل چک کنید)")
@@ -1180,7 +1198,8 @@ def run_sending(cfg, S, tasks, args):
                     how = contact["phone"] if contact["phone"] else "جستجو با نام"
                     print(f"   [{seq}] {contact['label']} — {how}")
                     if contact["phone"]:
-                        ok, err = open_chat_by_phone(page, contact["phone"], S)
+                        ok, err = open_chat_by_phone(page, contact["phone"], S,
+                                                     self_test=bool(cfg.get("_self_test")))
                         if not ok and cfg.get("_self_test"):
                             # در حالت تست: روبیکا شماره‌ی خودِ کاربر را با جستجوی شماره
                             # نشان نمی‌دهد؛ با نامِ مخاطبِ ذخیره‌شده در گوشی امتحان می‌کنیم
