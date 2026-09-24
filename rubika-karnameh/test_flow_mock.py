@@ -55,6 +55,9 @@ class MockPage:
         self.sent = []  # (فایل، کپشن)
         self.no_send_button = False
         self.attach_evidence = True  # آیا پیوست، نشانه‌ای در صفحه می‌گذارد؟
+        self.attach_modal = False    # رفتار جدید روبیکا: بعد از پیوست، پنجره‌ی «فایل انتخاب شده» باز می‌شود
+        self.modal_open = False
+        self.modal_caption = ""
 
     # ---------------- ساخت عناصر ----------------
     def _search_box(self):
@@ -82,9 +85,41 @@ class MockPage:
         self.sent.append((self.attached_file, self.composer_value))
         self.attached_file, self.composer_value = None, ""
 
+    # ---------------- پنجره‌ی «فایل انتخاب شده» (مثل روبیکا وب) ----------------
+    def _modal_send(self):
+        assert self.attached_file, "ارسال از پنجره بدون فایل؟"
+        self.sent.append((self.attached_file, self.modal_caption))
+        self.attached_file, self.modal_caption = None, ""
+        self.modal_open = False
+
+    def _modal_input_el(self):
+        el = El("input", "")
+        el._click = lambda: None
+        el._fill = lambda v: setattr(self, "modal_caption", v)
+
+        def _type(t):
+            self.modal_caption = (self.modal_caption or "") + t
+
+        el._type = _type
+        el._press = lambda k: self._modal_send() if k == "Enter" else None
+        return el
+
     # ---------------- رابط playwright ----------------
     def locator(self, sel):
         s = sel.lower()
+        if "فایل انتخاب شده" in sel:  # پنجره‌ی پیوست روبیکا
+            if not self.modal_open:
+                return _Single(None)
+            # توجه: سلکتور ورودی هم عبارت button را (در شرطِ ظرف) دارد؛ پس اول
+            # ورودی با بخش مخصوصِ خودش شناخته می‌شود، بعد دکمه‌ی ارسال.
+            if "input[not(@type='file')]" in sel or "//textarea" in sel \
+                    or "contenteditable" in sel:
+                return _Single(self._modal_input_el())
+            if "button" in sel:
+                el = El("button", "ارسال")
+                el._click = self._modal_send
+                return _Single(el)
+            return _Single(El("div", "۱ فایل انتخاب شده"))
         if "placeholder*='جستجو'" in sel and self.state == "main":
             return _Single(self._search_box())
         if ("پیام" in sel or "contenteditable" in sel or s == "textarea") and self.state == "chat_open":
@@ -214,6 +249,9 @@ class _FileInputs:
 
             def set_input_files(self, path):
                 page.attached_file = path
+                if getattr(page, "attach_modal", False):
+                    page.modal_open = True
+                    page.modal_caption = ""
 
         return _FI()
 
@@ -423,6 +461,42 @@ def test_send_image_no_evidence_no_text_only():
     print("✅ send_image: بدون پیوستِ واقعی، متنِ تنها فرستاده نمی‌شود")
 
 
+def test_send_image_attach_modal():
+    """رفتار فعلی روبیکا وب: بعد از پیوست، پنجره‌ی «فایل انتخاب شده» باز می‌شود و
+    ارسال فقط با دکمه‌ی «ارسال» داخل همان پنجره کامل می‌شود."""
+    page = MockPage(CONTACTS)
+    page.attach_modal = True
+    ok, _ = sw.open_chat(page, "مسئول نسرا آران و بیدگل", S, CFG)
+    assert ok
+    ok, err = sw.send_image(page, IMG, "کارنامه عملکرد شهریور ۱۴۰۵ ناحیه آران و بیدگل", S)
+    assert ok, f"ارسال از پنجره ناموفق: {err}"
+    assert not page.modal_open, "پنجره باید بعد از ارسال بسته شده باشد"
+    assert len(page.sent) == 1
+    f, cap = page.sent[0]
+    assert Path(f).name == IMG.name, f
+    assert cap == "کارنامه عملکرد شهریور ۱۴۰۵ ناحیه آران و بیدگل", cap
+    assert page.composer_value == "", "ورودی اصلی صفحه نباید استفاده شود"
+    print("✅ send_image: پنجره‌ی «فایل انتخاب شده» ← متن در ورودی پنجره ← دکمه‌ی ارسال پنجره")
+
+
+def test_send_image_modal_button_stuck_no_text_only():
+    """اگر پنجره بعد از کلیک بسته نشد، نباید متنِ تنها از ورودی اصلی فرستاده شود"""
+    page = MockPage(CONTACTS)
+    page.attach_modal = True
+
+    def stuck():
+        pass  # دکمه کلیک می‌شود اما پنجره بسته نمی‌شود و چیزی ارسال نمی‌شود
+
+    page._modal_send = stuck
+    ok, _ = sw.open_chat(page, "فرمانده گردان آران و بیدگل", S, CFG)
+    assert ok
+    ok2, err2 = sw.send_image(page, IMG, "کپشن", S)
+    assert not ok2, "باید ناموفق می‌شد!"
+    assert "بسته نشد" in err2
+    assert not page.sent, "نباید چیزی (مخصوصاً متن تنها) فرستاده می‌شد"
+    print("✅ send_image: پنجره‌ی بسته‌نشده ← توقف بدون ارسال متنِ تنها")
+
+
 def test_open_chat_by_phone_found():
     page = MockPagePhone({"09121112233": "علی محمدی"})
     ok, err = sw.open_chat_by_phone(page, "09121112233", S)
@@ -487,6 +561,8 @@ if __name__ == "__main__":
     test_ensure_test_image_and_placeholder()
     test_recipients_xlsx_autocreate()
     test_send_image_no_evidence_no_text_only()
+    test_send_image_attach_modal()
+    test_send_image_modal_button_stuck_no_text_only()
     print("\n🎉 همه سناریوهای شبیه‌سازی‌شده پاس شدند!")
     print()
     print("=" * 60)

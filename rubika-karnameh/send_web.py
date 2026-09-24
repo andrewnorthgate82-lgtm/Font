@@ -1003,7 +1003,7 @@ def print_chat_attach_info(page):
     """چاپ ورودی‌های فایل و دکمه‌های صفحه‌ی گفتگو — برای عیب‌یابی پیوست تصویر"""
     try:
         info = page.evaluate(
-            """() => {
+            r"""() => {
                 const out = {files: [], buttons: []};
                 for (const el of Array.from(document.querySelectorAll('input[type="file"]')).slice(0,10)){
                     out.files.push({
@@ -1111,6 +1111,77 @@ def attach_file(page, image: Path, S) -> tuple:
                    "ارسال متوقف شد. گزارش در debug/chat_attach_info.json")
 
 
+MODAL_HEADER = "فایل انتخاب شده"
+# پنجره‌ی «۱ فایل انتخاب شده» که روبیکا بعد از پیوست باز می‌کند:
+# سربرگ پنجره (متن کوتاه شامل عبارت بالا) ← نزدیک‌ترین ظرفِ دارای دکمه‌ی «ارسال»
+_MODAL_HEAD_XP = ("//*[contains(.,'فایل انتخاب شده') "
+                  "and string-length(normalize-space(.)) < 40]")
+_MODAL_ROOT_XP = (_MODAL_HEAD_XP +
+                  "/ancestor-or-self::*[.//button[normalize-space(.)='ارسال']][1]")
+_MODAL_SEND_XP = _MODAL_ROOT_XP + "//button[normalize-space(.)='ارسال']"
+_MODAL_INPUT_XP = " | ".join(
+    _MODAL_ROOT_XP + tail for tail in
+    ("//input[not(@type='file')]", "//textarea", "//*[@contenteditable='true']"))
+
+
+def attach_modal_send(page, caption, S) -> tuple:
+    """روبیکا بعد از پیوستِ فایل، پنجره‌ی «۱ فایل انتخاب شده» را باز می‌کند و ارسالِ
+    نهایی فقط با دکمه‌ی «ارسال»ِ داخل همان پنجره انجام می‌شود. اگر پنجره باز باشد:
+    متن را در ورودیِ داخل پنجره می‌نویسد و دکمه‌ی ارسالِ پنجره را می‌زند و بسته
+    شدنش را راستی‌آزمایی می‌کند. خروجی: (آیا پنجره مدیریت شد؟, پیام خطا یا None)"""
+    header = page.locator(f"text={MODAL_HEADER}").first
+    visible = False
+    for _ in range(4):
+        try:
+            visible = header.is_visible()
+        except Exception:
+            visible = False
+        if visible:
+            break
+        page.wait_for_timeout(800)
+    if not visible:
+        return False, None  # پنجره‌ای باز نیست — همان روش قدیمی (ورودی اصلی)
+
+    print("   🪟 پنجره‌ی «فایل انتخاب شده» باز است — ارسال از داخل همان پنجره")
+    inp = page.locator("xpath=" + _MODAL_INPUT_XP).first
+    if caption:
+        try:
+            if inp.count():
+                print("   ↻ نوشتن متن در ورودیِ پنجره ...")
+                try:
+                    inp.fill(caption)
+                except Exception:
+                    inp.click()
+                    inp.press_sequentially(caption, delay=15)
+                page.wait_for_timeout(300)
+        except Exception as e:
+            log.debug("modal caption failed: %s", e)
+
+    btn = page.locator("xpath=" + _MODAL_SEND_XP).first
+    try:
+        btn.click()
+    except Exception as e:
+        return True, f"دکمه‌ی «ارسال» داخل پنجره‌ی «فایل انتخاب شده» کلیک نشد: {e}"
+    print("   ↻ کلیک روی دکمه‌ی ارسالِ پنجره ...")
+
+    closed = False
+    for _ in range(8):
+        page.wait_for_timeout(1000)
+        try:
+            if not page.locator(f"text={MODAL_HEADER}").first.is_visible():
+                closed = True
+                break
+        except Exception:
+            closed = True
+            break
+    if not closed:
+        return True, ("پنجره‌ی «فایل انتخاب شده» بعد از کلیک روی ارسال بسته نشد — "
+                      "برای جلوگیری از ارسال اشتباه، چیزی فرستاده نشد؛ لطفاً مرورگر را چک کنید.")
+    print("   ✅ ارسال از پنجره‌ی «فایل انتخاب شده» انجام شد (تصویر + متن)")
+    page.wait_for_timeout(1200)
+    return True, None
+
+
 def send_image(page, image: Path, caption, S) -> tuple:
     """ارسال یک تصویر (با کپشن) در گفتگوی باز. خروجی: (موفق؟, پیام خطا)"""
     print(f"   ↻ پیوست تصویر «{image.name}» ...")
@@ -1118,6 +1189,16 @@ def send_image(page, image: Path, caption, S) -> tuple:
     if not ok:
         return False, err
     print("   ✅ تصویر پیوست شد")
+
+    # روبیکا پس از پیوست، پنجره‌ی «فایل انتخاب شده» را باز می‌کند؛ ارسال نهایی فقط
+    # با دکمه‌ی «ارسال» داخل همان پنجره است. اگر پنجره بود، ورودی اصلی هرگز لمس نشود
+    # (ورودی اصلی فقط متنِ خالی می‌فرستد و تصویر در پنجره جا می‌ماند).
+    handled, merr = attach_modal_send(page, caption, S)
+    if handled:
+        if merr:
+            return False, merr
+        log.info("   ارسال با دکمه‌ی ارسالِ پنجره‌ی «فایل انتخاب شده»")
+        return True, None
 
     cap = find_locator(page, S["message_input"], timeout=10000)
     if not cap:
