@@ -420,7 +420,7 @@ def build_workbook(days: list[dict], year: int, month: int, person_title: str,
 
     # --- تنظیمات چاپ A4 ---
     ws.sheet_properties.pageSetUpPr.fitToPage = True
-    ws.page_setup.orientation = "landscape"
+    ws.page_setup.orientation = "portrait"
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
     ws.page_setup.fitToWidth = 1
     ws.page_setup.fitToHeight = 1
