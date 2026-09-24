@@ -677,6 +677,39 @@ def pick_result_by_phone(page, phone, S):
     return None
 
 
+def dump_search_dom(page, phone):
+    """ذخیره‌ی وضعیت صفحه بعد از جستجوی شماره — برای عیب‌یابیِ نتیجه‌های جستجو"""
+    d = BASE / "debug"
+    d.mkdir(exist_ok=True)
+    try:
+        data = page.evaluate(
+            """() => {
+                const out = {url: location.href,
+                             anyText: (document.body.innerText||'').replace(/\\s+/g,' ').slice(0,600),
+                             items: []};
+                const sels = ['[class*="result" i]','[role="option"]','li',
+                              '[class*="item" i]','[class*="chat" i]','[class*="list" i]'];
+                const seen = new Set();
+                for (const s of sels){
+                    for (const el of Array.from(document.querySelectorAll(s)).slice(0,40)){
+                        const t = (el.innerText||'').replace(/\\s+/g,' ').trim();
+                        if (!t || t.length>300 || seen.has(t)) continue;
+                        seen.add(t);
+                        out.items.push({sel: s,
+                                        cls: (el.className && el.className.toString ? el.className.toString() : '').slice(0,100),
+                                        text: t.slice(0,120)});
+                        if (out.items.length>=40) return out;
+                    }
+                }
+                return out;
+            }"""
+        )
+        (d / "dom_search_number.json").write_text(
+            json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    except Exception as e:
+        print(f"   ⚠️ استخراج DOM ناموفق: {e}")
+
+
 def open_chat_by_phone(page, phone, S) -> tuple:
     """باز کردن گفتگو با «جستجوی شماره تلفن» — بدون نیاز به مخاطب ذخیره‌شده.
     خروجی: (موفق؟, پیام خطا)"""
@@ -692,7 +725,7 @@ def open_chat_by_phone(page, phone, S) -> tuple:
             clear_input(box)
             print(f"   ↻ جستجوی شماره {v} ...")
             type_text(box, v)
-            page.wait_for_timeout(1700)  # منتظر بارگذاری نتیجه‌ها
+            page.wait_for_timeout(2200)  # منتظر بارگذاری نتیجه‌ها
         except Exception as e:
             return False, f"خطا در تایپ در جستجو: {e}"
 
@@ -725,6 +758,13 @@ def open_chat_by_phone(page, phone, S) -> tuple:
         print("   ✅ گفتگو باز شد")
         return True, None
 
+    # عیب‌یابی: چه چیزهایی در فهرستِ نتیجه‌ها دیده می‌شود؟
+    results = search_results(page, S)
+    print(f"   🔎 عیب‌یابی: اسکریپت بعد از تایپ شماره، {len(results)} مورد در فهرست نتیجه‌ها دید")
+    for it, txt in results[:3]:
+        print(f"      • «{txt[:60]}»")
+    dump_search_dom(page, phone)
+    print("   💾 گزارش کامل در debug/dom_search_number.json ذخیره شد")
     return False, (f"شماره {phone} در نتیجه‌های جستجوی روبیکا پیدا نشد "
                    "(شماره را در اکسل چک کنید)")
 
@@ -1044,6 +1084,11 @@ def run_sending(cfg, S, tasks, args):
                     print(f"   [{seq}] {contact['label']} — {how}")
                     if contact["phone"]:
                         ok, err = open_chat_by_phone(page, contact["phone"], S)
+                        if not ok and cfg.get("_self_test"):
+                            # در حالت تست: روبیکا شماره‌ی خودِ کاربر را با جستجوی شماره
+                            # نشان نمی‌دهد؛ با نامِ مخاطبِ ذخیره‌شده در گوشی امتحان می‌کنیم
+                            print(f"   ⤵ شماره پیدا نشد؛ تلاش با نام مخاطبِ «{contact['label']}» ...")
+                            ok, err = open_chat(page, contact["label"], S, cfg)
                     else:
                         ok, err = open_chat(page, contact["label"], S, cfg)
                     if not ok:
