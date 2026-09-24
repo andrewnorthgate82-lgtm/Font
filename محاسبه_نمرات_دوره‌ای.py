@@ -3,6 +3,9 @@
 ====================================================================
 سامانه هوشمند سنجش نمرات دوره‌ای نواحی نسرا - استان اصفهان
 (دوره‌های ۲ ماهه، ۳ ماهه و ۶ ماهه)
+پشتیبانی کامل از قرارگیری فایل‌ها در پوشه‌های ماهانه درون reports/
+(مثال: reports/مرداد 1405/امام رضا.xlsx و reports/شهریور 1405/امام رضا.xlsx)
+
 خروجی: فایل اکسل متمرکز نام ناحیه و نمره نهایی (جهت کپی آسان)
 سطح کیفی: ۳ سطح (عالی، متوسط، ضعیف)
 مقیاس نمره‌دهی: ۷۰ (صفر) تا ۱۰۰ (عالی)
@@ -90,8 +93,6 @@ DISTRICT_BRANCHES = [
 DISTRICTS = [d[0] for d in DISTRICT_BRANCHES]
 BRANCH_MAP = {d[0]: d[1] for d in DISTRICT_BRANCHES}
 
-# Monthly base multipliers per hozeh:
-# Hozori: 31, Majazi: 217, Khalagh: 62, Tolid: 3, Neshast: 1 per month
 BASE_HOZORI = 31
 BASE_MAJAZI = 217
 BASE_KHALAGH = 62
@@ -103,7 +104,7 @@ PERIOD_CONFIGS = {
         'months': 2,
         'title': '۲ ماهه',
         'title_en': '2-Month',
-        'desc': 'دوره ۲ ماهه (حداکثر ۲ فایل اکسل برای هر ناحیه)',
+        'desc': 'دوره ۲ ماهه (۲ پوشه ماهانه یا ۲ فایل برای هر ناحیه)',
         'hozori_mult': BASE_HOZORI * 2,    # 62
         'majazi_mult': BASE_MAJAZI * 2,    # 434
         'khalagh_mult': BASE_KHALAGH * 2,  # 124
@@ -114,7 +115,7 @@ PERIOD_CONFIGS = {
         'months': 3,
         'title': '۳ ماهه',
         'title_en': '3-Month',
-        'desc': 'دوره ۳ ماهه (فصلی - حداکثر ۳ فایل اکسل برای هر ناحیه)',
+        'desc': 'دوره ۳ ماهه (۳ پوشه ماهانه یا ۳ فایل برای هر ناحیه)',
         'hozori_mult': BASE_HOZORI * 3,    # 93
         'majazi_mult': BASE_MAJAZI * 3,    # 651
         'khalagh_mult': BASE_KHALAGH * 3,  # 186
@@ -125,7 +126,7 @@ PERIOD_CONFIGS = {
         'months': 6,
         'title': '۶ ماهه',
         'title_en': '6-Month',
-        'desc': 'دوره ۶ ماهه (نیم‌سال - حداکثر ۶ فایل اکسل برای هر ناحیه)',
+        'desc': 'دوره ۶ ماهه (۶ پوشه ماهانه یا ۶ فایل برای هر ناحیه)',
         'hozori_mult': BASE_HOZORI * 6,    # 186
         'majazi_mult': BASE_MAJAZI * 6,    # 1302
         'khalagh_mult': BASE_KHALAGH * 6,  # 372
@@ -217,10 +218,10 @@ def extract_sheet_metrics(ws):
 
 def get_tier_3_levels(score):
     """
-    3 سطح کیفی طبق درخواست کاربر:
-    1. عالی (نمره 90 تا 100)
-    2. متوسط (نمره 80 تا 89.9)
-    3. ضعیف (نمره زیر 80 - شامل عملکرد صفر یا عدم فعالیت با نمره 70)
+    ۳ سطح کیفی طبق درخواست کاربر:
+    1. عالی (نمره ۹۰ تا ۱۰۰)
+    2. متوسط (نمره ۸۰ تا ۸۹.۹)
+    3. ضعیف (نمره زیر ۸۰ - شامل نمره ۷۰ عدم فعالیت یا کسری)
     """
     if score >= 90.0:
         return "عالی"
@@ -231,13 +232,13 @@ def get_tier_3_levels(score):
 
 def prompt_period():
     print("=" * 75)
-    print("   سامانه هوشمند استخراج نمرات دوره‌ای نواحی نسرا - استان اصفهان")
-    print("   (مقیاس ۷۰ تا ۱۰۰ | سطح کیفی ۳ گانه: عالی، متوسط، ضعیف)")
+    print("   سامانه هوشمند سنجش نمرات دوره‌ای نواحی نسرا - استان اصفهان")
+    print("   (پشتیبانی از پوشه‌بندی ماهانه در reports/ | مقیاس ۷۰ تا ۱۰۰)")
     print("=" * 75)
     print("انتخاب طول دوره ارزیابی عملکرد:\n")
-    print("  [1] دوره ۲ ماهه (2-Month) - بررسی حداکثر ۲ فایل اکسل برای هر ناحیه")
-    print("  [2] دوره ۳ ماهه (3-Month) - بررسی حداکثر ۳ فایل اکسل برای هر ناحیه (فصلی)")
-    print("  [3] دوره ۶ ماهه (6-Month) - بررسی حداکثر ۶ فایل اکسل برای هر ناحیه (نیم‌سال)")
+    print("  [1] دوره ۲ ماهه (2-Month) - بررسی ۲ ماه (۲ پوشه ماهانه یا ۲ فایل)")
+    print("  [2] دوره ۳ ماهه (3-Month) - بررسی ۳ ماه (۳ پوشه ماهانه یا ۳ فایل)")
+    print("  [3] دوره ۶ ماهه (6-Month) - بررسی ۶ ماه (۶ پوشه ماهانه یا ۶ فایل)")
     print("-" * 75)
     
     choice = "2"
@@ -251,6 +252,37 @@ def prompt_period():
     map_choice = {'1': 2, '2': 3, '3': 6}
     return map_choice.get(choice, 3)
 
+def scan_reports_directory(reports_dir='reports'):
+    os.makedirs(reports_dir, exist_ok=True)
+    
+    # Check for subdirectories (month folders like 'مرداد 1405', 'شهریور 1405')
+    all_entries = sorted(os.listdir(reports_dir))
+    subdirs = [d for d in all_entries if os.path.isdir(os.path.join(reports_dir, d)) and not d.startswith('.') and not d.startswith('__')]
+    
+    files_list = [] # tuples of (abs_path, folder_name, filename)
+    
+    if subdirs:
+        print(f"📁 ساختار پوشه‌بندی ماهانه شناسایی شد ({len(subdirs)} پوشه در '{reports_dir}'):")
+        for sdir in subdirs:
+            spath = os.path.join(reports_dir, sdir)
+            s_files = glob.glob(os.path.join(spath, '*.xlsx'))
+            s_files = [f for f in s_files if not os.path.basename(f).startswith('~$')]
+            print(f"   📂 پوشه ماهانه «{sdir}»: شامل {len(s_files)} فایل اکسل")
+            for f in s_files:
+                files_list.append((f, sdir, os.path.basename(f)))
+    else:
+        # Check flat files directly in reports/
+        flat_files = glob.glob(os.path.join(reports_dir, '*.xlsx'))
+        flat_files = [f for f in flat_files if not os.path.basename(f).startswith('~$')]
+        if flat_files:
+            print(f"📁 ساختار فایل‌های مستقیم در پوشه '{reports_dir}' ({len(flat_files)} فایل اکسل)")
+            for f in flat_files:
+                files_list.append((f, '', os.path.basename(f)))
+        else:
+            print(f"📁 پوشه '{reports_dir}' آماده است (هنوز فایلی قرار داده نشده است).")
+            
+    return subdirs, files_list
+
 def run_period_evaluation(selected_months=None):
     if selected_months in [2, 3, 6]:
         n_months = selected_months
@@ -263,19 +295,15 @@ def run_period_evaluation(selected_months=None):
     print(f"🎯 حدانتظارها بر مبنای ضریب {n_months} برابری اهداف ماهانه محاسبه می‌گردد.")
     print("=" * 75)
 
-    reports_dir = 'reports'
-    os.makedirs(reports_dir, exist_ok=True)
-    all_files = glob.glob(os.path.join(reports_dir, '*.xlsx'))
-    all_files = [f for f in all_files if not os.path.basename(f).startswith('~$')]
-
-    print(f"📁 پوشه گزارشات: '{reports_dir}' | مجموع فایل‌های اکسل یافت‌شده: {len(all_files)}")
+    subdirs, all_files = scan_reports_directory('reports')
     print("-" * 75)
 
-    # 1. Parse and accumulate files per district
+    # Accumulate per district
     accumulated = {}
     for dn in DISTRICTS:
         accumulated[dn] = {
             'files_count': 0,
+            'months_found': [],
             'files': [],
             'hozori': 0,
             'majazi': 0,
@@ -284,10 +312,11 @@ def run_period_evaluation(selected_months=None):
             'neshast': 0
         }
 
-    for fpath in all_files:
-        fname = os.path.basename(fpath)
+    for fpath, folder_label, fname in all_files:
         try:
+            # Match by filename first (e.g. 'امام رضا.xlsx' or 'ناحیه مبارکه.xlsx')
             detected = match_district_name(fname)
+            
             wb = openpyxl.load_workbook(fpath, data_only=True)
             
             ws_hoz = None
@@ -304,6 +333,7 @@ def run_period_evaluation(selected_months=None):
                 elif 'خلاق' in cn: ws_kha = wb[sname]
                 elif 'تولید' in cn: ws_tol = wb[sname]
 
+            # If not detected from filename, try reading cell values inside workbook
             if not detected:
                 for ws in [ws_hoz, ws_maj, ws_kha, ws_tav]:
                     if ws is None: continue
@@ -317,7 +347,7 @@ def run_period_evaluation(selected_months=None):
                     if detected: break
 
             if not detected:
-                print(f"⚠️ شناسایی نام ناحیه برای فایل '{fname}' ناموفق بود.")
+                print(f"⚠️ شناسایی ناحیه برای فایل '{fname}' (در پوشه '{folder_label}') ناموفق بود.")
                 continue
 
             m_hoz = extract_sheet_metrics(ws_hoz)
@@ -335,23 +365,26 @@ def run_period_evaluation(selected_months=None):
             tol_val = m_tol['people_sum'] if m_tol['people_sum'] > 0 else m_tol['classes_count']
             nes_val = 1 if (hoz_val + maj_val + kha_val + tol_val) > 0 else 0
 
+            month_tag = folder_label if folder_label else f"فایل {accumulated[detected]['files_count'] + 1}"
             accumulated[detected]['files_count'] += 1
-            accumulated[detected]['files'].append(fname)
+            if month_tag not in accumulated[detected]['months_found']:
+                accumulated[detected]['months_found'].append(month_tag)
+            accumulated[detected]['files'].append(f"{folder_label}/{fname}" if folder_label else fname)
             accumulated[detected]['hozori'] += hoz_val
             accumulated[detected]['majazi'] += maj_val
             accumulated[detected]['khalagh'] += kha_val
             accumulated[detected]['tolid'] += tol_val
             accumulated[detected]['neshast'] += nes_val
 
-            print(f"✓ [{detected}] (فایل {accumulated[detected]['files_count']}: {fname}): +{hoz_val} حضوری | +{maj_val} مجازی | +{kha_val} خلاقانه | +{tol_val} تولید")
+            src_info = f"پوشه «{folder_label}»" if folder_label else fname
+            print(f"✓ [{detected}] ({src_info}): +{hoz_val} حضوری | +{maj_val} مجازی | +{kha_val} خلاقانه | +{tol_val} تولید")
 
         except Exception as e:
             print(f"❌ خطا در پردازش فایل '{fname}': {e}")
 
     print("-" * 75)
-    print("📊 محاسبه نمرات، درصد تحقق و رتبه‌بندی استانی...")
+    print("📊 محاسبه نمرات، تحلیل ماه‌های کارنکرده و رتبه‌بندی استانی...")
 
-    # 2. Calculate targets, realization %, scores (70 to 100), and 3 tiers
     results = []
     for dn in DISTRICTS:
         b_count = BRANCH_MAP[dn]
@@ -368,6 +401,10 @@ def run_period_evaluation(selected_months=None):
         a_tol = acc['tolid']
         a_nes = acc['neshast']
         f_cnt = acc['files_count']
+        m_found = acc['months_found']
+
+        # Determine missing months if subdirs exist
+        missing_months = [s for s in subdirs if s not in m_found] if subdirs else []
 
         pct_hoz = (a_hoz / t_hoz * 100) if t_hoz > 0 else 0
         pct_maj = (a_maj / t_maj * 100) if t_maj > 0 else 0
@@ -377,23 +414,32 @@ def run_period_evaluation(selected_months=None):
 
         avg_realization = (pct_hoz + pct_maj + pct_kha + pct_tol + pct_nes) / 5.0
         
-        # Scale: 70.0 (Zero performance) to 100.0 (Full performance)
+        # 70 to 100 scale
         final_score = round(70.0 + 30.0 * min(1.0, max(0.0, avg_realization / 100.0)), 1)
         tier = get_tier_3_levels(final_score)
 
-        # Status text
+        # Status & detailed description
         if f_cnt >= n_months:
-            status_text = "کامل"
+            status_summary = "کامل"
+            status_desc = f"کامل ({len(m_found)} از {n_months} ماه)"
         elif f_cnt > 0:
-            status_text = f"دارای کسری ({f_cnt} از {n_months} ماه)"
+            status_summary = "دارای کسری"
+            if missing_months:
+                status_desc = f"کسری: {len(m_found)} از {n_months} ماه (عدم فعالیت در: {'، '.join(missing_months)})"
+            else:
+                status_desc = f"کسری: {f_cnt} از {n_months} ماه تحویل شده"
         else:
-            status_text = "فاقد گزارش (عملکرد ۰)"
+            status_summary = "فاقد گزارش"
+            status_desc = f"فاقد گزارش (عملکرد ۰ در کل {n_months} ماه)"
 
         results.append({
             'district': dn,
             'branches': b_count,
             'files_count': f_cnt,
-            'status': status_text,
+            'months_found': m_found,
+            'missing_months': missing_months,
+            'status_summary': status_summary,
+            'status_desc': status_desc,
             'score': final_score,
             'tier': tier,
             'avg_realization': avg_realization,
@@ -404,7 +450,7 @@ def run_period_evaluation(selected_months=None):
             't_nes': t_nes, 'a_nes': a_nes, 'pct_nes': pct_nes
         })
 
-    # Sort to determine ranks
+    # Sort by score and realization to assign ranks
     sorted_by_score = sorted(results, key=lambda x: (x['score'], x['avg_realization']), reverse=True)
     rank_map = {}
     active_rank = 1
@@ -419,15 +465,13 @@ def run_period_evaluation(selected_months=None):
     for item in results:
         item['rank'] = rank_map[item['district']]
 
-    # 3. Create Excel workbook with quick-copy design
+    # Generate Excel Workbook
     excel_filename = "نمرات_نهایی_نواحی.xlsx"
     backup_period_file = f"نمرات_عملکرد_{n_months}ماهه.xlsx"
 
     wb = openpyxl.Workbook()
-    
-    # Styles
+
     font_title = Font(name='Calibri', size=15, bold=True, color='1E3A8A')
-    font_sub = Font(name='Calibri', size=11, bold=True, color='475569')
     font_th = Font(name='Calibri', size=11, bold=True, color='FFFFFF')
     font_td = Font(name='Calibri', size=11, bold=False, color='0F172A')
     font_score = Font(name='Calibri', size=12, bold=True, color='047857')
@@ -436,15 +480,12 @@ def run_period_evaluation(selected_months=None):
     font_copy_sc = Font(name='Calibri', size=12, bold=True, color='047857')
 
     fill_th_navy = PatternFill(start_color='1E3A8A', end_color='1E3A8A', fill_type='solid')
-    fill_th_teal = PatternFill(start_color='0D9488', end_color='0D9488', fill_type='solid')
-    fill_th_gray = PatternFill(start_color='475569', end_color='475569', fill_type='solid')
     fill_copy_header = PatternFill(start_color='059669', end_color='059669', fill_type='solid')
     
     fill_tier_ali = PatternFill(start_color='D1FAE5', end_color='D1FAE5', fill_type='solid')      # Green
     fill_tier_motevaset = PatternFill(start_color='FEF3C7', end_color='FEF3C7', fill_type='solid')# Yellow
     fill_tier_zaeef = PatternFill(start_color='FEE2E2', end_color='FEE2E2', fill_type='solid')     # Red
 
-    fill_zebra = PatternFill(start_color='F8FAFC', end_color='F8FAFC', fill_type='solid')
     fill_score_col = PatternFill(start_color='ECFDF5', end_color='ECFDF5', fill_type='solid')
 
     border_thin = Border(
@@ -456,75 +497,14 @@ def run_period_evaluation(selected_months=None):
 
     align_center = Alignment(horizontal='center', vertical='center')
     align_right = Alignment(horizontal='right', vertical='center')
-    align_left = Alignment(horizontal='left', vertical='center')
 
     # ==========================================
-    # SHEET 1: جدول کپی سریع (Quick Copy Sheet)
-    # Designed specifically for easy copy-paste of District & Score!
+    # SHEET 1: فقط نام و نمره (ساده‌ترین حالت کپی مستقیم)
     # ==========================================
-    ws_copy = wb.active
-    ws_copy.title = "کپی سریع نام و نمره"
-    ws_copy.views.sheetView[0].rightToLeft = True
-
-    ws_copy.merge_cells('A1:C1')
-    ws_copy['A1'] = f"جدول نمرات عملکرد {cfg['title']} نواحی نسرا (مقیاس ۷۰ تا ۱۰۰ - آماده کپی)"
-    ws_copy['A1'].font = font_title
-    ws_copy['A1'].alignment = align_center
-
-    ws_copy['A3'] = "ردیف"
-    ws_copy['B3'] = "نام ناحیه (شهرستان)"
-    ws_copy['C3'] = "نمره عملکرد (۷۰-۱۰۰)"
-    ws_copy['D3'] = "سطح کیفی (۳ سطح)"
-    ws_copy['E3'] = "رتبه استانی"
-    ws_copy['F3'] = "وضعیت دریافت گزارش"
-
-    for col in ['A', 'B', 'C', 'D', 'E', 'F']:
-        cell = ws_copy[f'{col}3']
-        cell.font = font_copy_th
-        cell.fill = fill_copy_header
-        cell.alignment = align_center
-        cell.border = border_thin
-
-    for idx, r in enumerate(results, start=1):
-        row_num = 3 + idx
-        ws_copy.cell(row=row_num, column=1, value=idx).alignment = align_center
-        ws_copy.cell(row=row_num, column=2, value=r['district']).alignment = align_right
-        ws_copy.cell(row=row_num, column=3, value=r['score']).alignment = align_center
-        ws_copy.cell(row=row_num, column=4, value=r['tier']).alignment = align_center
-        ws_copy.cell(row=row_num, column=5, value=r['rank']).alignment = align_center
-        ws_copy.cell(row=row_num, column=6, value=f"{r['files_count']} از {n_months} ماه ({r['status']})").alignment = align_right
-
-        ws_copy.cell(row=row_num, column=1).font = font_td
-        ws_copy.cell(row=row_num, column=2).font = font_copy_dn
-        ws_copy.cell(row=row_num, column=3).font = font_copy_sc
-        ws_copy.cell(row=row_num, column=3).fill = fill_score_col
-
-        # Tier coloring
-        tier_cell = ws_copy.cell(row=row_num, column=4)
-        if r['tier'] == 'عالی': tier_cell.fill = fill_tier_ali
-        elif r['tier'] == 'متوسط': tier_cell.fill = fill_tier_motevaset
-        else: tier_cell.fill = fill_tier_zaeef
-
-        ws_copy.cell(row=row_num, column=5).font = font_td
-        ws_copy.cell(row=row_num, column=6).font = font_td
-
-        for c in range(1, 7):
-            ws_copy.cell(row=row_num, column=c).border = border_thin
-
-    ws_copy.column_dimensions['A'].width = 8
-    ws_copy.column_dimensions['B'].width = 24
-    ws_copy.column_dimensions['C'].width = 24
-    ws_copy.column_dimensions['D'].width = 18
-    ws_copy.column_dimensions['E'].width = 14
-    ws_copy.column_dimensions['F'].width = 30
-
-    
-    # ==========================================
-    # SHEET 0: فقط نام ناحیه و نمره (خام - ساده‌ترین حالت کپی)
-    # 2 columns only (A: نام ناحیه, B: نمره)
-    # ==========================================
-    ws_raw = wb.create_sheet(title="فقط نام و نمره (ساده)", index=0)
+    ws_raw = wb.active
+    ws_raw.title = "فقط نام و نمره (ساده)"
     ws_raw.views.sheetView[0].rightToLeft = True
+    
     ws_raw['A1'] = "نام ناحیه"
     ws_raw['B1'] = "نمره (۷۰-۱۰۰)"
     ws_raw['A1'].font = font_copy_th
@@ -533,7 +513,9 @@ def run_period_evaluation(selected_months=None):
     ws_raw['B1'].fill = fill_copy_header
     ws_raw['A1'].alignment = align_center
     ws_raw['B1'].alignment = align_center
-    
+    ws_raw['A1'].border = border_thin
+    ws_raw['B1'].border = border_thin
+
     for idx, r in enumerate(results, start=2):
         ws_raw.cell(row=idx, column=1, value=r['district']).alignment = align_right
         ws_raw.cell(row=idx, column=2, value=r['score']).alignment = align_center
@@ -541,34 +523,93 @@ def run_period_evaluation(selected_months=None):
         ws_raw.cell(row=idx, column=2).font = font_copy_sc
         ws_raw.cell(row=idx, column=1).border = border_thin
         ws_raw.cell(row=idx, column=2).border = border_thin
-    
+
     ws_raw.column_dimensions['A'].width = 25
     ws_raw.column_dimensions['B'].width = 18
 
     # ==========================================
-    # SHEET 2: جدول رتبه‌بندی استانی (Sorted by Rank)
+    # SHEET 2: جدول کامل نمرات و وضعیت ماه‌ها
+    # ==========================================
+    ws_copy = wb.create_sheet(title="جدول نمرات و تحلیل ماه‌ها")
+    ws_copy.views.sheetView[0].rightToLeft = True
+
+    ws_copy.merge_cells('A1:G1')
+    ws_copy['A1'] = f"جدول ارزیابی عملکرد {cfg['title']} نواحی نسرا (مقیاس ۷۰ تا ۱۰۰ | ۳ سطح کیفی)"
+    ws_copy['A1'].font = font_title
+    ws_copy['A1'].alignment = align_center
+
+    headers_s2 = [
+        ('ردیف', 8),
+        ('نام ناحیه (شهرستان)', 24),
+        ('نمره عملکرد (۷۰-۱۰۰)', 22),
+        ('سطح کیفی (۳ سطح)', 18),
+        ('رتبه استانی', 14),
+        ('تعداد ماه‌های ارسالی', 20),
+        ('وضعیت و ماه‌های کارنکرده', 38)
+    ]
+
+    for c_idx, (h_title, w) in enumerate(headers_s2, start=1):
+        cell = ws_copy.cell(row=3, column=c_idx, value=h_title)
+        cell.font = font_copy_th
+        cell.fill = fill_copy_header
+        cell.alignment = align_center
+        cell.border = border_thin
+        ws_copy.column_dimensions[get_column_letter(c_idx)].width = w
+
+    for idx, r in enumerate(results, start=1):
+        row_num = 3 + idx
+        ws_copy.cell(row=row_num, column=1, value=idx).alignment = align_center
+        ws_copy.cell(row=row_num, column=2, value=r['district']).alignment = align_right
+        ws_copy.cell(row=row_num, column=3, value=r['score']).alignment = align_center
+        ws_copy.cell(row=row_num, column=4, value=r['tier']).alignment = align_center
+        ws_copy.cell(row=row_num, column=5, value=r['rank']).alignment = align_center
+        ws_copy.cell(row=row_num, column=6, value=f"{r['files_count']} از {n_months} ماه").alignment = align_center
+        ws_copy.cell(row=row_num, column=7, value=r['status_desc']).alignment = align_right
+
+        ws_copy.cell(row=row_num, column=1).font = font_td
+        ws_copy.cell(row=row_num, column=2).font = font_copy_dn
+        ws_copy.cell(row=row_num, column=3).font = font_copy_sc
+        ws_copy.cell(row=row_num, column=3).fill = fill_score_col
+
+        tier_cell = ws_copy.cell(row=row_num, column=4)
+        if r['tier'] == 'عالی': tier_cell.fill = fill_tier_ali
+        elif r['tier'] == 'متوسط': tier_cell.fill = fill_tier_motevaset
+        else: tier_cell.fill = fill_tier_zaeef
+
+        ws_copy.cell(row=row_num, column=5).font = font_td
+        ws_copy.cell(row=row_num, column=6).font = font_td
+        ws_copy.cell(row=row_num, column=7).font = font_td
+
+        for c in range(1, 8):
+            ws_copy.cell(row=row_num, column=c).border = border_thin
+
+    # ==========================================
+    # SHEET 3: جدول رتبه‌بندی استانی
     # ==========================================
     ws_rank = wb.create_sheet(title="رتبه‌بندی استانی")
     ws_rank.views.sheetView[0].rightToLeft = True
 
-    ws_rank.merge_cells('A1:E1')
+    ws_rank.merge_cells('A1:F1')
     ws_rank['A1'] = f"رتبه‌بندی استانی عملکرد {cfg['title']} ۳۲ شهرستان (به ترتیب رتبه)"
     ws_rank['A1'].font = font_title
     ws_rank['A1'].alignment = align_center
 
-    ws_rank['A3'] = "رتبه"
-    ws_rank['B3'] = "نام ناحیه (شهرستان)"
-    ws_rank['C3'] = "نمره عملکرد (۷۰-۱۰۰)"
-    ws_rank['D3'] = "سطح کیفی"
-    ws_rank['E3'] = "درصد تحقق اهداف"
-    ws_rank['F3'] = "تعداد ماه‌های ارسالی"
+    headers_s3 = [
+        ('رتبه', 10),
+        ('نام ناحیه (شهرستان)', 24),
+        ('نمره عملکرد (۷۰-۱۰۰)', 22),
+        ('سطح کیفی', 16),
+        ('درصد تحقق اهداف', 18),
+        ('تعداد ماه‌های ارسالی', 20)
+    ]
 
-    for col in ['A', 'B', 'C', 'D', 'E', 'F']:
-        cell = ws_rank[f'{col}3']
+    for c_idx, (h_title, w) in enumerate(headers_s3, start=1):
+        cell = ws_rank.cell(row=3, column=c_idx, value=h_title)
         cell.font = font_th
         cell.fill = fill_th_navy
         cell.alignment = align_center
         cell.border = border_thin
+        ws_rank.column_dimensions[get_column_letter(c_idx)].width = w
 
     for idx, r in enumerate(sorted_by_score, start=1):
         row_num = 3 + idx
@@ -595,17 +636,10 @@ def run_period_evaluation(selected_months=None):
         for c in range(1, 7):
             ws_rank.cell(row=row_num, column=c).border = border_thin
 
-    ws_rank.column_dimensions['A'].width = 10
-    ws_rank.column_dimensions['B'].width = 24
-    ws_rank.column_dimensions['C'].width = 22
-    ws_rank.column_dimensions['D'].width = 16
-    ws_rank.column_dimensions['E'].width = 20
-    ws_rank.column_dimensions['F'].width = 22
-
     # ==========================================
-    # SHEET 3: کارنامه تفصیلی و مستندات شاخص‌ها
+    # SHEET 4: ریز مستندات ۵ شاخص
     # ==========================================
-    ws_full = wb.create_sheet(title="جزئیات و مستندات شاخص‌ها")
+    ws_full = wb.create_sheet(title="مستندات شاخص‌ها")
     ws_full.views.sheetView[0].rightToLeft = True
 
     ws_full.merge_cells('A1:T1')
@@ -614,25 +648,12 @@ def run_period_evaluation(selected_months=None):
     ws_full['A1'].alignment = align_center
 
     headers_full = [
-        ('ردیف', 6),
-        ('نام ناحیه', 20),
-        ('نمره (۷۰-۱۰۰)', 14),
-        ('سطح', 12),
-        ('رتبه', 8),
-        ('ماه‌های ارسالی', 14),
-        ('حوزه', 8),
-        ('انتظار حضوری', 14),
-        ('عملکرد حضوری', 14),
-        ('تحقق حضوری', 12),
-        ('انتظار مجازی', 14),
-        ('عملکرد مجازی', 14),
-        ('تحقق مجازی', 12),
-        ('انتظار خلاقانه', 14),
-        ('عملکرد خلاقانه', 14),
-        ('تحقق خلاقانه', 12),
-        ('انتظار تولید', 14),
-        ('عملکرد تولید', 14),
-        ('تحقق تولید', 12),
+        ('ردیف', 6), ('نام ناحیه', 20), ('نمره (۷۰-۱۰۰)', 14), ('سطح', 12), ('رتبه', 8),
+        ('ماه‌های ارسالی', 14), ('حوزه', 8),
+        ('انتظار حضوری', 14), ('عملکرد حضوری', 14), ('تحقق حضوری', 12),
+        ('انتظار مجازی', 14), ('عملکرد مجازی', 14), ('تحقق مجازی', 12),
+        ('انتظار خلاقانه', 14), ('عملکرد خلاقانه', 14), ('تحقق خلاقانه', 12),
+        ('انتظار تولید', 14), ('عملکرد تولید', 14), ('تحقق تولید', 12),
         ('تحقق کل', 12)
     ]
 
@@ -682,23 +703,22 @@ def run_period_evaluation(selected_months=None):
     except Exception:
         pass
 
-    # 4. Print clean console table
-    print("\n" + "=" * 80)
+    # Print Clean Console Output
+    print("\n" + "=" * 90)
     print(f"📋 جدول نمرات دوره {cfg['title']} نواحی نسرا استان اصفهان (مقیاس ۷۰ تا ۱۰۰):")
-    print("=" * 80)
-    print(f"{'ردیف':^6} | {'نام ناحیه (شهرستان)':<20} | {'نمره':^8} | {'سطح کیفی':^10} | {'رتبه':^6} | {'ماه‌های ارسالی':^16}")
-    print("-" * 80)
+    print("=" * 90)
+    print(f"{'ردیف':^6} | {'نام ناحیه (شهرستان)':<20} | {'نمره':^8} | {'سطح کیفی':^10} | {'رتبه':^6} | {'وضعیت ماه‌های ارسالی':<32}")
+    print("-" * 90)
     for idx, r in enumerate(results, start=1):
-        print(f"{idx:^6} | {r['district']:<20} | {r['score']:^8.1f} | {r['tier']:^10} | {str(r['rank']):^6} | {r['files_count']:^2} از {n_months} ماه ({r['status']})")
-    print("=" * 80)
+        print(f"{idx:^6} | {r['district']:<20} | {r['score']:^8.1f} | {r['tier']:^10} | {str(r['rank']):^6} | {r['status_desc']:<32}")
+    print("=" * 90)
 
     print(f"\n🎉 فایل اکسل متمرکز با موفقیت تولید شد:")
     print(f"   📄 «{os.path.abspath(excel_filename)}»")
-    print(f"   (یک کپی با نام «{backup_period_file}» نیز در همین پوشه ذخیره شد)")
-    print(f"\n💡 شما می‌توانید بلافاصله ستون نام ناحیه و نمره را انتخاب و کپی (Ctrl+C) کنید.")
-    print("=" * 80)
+    print(f"   (یک کپی با نام «{backup_period_file}» نیز ذخیره شد)")
+    print(f"\n💡 در شیت ۱ («فقط نام و نمره»)، ستون‌ها آماده انتخاب و کپی (Ctrl+C) هستند.")
+    print("=" * 90)
 
-    # Automatically open the generated Excel file on Windows
     if sys.platform == 'win32':
         try:
             os.system(f'start excel "{os.path.abspath(excel_filename)}"')

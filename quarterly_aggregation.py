@@ -225,23 +225,12 @@ def prompt_quarter_and_year():
     return sel_period, sel_year
 
 def find_quarterly_reports_files(quarter_name):
-    # Searches in reports, reports_3months, or subfolder
-    candidates = [
-        'reports',
-        'reports_3months',
-        'گزارشات_سه_ماهه',
-        os.path.join('reports', quarter_name.split()[0])
-    ]
-    all_files = []
-    found_dir = 'reports'
-    for c in candidates:
-        if os.path.exists(c):
-            files = glob.glob(os.path.join(c, '*.xlsx'))
-            files = [f for f in files if not os.path.basename(f).startswith('~$')]
-            if files:
-                return c, files
-    os.makedirs('reports', exist_ok=True)
-    return 'reports', []
+    # Searches recursively in reports/ and subfolders (e.g. reports/Mordad 1405/*.xlsx)
+    reports_dir = 'reports'
+    os.makedirs(reports_dir, exist_ok=True)
+    all_files = glob.glob(os.path.join(reports_dir, '**', '*.xlsx'), recursive=True)
+    all_files = [f for f in all_files if not os.path.basename(f).startswith('~$')]
+    return reports_dir, all_files
 
 def process_quarterly_reports(master_excel="تهیه کارنامه ۳ ماهه نواحی.xlsx", selected_quarter=None, selected_year=None):
     if not os.path.exists(master_excel):
