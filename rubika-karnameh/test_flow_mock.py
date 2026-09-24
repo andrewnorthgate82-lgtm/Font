@@ -54,6 +54,7 @@ class MockPage:
         self.attached_file = None
         self.sent = []  # (فایل، کپشن)
         self.no_send_button = False
+        self.attach_evidence = True  # آیا پیوست، نشانه‌ای در صفحه می‌گذارد؟
 
     # ---------------- ساخت عناصر ----------------
     def _search_box(self):
@@ -110,6 +111,8 @@ class MockPage:
     def evaluate(self, js, arg=None):
         if "input[type=file]" in js:  # find_attach_input_index
             return 0 if self.state == "chat_open" else -1
+        if "canvas" in js and "imgs" in js:  # attachment_signature
+            return {"imgs": 1 if (self.attached_file and self.attach_evidence) else 0, "prev": 0}
         raise AssertionError(f"page.evaluate غیرمنتظره: {js[:60]}")
 
     def screenshot(self, **kw):
@@ -399,6 +402,27 @@ def test_build_tasks_with_xlsx():
     print("✅ build_tasks: اکسل اولویت دارد؛ ناحیه‌های بدون اکسل با نام جستجو می‌شوند")
 
 
+def test_make_caption_no_double_district():
+    cfg = {"send_caption": True,
+           "caption_template": "کارنامه عملکرد {month} ناحیه {city}",
+           "month": "مهر ۱۴۰۵"}
+    assert sw.make_caption(cfg, "ناحیه تست") == "کارنامه عملکرد مهر ۱۴۰۵ ناحیه تست"
+    assert sw.make_caption(cfg, "آران و بیدگل") == "کارنامه عملکرد مهر ۱۴۰۵ ناحیه آران و بیدگل"
+    print("✅ make_caption: دیگر «ناحیه ناحیه تست» تولید نمی‌کند")
+
+
+def test_send_image_no_evidence_no_text_only():
+    """اگر نشانه‌ای از پیوست تصویر در صفحه نباشد، نباید فقط متن فرستاده شود"""
+    page = MockPage(CONTACTS)
+    ok, _ = sw.open_chat(page, "مسئول نسرا آران و بیدگل", S, CFG)
+    assert ok
+    page.attach_evidence = False  # شبیه‌سازی: پیوست واقعاً انجام نمی‌شود
+    ok2, err2 = sw.send_image(page, IMG, "کپشن", S)
+    assert not ok2, "باید ناموفق می‌شد!"
+    assert not page.sent, "نباید فقط متن فرستاده می‌شد!"
+    print("✅ send_image: بدون پیوستِ واقعی، متنِ تنها فرستاده نمی‌شود")
+
+
 def test_open_chat_by_phone_found():
     page = MockPagePhone({"09121112233": "علی محمدی"})
     ok, err = sw.open_chat_by_phone(page, "09121112233", S)
@@ -450,6 +474,7 @@ def test_recipients_xlsx_autocreate():
 
 if __name__ == "__main__":
     test_normalize_phone()
+    test_make_caption_no_double_district()
     test_xlsx_loading()
     test_build_tasks_with_xlsx()
     test_open_chat_success()
@@ -461,6 +486,7 @@ if __name__ == "__main__":
     test_open_chat_by_phone_not_found()
     test_ensure_test_image_and_placeholder()
     test_recipients_xlsx_autocreate()
+    test_send_image_no_evidence_no_text_only()
     print("\n🎉 همه سناریوهای شبیه‌سازی‌شده پاس شدند!")
     print()
     print("=" * 60)

@@ -514,8 +514,12 @@ def build_tasks(cfg: dict, only=None) -> dict:
 def make_caption(cfg: dict, city: str):
     if not cfg.get("send_caption"):
         return None
+    tpl = cfg["caption_template"]
+    # جلوگیری از تکرار: «ناحیه ناحیه تست» ← «ناحیه تست»
+    if flat(city).replace(" ", "").startswith("ناحیه"):
+        tpl = tpl.replace("ناحیه {city}", "{city}")
     try:
-        return cfg["caption_template"].format(month=cfg.get("month", ""), city=city)
+        return tpl.format(month=cfg.get("month", ""), city=city)
     except (KeyError, IndexError):
         return cfg["caption_template"]
 
@@ -950,24 +954,124 @@ def find_attach_input_index(page, S):
     return None
 
 
+def attachment_signature(page):
+    """نشانه‌های «پیوست شدن» فایل در صفحه (تصاویر/پیش‌نمایش‌ها) — برای راستی‌آزمایی"""
+    try:
+        return page.evaluate(
+            """() => ({
+                imgs: document.querySelectorAll('img, canvas, video').length,
+                prev: document.querySelectorAll('[class*="preview" i], [class*="attach" i], [class*="upload" i], [class*="file" i]').length,
+            })"""
+        )
+    except Exception:
+        return None
+
+
+def attach_by_drop(page, image: Path) -> bool:
+    """پیوست با شبیه‌سازی «کشیدن و رها کردن» فایل روی صفحه‌ی گفتگو"""
+    import base64
+    try:
+        b64 = base64.b64encode(image.read_bytes()).decode()
+        return bool(page.evaluate(
+            """async (args) => {
+                const [b64, name] = args;
+                const bin = atob(b64);
+                const arr = new Uint8Array(bin.length);
+                for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+                const file = new File([arr], name, {type: 'image/png'});
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                const targets = Array.from(document.querySelectorAll(
+                    '[contenteditable="true"], textarea, [class*="composer" i], [class*="message" i], [class*="chat" i]'));
+                for (const t of targets) {
+                    for (const type of ['dragenter', 'dragover', 'drop']) {
+                        t.dispatchEvent(new DragEvent(type, {bubbles: true, cancelable: true, dataTransfer: dt}));
+                    }
+                    await new Promise(r => setTimeout(r, 250));
+                    if (document.querySelectorAll('img, canvas, [class*="preview" i]').length) return true;
+                }
+                return false;
+            }""",
+            [b64, image.name],
+        ))
+    except Exception as e:
+        log.debug("drop failed: %s", e)
+        return False
+
+
+def print_chat_attach_info(page):
+    """چاپ ورودی‌های فایل و دکمه‌های صفحه‌ی گفتگو — برای عیب‌یابی پیوست تصویر"""
+    try:
+        info = page.evaluate(
+            """() => {
+                const out = {files: [], buttons: []};
+                for (const el of Array.from(document.querySelectorAll('input[type="file"]')).slice(0,10)){
+                    out.files.push({
+                        accept: el.getAttribute('accept') || '',
+                        id: el.id || '',
+                        cls: (el.className && el.className.toString ? el.className.toString() : '').slice(0,60),
+                    });
+                }
+                for (const el of Array.from(document.querySelectorAll('button, [role="button"]')).slice(0,60)){
+                    const lbl = el.getAttribute('aria-label') || el.getAttribute('title')
+                                || (el.innerText || '').replace(/\s+/g,' ').trim();
+                    if (lbl) out.buttons.push(lbl.slice(0,40));
+                    if (out.buttons.length >= 12) break;
+                }
+                return out;
+            }"""
+        )
+    except Exception as e:
+        print(f"   ⚠️ استخراج اطلاعات گفتگو ناموفق: {e}")
+        return
+    files = info.get("files") or []
+    print(f"   📎 ورودی‌های فایل در صفحه: {len(files)}")
+    for f in files[:5]:
+        print(f"      • accept=«{str(f.get('accept'))[:30]}» id=«{str(f.get('id'))[:20]}» class=«{str(f.get('cls'))[:40]}»")
+    btns = info.get("buttons") or []
+    if btns:
+        print(f"   🔘 دکمه‌ها: {' | '.join(btns[:10])}")
+    try:
+        d = BASE / "debug"
+        d.mkdir(exist_ok=True)
+        (d / "chat_attach_info.json").write_text(
+            json.dumps(info, ensure_ascii=False, indent=1), encoding="utf-8")
+        print("   💾 در debug/chat_attach_info.json هم ذخیره شد")
+    except Exception:
+        pass
+
+
 def attach_file(page, image: Path, S) -> tuple:
-    """انتخاب فایل تصویر برای ارسال — اول از ورودی مخفی فایل، بعد از دکمه پیوست."""
-    # ۱) ورودی‌های مخفیِ type=file
+    """پیوست تصویر به گفتگو — «با راستی‌آزمایی»: فقط وقتی موفق است که نشانه‌ای
+    از پیوست (پیش‌نمایش/تصویر) در صفحه ظاهر شود؛ وگرنه روش بعدی را می‌آزماید."""
+    before = attachment_signature(page)
+
+    def attached():
+        after = attachment_signature(page)
+        if before is None or after is None:
+            return True  # نتوانستیم بررسی کنیم — همان رفتار قدیمی
+        return (after.get("imgs", 0) > before.get("imgs", 0)
+                or after.get("prev", 0) > before.get("prev", 0))
+
+    # ۱) ورودی‌های مخفیِ type=file — یکی‌یکی و با راستی‌آزمایی
     try:
         inputs = page.locator("input[type='file']")
         cnt = inputs.count()
-        if cnt > 0:
-            idx = find_attach_input_index(page, S)
-            if idx is None:
-                idx = cnt - 1
-                for i in range(cnt):
-                    acc = inputs.nth(i).get_attribute("accept") or ""
-                    if "image" in acc.lower():
-                        idx = i
-                        break
-            inputs.nth(idx).set_input_files(str(image))
-            page.wait_for_timeout(2500)  # منتظر پیش‌نمایش
-            return True, None
+        order = []
+        for i in range(cnt):
+            acc = (inputs.nth(i).get_attribute("accept") or "").lower()
+            if "image" in acc or not acc:
+                order.append(i)
+        order += [i for i in range(cnt) if i not in order]
+        for i in order:
+            try:
+                inputs.nth(i).set_input_files(str(image))
+                page.wait_for_timeout(2000)
+                if attached():
+                    return True, None
+                print(f"   ↻ ورودیِ فایلِ {i + 1}. پیوست را نشان نداد؛ ورودی بعدی ...")
+            except Exception:
+                continue
     except Exception as e:
         log.debug("set_input_files failed: %s", e)
 
@@ -993,9 +1097,18 @@ def attach_file(page, image: Path, S) -> tuple:
                 raise RuntimeError("دکمه پیوست پیدا نشد")
         fc.value.set_files(str(image))
         page.wait_for_timeout(2500)
-        return True, None
+        if attached():
+            return True, None
     except Exception as e:
-        return False, f"نتوانستیم فایل را پیوست کنیم: {e}"
+        log.debug("attach button failed: %s", e)
+
+    # ۳) شبیه‌سازی کشیدن و رها کردن تصویر روی صفحه گفتگو
+    if attach_by_drop(page, image) and attached():
+        return True, None
+
+    print_chat_attach_info(page)
+    return False, ("تصویر واقعاً به گفتگو پیوست نشد — برای اینکه «فقط متنِ خالی» فرستاده نشود، "
+                   "ارسال متوقف شد. گزارش در debug/chat_attach_info.json")
 
 
 def send_image(page, image: Path, caption, S) -> tuple:
@@ -1341,6 +1454,7 @@ def main():
         print("   گیرنده: شماره‌ای که در فایل اکسلِ «مخاطبین.xlsx» برای «ناحیه تست» نوشته‌اید")
         print("   (اگر آن ردیف خالی باشد، با نام مخاطبِ ذخیره‌شده در گوشی جستجو می‌شود)\n")
         args.only = ["ناحیه تست"]
+        args.force = True  # تست همیشه دوباره ارسال می‌شود
         if not args.limit:
             args.limit = 1
 
