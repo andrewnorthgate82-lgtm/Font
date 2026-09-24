@@ -38,8 +38,10 @@ THU_HALF_DUTY = 4 * 60        # موظفی پنجشنبه نیمه‌وقت: ۴ 
 
 HOLIDAY_WORK_MIN = 60         # کف دورکاری روز تعطیل: ۱ ساعت
 HOLIDAY_WORK_MAX = 150        # سقف دورکاری روز تعطیل: ۲:۳۰
-HOLIDAY_ENTRY_MIN = 540       # ۹:۰۰
-HOLIDAY_ENTRY_MAX = 690       # ۱۱:۳۰
+ENTRY_MIN = 480               # ۸:۰۰
+ENTRY_MAX = 570               # ۹:۳۰
+HOLIDAY_ENTRY_MIN = 480       # ۸:۰۰
+HOLIDAY_ENTRY_MAX = 570       # ۹:۳۰
 
 FA_DIGITS = str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹")
 
@@ -141,7 +143,7 @@ def distribute_hours(work_days: list[dict], target: int, rng: random.Random) -> 
 
 # ---------------------------------------------------------------- موتور متن
 def build_descriptions(days: list[dict], activities: dict, regions: list[str],
-                        rng: random.Random) -> None:
+                        rng: random.Random, month: int) -> None:
     """ساخت شرح فعالیت هر روز. نتیجه در کلید desc ذخیره می‌شود."""
     routines = activities["routines"][:]
     rng.shuffle(routines)
@@ -173,6 +175,15 @@ def build_descriptions(days: list[dict], activities: dict, regions: list[str],
     work_days = [d for d in days if d["kind"] in ("full", "thu")]
     first3 = {d["day"] for d in work_days[:3]}
     last3 = {d["day"] for d in work_days[-3:]}
+    prev_month_name = MONTH_NAMES[month - 2] if month > 1 else MONTH_NAMES[-1]
+    report_candidates = [
+        d for d in days
+        if 2 <= d["day"] <= 7 and d["kind"] in ("full", "thu", "worked_holiday")
+    ]
+    if not report_candidates:
+        report_candidates = [d for d in days if 2 <= d["day"] <= 7]
+    report_day = rng.choice(report_candidates)["day"] if report_candidates else None
+    report_text = f"تجمیع و تکمیل گزارش کارکرد ماه {prev_month_name}"
 
     for day in days:
         kind = day["kind"]
@@ -213,6 +224,8 @@ def build_descriptions(days: list[dict], activities: dict, regions: list[str],
                 parts.append(fill(mains[main_idx % len(mains)]))
                 main_idx += 1
             day["desc"] = "؛ ".join(parts)
+        if day["day"] == report_day:
+            day["desc"] = f"{day['desc']}؛ {report_text}"
 
 
 # ---------------------------------------------------------------- ساخت اکسل
@@ -498,9 +511,10 @@ def generate(year: int, month: int, person_title: str, person_name: str,
     # --- توزیع ساعات و ورود/خروج ---
     distribute_hours(work_days, work_target, rng_hours)
     for day in work_days:
-        day["entry"] = 440 + rng_entry.randrange(11) * 5  # ۷:۲۰ تا ۸:۱۰
+        estep = (ENTRY_MAX - ENTRY_MIN) // 5
+        day["entry"] = ENTRY_MIN + rng_entry.randrange(estep + 1) * 5  # ۸:۰۰ تا ۹:۳۰
 
-    build_descriptions(days, activities, regions, rng_text)
+    build_descriptions(days, activities, regions, rng_text, month)
 
     total = sum(d.get("minutes", 0) for d in days if d["kind"] in ("full", "thu", "worked_holiday"))
 
