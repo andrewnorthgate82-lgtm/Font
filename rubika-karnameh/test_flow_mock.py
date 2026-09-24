@@ -365,6 +365,10 @@ def test_xlsx_loading():
     assert data["آران و بیدگل"][1]["phone"] == "09121112255"
     assert data["آران و بیدگل"][2]["phone"] == "09121112266"
     assert data["آران و بیدگل"][0]["name"] == "علی"
+    # نامِ تمیزِ جستجو نباید نام شخص را شامل شود
+    assert data["ناحیه تست"][0]["search_name"] == "مسئول نسرا ناحیه تست"
+    assert data["آران و بیدگل"][0]["search_name"] == "مسئول نسرا آران و بیدگل"
+    assert "محسن" not in data["ناحیه تست"][0]["search_name"]
     # ردیفِ بدون شماره = ناحیه‌ی ردشده
     assert data["ناحیه خالی"] == []
     print("✅ load_recipients_xlsx: اکسل درست خوانده می‌شود (تکراری‌ها یکی می‌شوند)")

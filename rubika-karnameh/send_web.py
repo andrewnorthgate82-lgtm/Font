@@ -291,9 +291,10 @@ def load_recipients_xlsx(path: Path, cfg: dict) -> dict:
             if raw not in (None, "") and not phone:
                 print(f"   ⚠️ در اکسل، شماره‌ی «{role} {city}» خوانا نیست («{raw}») — نادیده گرفته شد")
             if phone:
-                label = f"{role} {city}" + (f" — {name}" if name else "")
+                search_name = f"{role} {city}"  # نام تمیز برای جستجو (بدون نام شخص)
+                label = search_name + (f" — {name}" if name else "")
                 contacts.append({"key": phone, "phone": phone, "name": name,
-                                 "role": role, "label": label})
+                                 "role": role, "label": label, "search_name": search_name})
         # شماره‌ی تکراری در یک ناحیه = یک پیام (وقتی یک نفر دو نقش دارد)
         seen, uniq = set(), []
         for c in contacts:
@@ -463,8 +464,8 @@ def build_tasks(cfg: dict, only=None) -> dict:
                     print(f"   ⚠️ ناحیه «{city}» در اکسل هست ولی شماره‌ای برایش ثبت نشده — رد می‌شود")
             else:
                 # بدون اکسل: جستجو با نام مخاطب (نیازمند مخاطبِ ذخیره‌شده در گوشی)
-                g["contacts"] = [{"key": n, "phone": None, "name": None, "role": None, "label": n}
-                                 for n in names]
+                g["contacts"] = [{"key": n, "phone": None, "name": None, "role": None,
+                                  "label": n, "search_name": n} for n in names]
     # ناحیه‌هایی که در اکسل هستند ولی تصویرِ متناظر ندارند
     if only is None:
         matched = {flat(c) for c in tasks}
@@ -712,6 +713,12 @@ def open_chat(page, contact, S, cfg) -> tuple:
 
     # آیا گفتگویی باز شد؟ (باید ورودی پیام دیده شود)
     if not find_locator(page, S["message_input"], timeout=6000):
+        results = search_results(page, S)
+        print(f"   🔎 عیب‌یابی: بعد از تایپ نام، {len(results)} مورد در فهرست نتیجه‌ها دیده شد")
+        for it, txt in results[:3]:
+            print(f"      • «{txt[:60]}»")
+        dump_search_dom(page, contact, "dom_search_name.json")
+        print("   💾 گزارش کامل در debug/dom_search_name.json ذخیره شد")
         return False, "مخاطب در نتیجه‌های جستجو پیدا نشد (نام ذخیره‌شده در دفترچه تلفن را چک کنید)"
     print("   ✅ گفتگو باز شد")
 
@@ -767,8 +774,8 @@ def pick_result_by_phone(page, phone, S):
     return None
 
 
-def dump_search_dom(page, phone):
-    """ذخیره‌ی وضعیت صفحه بعد از جستجوی شماره — برای عیب‌یابیِ نتیجه‌های جستجو"""
+def dump_search_dom(page, term, fname="dom_search_number.json"):
+    """ذخیره‌ی وضعیت صفحه بعد از جستجو — برای عیب‌یابیِ نتیجه‌های جستجو"""
     d = BASE / "debug"
     d.mkdir(exist_ok=True)
     try:
@@ -794,7 +801,7 @@ def dump_search_dom(page, phone):
                 return out;
             }"""
         )
-        (d / "dom_search_number.json").write_text(
+        (d / fname).write_text(
             json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
     except Exception as e:
         print(f"   ⚠️ استخراج DOM ناموفق: {e}")
@@ -1177,10 +1184,11 @@ def run_sending(cfg, S, tasks, args):
                         if not ok and cfg.get("_self_test"):
                             # در حالت تست: روبیکا شماره‌ی خودِ کاربر را با جستجوی شماره
                             # نشان نمی‌دهد؛ با نامِ مخاطبِ ذخیره‌شده در گوشی امتحان می‌کنیم
-                            print(f"   ⤵ شماره پیدا نشد؛ تلاش با نام مخاطبِ «{contact['label']}» ...")
-                            ok, err = open_chat(page, contact["label"], S, cfg)
+                            sname = contact.get("search_name") or contact["label"]
+                            print(f"   ⤵ شماره پیدا نشد؛ تلاش با نام مخاطبِ «{sname}» ...")
+                            ok, err = open_chat(page, sname, S, cfg)
                     else:
-                        ok, err = open_chat(page, contact["label"], S, cfg)
+                        ok, err = open_chat(page, contact.get("search_name") or contact["label"], S, cfg)
                     if not ok:
                         stats["fail"] += 1
                         failures.append({"contact": contact["label"], "stage": "باز کردن گفتگو", "error": err})
@@ -1300,7 +1308,7 @@ def main():
         if c["phone"]:
             print(f"   📱 گیرنده‌ی تست: شماره {c['phone']}")
         else:
-            print(f"   ⚠️ در اکسل شماره‌ای برای «ناحیه تست» نیست؛ با نام «{c['label']}» جستجو می‌شود")
+            print(f"   ⚠️ در اکسل شماره‌ای برای «ناحیه تست» نیست؛ با نام «{c.get('search_name') or c['label']}» جستجو می‌شود")
             print("      💡 بهتر است شماره‌ی خودتان را در فایل مخاطبین.xlsx وارد کنید")
         print()
 
