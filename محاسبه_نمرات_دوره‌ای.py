@@ -3,12 +3,16 @@
 ====================================================================
 سامانه هوشمند سنجش نمرات دوره‌ای نواحی نسرا - استان اصفهان
 (دوره‌های ۲ ماهه، ۳ ماهه و ۶ ماهه)
-پشتیبانی کامل از قرارگیری فایل‌ها در پوشه‌های ماهانه درون reports/
-(مثال: reports/مرداد 1405/امام رضا.xlsx و reports/شهریور 1405/امام رضا.xlsx)
 
-خروجی: فایل اکسل متمرکز نام ناحیه و نمره نهایی (جهت کپی آسان)
-سطح کیفی: ۳ سطح (عالی، متوسط، ضعیف)
-مقیاس نمره‌دهی: ۷۰ (صفر) تا ۱۰۰ (عالی)
+منطق مصوب اوزان و سقف شاخص‌ها:
+- ۱۰٪ سواد رسانه حضوری
+- ۳۰٪ سواد رسانه مجازی
+  (قابلیت سرشکن و تبدیل حضوری و مجازی روی هم در سبد ۴۰ درصدی آموزش)
+- ۵۰٪ اقدامات خلاقانه (دارای سقف قطعی ۱۰۰٪ بدون سرریز کاذب)
+- ۱۰٪ تولیدات رسانه‌ای (دارای سقف قطعی ۱۰۰٪)
+
+مقیاس نمره‌دهی: ۷۰ (عملکرد صفر) تا ۱۰۰ (تحقق کامل)
+سطح کیفی ۳ گانه: عالی (۹۰-۱۰۰)، متوسط (۸۰-۸۹.۹)، ضعیف (زیر ۸۰)
 ====================================================================
 """
 
@@ -27,7 +31,6 @@ if sys.platform == 'win32':
     except Exception:
         pass
 
-# Ensure working directory is script directory
 script_dir = os.path.dirname(os.path.abspath(__file__))
 if script_dir:
     os.chdir(script_dir)
@@ -93,11 +96,18 @@ DISTRICT_BRANCHES = [
 DISTRICTS = [d[0] for d in DISTRICT_BRANCHES]
 BRANCH_MAP = {d[0]: d[1] for d in DISTRICT_BRANCHES}
 
+# Monthly base multipliers per hozeh:
 BASE_HOZORI = 31
 BASE_MAJAZI = 217
 BASE_KHALAGH = 62
 BASE_TOLID = 3
-BASE_NESHAST = 1
+
+# Approved Weights
+WEIGHT_HOZORI = 0.10   # 10%
+WEIGHT_MAJAZI = 0.30   # 30%
+WEIGHT_TRAINING_POOL = 0.40 # 40% (Combined in-person & virtual)
+WEIGHT_KHALAGH = 0.50  # 50% (Hard cap 100%)
+WEIGHT_TOLID = 0.10    # 10% (Hard cap 100%)
 
 PERIOD_CONFIGS = {
     2: {
@@ -108,8 +118,7 @@ PERIOD_CONFIGS = {
         'hozori_mult': BASE_HOZORI * 2,    # 62
         'majazi_mult': BASE_MAJAZI * 2,    # 434
         'khalagh_mult': BASE_KHALAGH * 2,  # 124
-        'tolid_mult': BASE_TOLID * 2,      # 6
-        'neshast_target': BASE_NESHAST * 2 # 2
+        'tolid_mult': BASE_TOLID * 2       # 6
     },
     3: {
         'months': 3,
@@ -119,8 +128,7 @@ PERIOD_CONFIGS = {
         'hozori_mult': BASE_HOZORI * 3,    # 93
         'majazi_mult': BASE_MAJAZI * 3,    # 651
         'khalagh_mult': BASE_KHALAGH * 3,  # 186
-        'tolid_mult': BASE_TOLID * 3,      # 9
-        'neshast_target': BASE_NESHAST * 3 # 3
+        'tolid_mult': BASE_TOLID * 3       # 9
     },
     6: {
         'months': 6,
@@ -130,8 +138,7 @@ PERIOD_CONFIGS = {
         'hozori_mult': BASE_HOZORI * 6,    # 186
         'majazi_mult': BASE_MAJAZI * 6,    # 1302
         'khalagh_mult': BASE_KHALAGH * 6,  # 372
-        'tolid_mult': BASE_TOLID * 6,      # 18
-        'neshast_target': BASE_NESHAST * 6 # 6
+        'tolid_mult': BASE_TOLID * 6       # 18
     }
 }
 
@@ -218,10 +225,10 @@ def extract_sheet_metrics(ws):
 
 def get_tier_3_levels(score):
     """
-    ۳ سطح کیفی طبق درخواست کاربر:
-    1. عالی (نمره ۹۰ تا ۱۰۰)
-    2. متوسط (نمره ۸۰ تا ۸۹.۹)
-    3. ضعیف (نمره زیر ۸۰ - شامل نمره ۷۰ عدم فعالیت یا کسری)
+    ۳ سطح کیفی مصوب:
+    1. عالی: نمره ۹۰ تا ۱۰۰
+    2. متوسط: نمره ۸۰ تا ۸۹.۹
+    3. ضعیف: نمره زیر ۸۰ (شامل نمره ۷۰ عدم فعالیت یا کسری)
     """
     if score >= 90.0:
         return "عالی"
@@ -231,15 +238,15 @@ def get_tier_3_levels(score):
         return "ضعیف"
 
 def prompt_period():
-    print("=" * 75)
+    print("=" * 80)
     print("   سامانه هوشمند سنجش نمرات دوره‌ای نواحی نسرا - استان اصفهان")
-    print("   (پشتیبانی از پوشه‌بندی ماهانه در reports/ | مقیاس ۷۰ تا ۱۰۰)")
-    print("=" * 75)
+    print("   (منطق وزنی: ۱۰٪ حضوری، ۳۰٪ مجازی، ۵۰٪ خلاقانه [سقف ۱۰۰٪]، ۱۰٪ تولیدات)")
+    print("=" * 80)
     print("انتخاب طول دوره ارزیابی عملکرد:\n")
     print("  [1] دوره ۲ ماهه (2-Month) - بررسی ۲ ماه (۲ پوشه ماهانه یا ۲ فایل)")
     print("  [2] دوره ۳ ماهه (3-Month) - بررسی ۳ ماه (۳ پوشه ماهانه یا ۳ فایل)")
     print("  [3] دوره ۶ ماهه (6-Month) - بررسی ۶ ماه (۶ پوشه ماهانه یا ۶ فایل)")
-    print("-" * 75)
+    print("-" * 80)
     
     choice = "2"
     try:
@@ -254,13 +261,10 @@ def prompt_period():
 
 def scan_reports_directory(reports_dir='reports'):
     os.makedirs(reports_dir, exist_ok=True)
-    
-    # Check for subdirectories (month folders like 'مرداد 1405', 'شهریور 1405')
     all_entries = sorted(os.listdir(reports_dir))
     subdirs = [d for d in all_entries if os.path.isdir(os.path.join(reports_dir, d)) and not d.startswith('.') and not d.startswith('__')]
     
-    files_list = [] # tuples of (abs_path, folder_name, filename)
-    
+    files_list = []
     if subdirs:
         print(f"📁 ساختار پوشه‌بندی ماهانه شناسایی شد ({len(subdirs)} پوشه در '{reports_dir}'):")
         for sdir in subdirs:
@@ -271,7 +275,6 @@ def scan_reports_directory(reports_dir='reports'):
             for f in s_files:
                 files_list.append((f, sdir, os.path.basename(f)))
     else:
-        # Check flat files directly in reports/
         flat_files = glob.glob(os.path.join(reports_dir, '*.xlsx'))
         flat_files = [f for f in flat_files if not os.path.basename(f).startswith('~$')]
         if flat_files:
@@ -279,7 +282,7 @@ def scan_reports_directory(reports_dir='reports'):
             for f in flat_files:
                 files_list.append((f, '', os.path.basename(f)))
         else:
-            print(f"📁 پوشه '{reports_dir}' آماده است (هنوز فایلی قرار داده نشده است).")
+            print(f"📁 پوشه '{reports_dir}' آماده است (فایلی در پوشه قرار ندارد).")
             
     return subdirs, files_list
 
@@ -290,15 +293,15 @@ def run_period_evaluation(selected_months=None):
         n_months = prompt_period()
 
     cfg = PERIOD_CONFIGS[n_months]
-    print("\n" + "=" * 75)
+    print("\n" + "=" * 80)
     print(f"📌 دوره انتخابی: عملکرد {cfg['title']} ({cfg['title_en']})")
-    print(f"🎯 حدانتظارها بر مبنای ضریب {n_months} برابری اهداف ماهانه محاسبه می‌گردد.")
-    print("=" * 75)
+    print(f"🎯 حدانتظارها: ضریب {n_months} برابری اهداف ماهانه")
+    print("⚖️ اوزان ارزیابی: ۱۰٪ حضوری | ۳۰٪ مجازی (سرشکن در سبد ۴۰٪ آموزش) | ۵۰٪ خلاقانه (سقف ۱۰۰٪) | ۱۰٪ تولیدات")
+    print("=" * 80)
 
     subdirs, all_files = scan_reports_directory('reports')
-    print("-" * 75)
+    print("-" * 80)
 
-    # Accumulate per district
     accumulated = {}
     for dn in DISTRICTS:
         accumulated[dn] = {
@@ -308,15 +311,12 @@ def run_period_evaluation(selected_months=None):
             'hozori': 0,
             'majazi': 0,
             'khalagh': 0,
-            'tolid': 0,
-            'neshast': 0
+            'tolid': 0
         }
 
     for fpath, folder_label, fname in all_files:
         try:
-            # Match by filename first (e.g. 'امام رضا.xlsx' or 'ناحیه مبارکه.xlsx')
             detected = match_district_name(fname)
-            
             wb = openpyxl.load_workbook(fpath, data_only=True)
             
             ws_hoz = None
@@ -333,7 +333,6 @@ def run_period_evaluation(selected_months=None):
                 elif 'خلاق' in cn: ws_kha = wb[sname]
                 elif 'تولید' in cn: ws_tol = wb[sname]
 
-            # If not detected from filename, try reading cell values inside workbook
             if not detected:
                 for ws in [ws_hoz, ws_maj, ws_kha, ws_tav]:
                     if ws is None: continue
@@ -363,7 +362,6 @@ def run_period_evaluation(selected_months=None):
             maj_val = m_maj['people_sum'] if m_maj['people_sum'] > 0 else m_maj['classes_count']
             kha_val = m_kha['people_sum'] if m_kha['people_sum'] > 0 else m_kha['classes_count']
             tol_val = m_tol['people_sum'] if m_tol['people_sum'] > 0 else m_tol['classes_count']
-            nes_val = 1 if (hoz_val + maj_val + kha_val + tol_val) > 0 else 0
 
             month_tag = folder_label if folder_label else f"فایل {accumulated[detected]['files_count'] + 1}"
             accumulated[detected]['files_count'] += 1
@@ -374,7 +372,6 @@ def run_period_evaluation(selected_months=None):
             accumulated[detected]['majazi'] += maj_val
             accumulated[detected]['khalagh'] += kha_val
             accumulated[detected]['tolid'] += tol_val
-            accumulated[detected]['neshast'] += nes_val
 
             src_info = f"پوشه «{folder_label}»" if folder_label else fname
             print(f"✓ [{detected}] ({src_info}): +{hoz_val} حضوری | +{maj_val} مجازی | +{kha_val} خلاقانه | +{tol_val} تولید")
@@ -382,8 +379,8 @@ def run_period_evaluation(selected_months=None):
         except Exception as e:
             print(f"❌ خطا در پردازش فایل '{fname}': {e}")
 
-    print("-" * 75)
-    print("📊 محاسبه نمرات، تحلیل ماه‌های کارنکرده و رتبه‌بندی استانی...")
+    print("-" * 80)
+    print("📊 محاسبه نمرات بر مبنای اوزان مصوب و سقف ۱۰۰٪...")
 
     results = []
     for dn in DISTRICTS:
@@ -392,44 +389,54 @@ def run_period_evaluation(selected_months=None):
         t_maj = b_count * cfg['majazi_mult']
         t_kha = b_count * cfg['khalagh_mult']
         t_tol = b_count * cfg['tolid_mult']
-        t_nes = cfg['neshast_target']
 
         acc = accumulated[dn]
         a_hoz = acc['hozori']
         a_maj = acc['majazi']
         a_kha = acc['khalagh']
         a_tol = acc['tolid']
-        a_nes = acc['neshast']
         f_cnt = acc['files_count']
         m_found = acc['months_found']
 
-        # Determine missing months if subdirs exist
         missing_months = [s for s in subdirs if s not in m_found] if subdirs else []
 
-        pct_hoz = (a_hoz / t_hoz * 100) if t_hoz > 0 else 0
-        pct_maj = (a_maj / t_maj * 100) if t_maj > 0 else 0
-        pct_kha = (a_kha / t_kha * 100) if t_kha > 0 else 0
-        pct_tol = (a_tol / t_tol * 100) if t_tol > 0 else 0
-        pct_nes = (a_nes / t_nes * 100) if t_nes > 0 else 0
+        # 1. Raw realization rates
+        r_hoz_raw = (a_hoz / t_hoz) if t_hoz > 0 else 0.0
+        r_maj_raw = (a_maj / t_maj) if t_maj > 0 else 0.0
+        r_kha_raw = (a_kha / t_kha) if t_kha > 0 else 0.0
+        r_tol_raw = (a_tol / t_tol) if t_tol > 0 else 0.0
 
-        avg_realization = (pct_hoz + pct_maj + pct_kha + pct_tol + pct_nes) / 5.0
-        
-        # 70 to 100 scale
-        final_score = round(70.0 + 30.0 * min(1.0, max(0.0, avg_realization / 100.0)), 1)
+        pct_hoz_raw = r_hoz_raw * 100.0
+        pct_maj_raw = r_maj_raw * 100.0
+        pct_kha_raw = r_kha_raw * 100.0
+        pct_tol_raw = r_tol_raw * 100.0
+
+        # 2. Training Basket (40% Total): 10% Hozori + 30% Majazi
+        # In-person and virtual can offset each other smoothly up to the combined 40% cap!
+        training_share = min(WEIGHT_TRAINING_POOL, (WEIGHT_HOZORI * r_hoz_raw) + (WEIGHT_MAJAZI * r_maj_raw))
+
+        # 3. Creative (50% Weight): Capped strictly at 100% (No artificial spillover!)
+        khalagh_share = WEIGHT_KHALAGH * min(1.0, r_kha_raw)
+
+        # 4. Productions (10% Weight): Capped strictly at 100%
+        tolid_share = WEIGHT_TOLID * min(1.0, r_tol_raw)
+
+        # Total Realization (0.0 to 1.0)
+        total_realization_ratio = training_share + khalagh_share + tolid_share
+        total_realization_pct = round(total_realization_ratio * 100.0, 2)
+
+        # Final Score in 70.0 to 100.0 scale:
+        final_score = round(70.0 + (30.0 * total_realization_ratio), 1)
         tier = get_tier_3_levels(final_score)
 
-        # Status & detailed description
         if f_cnt >= n_months:
-            status_summary = "کامل"
             status_desc = f"کامل ({len(m_found)} از {n_months} ماه)"
         elif f_cnt > 0:
-            status_summary = "دارای کسری"
             if missing_months:
                 status_desc = f"کسری: {len(m_found)} از {n_months} ماه (عدم فعالیت در: {'، '.join(missing_months)})"
             else:
                 status_desc = f"کسری: {f_cnt} از {n_months} ماه تحویل شده"
         else:
-            status_summary = "فاقد گزارش"
             status_desc = f"فاقد گزارش (عملکرد ۰ در کل {n_months} ماه)"
 
         results.append({
@@ -438,20 +445,20 @@ def run_period_evaluation(selected_months=None):
             'files_count': f_cnt,
             'months_found': m_found,
             'missing_months': missing_months,
-            'status_summary': status_summary,
             'status_desc': status_desc,
             'score': final_score,
             'tier': tier,
-            'avg_realization': avg_realization,
-            't_hoz': t_hoz, 'a_hoz': a_hoz, 'pct_hoz': pct_hoz,
-            't_maj': t_maj, 'a_maj': a_maj, 'pct_maj': pct_maj,
-            't_kha': t_kha, 'a_kha': a_kha, 'pct_kha': pct_kha,
-            't_tol': t_tol, 'a_tol': a_tol, 'pct_tol': pct_tol,
-            't_nes': t_nes, 'a_nes': a_nes, 'pct_nes': pct_nes
+            'total_realization_pct': total_realization_pct,
+            'training_share_pct': round(training_share * 100.0, 2),
+            'khalagh_share_pct': round(khalagh_share * 100.0, 2),
+            'tolid_share_pct': round(tolid_share * 100.0, 2),
+            't_hoz': t_hoz, 'a_hoz': a_hoz, 'pct_hoz_raw': pct_hoz_raw,
+            't_maj': t_maj, 'a_maj': a_maj, 'pct_maj_raw': pct_maj_raw,
+            't_kha': t_kha, 'a_kha': a_kha, 'pct_kha_raw': pct_kha_raw,
+            't_tol': t_tol, 'a_tol': a_tol, 'pct_tol_raw': pct_tol_raw
         })
 
-    # Sort by score and realization to assign ranks
-    sorted_by_score = sorted(results, key=lambda x: (x['score'], x['avg_realization']), reverse=True)
+    sorted_by_score = sorted(results, key=lambda x: (x['score'], x['total_realization_pct']), reverse=True)
     rank_map = {}
     active_rank = 1
     for item in sorted_by_score:
@@ -465,7 +472,6 @@ def run_period_evaluation(selected_months=None):
     for item in results:
         item['rank'] = rank_map[item['district']]
 
-    # Generate Excel Workbook
     excel_filename = "نمرات_نهایی_نواحی.xlsx"
     backup_period_file = f"نمرات_عملکرد_{n_months}ماهه.xlsx"
 
@@ -489,10 +495,8 @@ def run_period_evaluation(selected_months=None):
     fill_score_col = PatternFill(start_color='ECFDF5', end_color='ECFDF5', fill_type='solid')
 
     border_thin = Border(
-        left=Side(style='thin', color='CBD5E1'),
-        right=Side(style='thin', color='CBD5E1'),
-        top=Side(style='thin', color='CBD5E1'),
-        bottom=Side(style='thin', color='CBD5E1')
+        left=Side(style='thin', color='CBD5E1'), right=Side(style='thin', color='CBD5E1'),
+        top=Side(style='thin', color='CBD5E1'), bottom=Side(style='thin', color='CBD5E1')
     )
 
     align_center = Alignment(horizontal='center', vertical='center')
@@ -528,24 +532,20 @@ def run_period_evaluation(selected_months=None):
     ws_raw.column_dimensions['B'].width = 18
 
     # ==========================================
-    # SHEET 2: جدول کامل نمرات و وضعیت ماه‌ها
+    # SHEET 2: جدول نمرات و تحلیل ماه‌ها
     # ==========================================
     ws_copy = wb.create_sheet(title="جدول نمرات و تحلیل ماه‌ها")
     ws_copy.views.sheetView[0].rightToLeft = True
 
     ws_copy.merge_cells('A1:G1')
-    ws_copy['A1'] = f"جدول ارزیابی عملکرد {cfg['title']} نواحی نسرا (مقیاس ۷۰ تا ۱۰۰ | ۳ سطح کیفی)"
+    ws_copy['A1'] = f"جدول ارزیابی عملکرد {cfg['title']} نواحی نسرا (۱۰٪ حضوری، ۳۰٪ مجازی، ۵۰٪ خلاقانه، ۱۰٪ تولیدات)"
     ws_copy['A1'].font = font_title
     ws_copy['A1'].alignment = align_center
 
     headers_s2 = [
-        ('ردیف', 8),
-        ('نام ناحیه (شهرستان)', 24),
-        ('نمره عملکرد (۷۰-۱۰۰)', 22),
-        ('سطح کیفی (۳ سطح)', 18),
-        ('رتبه استانی', 14),
-        ('تعداد ماه‌های ارسالی', 20),
-        ('وضعیت و ماه‌های کارنکرده', 38)
+        ('ردیف', 8), ('نام ناحیه (شهرستان)', 24), ('نمره عملکرد (۷۰-۱۰۰)', 22),
+        ('سطح کیفی (۳ سطح)', 18), ('رتبه استانی', 14), ('تعداد ماه‌های ارسالی', 20),
+        ('وضعیت و ماه‌های کارنکرده', 40)
     ]
 
     for c_idx, (h_title, w) in enumerate(headers_s2, start=1):
@@ -595,12 +595,8 @@ def run_period_evaluation(selected_months=None):
     ws_rank['A1'].alignment = align_center
 
     headers_s3 = [
-        ('رتبه', 10),
-        ('نام ناحیه (شهرستان)', 24),
-        ('نمره عملکرد (۷۰-۱۰۰)', 22),
-        ('سطح کیفی', 16),
-        ('درصد تحقق اهداف', 18),
-        ('تعداد ماه‌های ارسالی', 20)
+        ('رتبه', 10), ('نام ناحیه (شهرستان)', 24), ('نمره عملکرد (۷۰-۱۰۰)', 22),
+        ('سطح کیفی', 16), ('درصد تحقق وزنی', 18), ('تعداد ماه‌های ارسالی', 20)
     ]
 
     for c_idx, (h_title, w) in enumerate(headers_s3, start=1):
@@ -617,7 +613,7 @@ def run_period_evaluation(selected_months=None):
         ws_rank.cell(row=row_num, column=2, value=r['district']).alignment = align_right
         ws_rank.cell(row=row_num, column=3, value=r['score']).alignment = align_center
         ws_rank.cell(row=row_num, column=4, value=r['tier']).alignment = align_center
-        ws_rank.cell(row=row_num, column=5, value=f"{r['avg_realization']:.1f}%").alignment = align_center
+        ws_rank.cell(row=row_num, column=5, value=f"{r['total_realization_pct']:.1f}%").alignment = align_center
         ws_rank.cell(row=row_num, column=6, value=f"{r['files_count']} از {n_months} ماه").alignment = align_center
 
         ws_rank.cell(row=row_num, column=1).font = font_td
@@ -637,24 +633,24 @@ def run_period_evaluation(selected_months=None):
             ws_rank.cell(row=row_num, column=c).border = border_thin
 
     # ==========================================
-    # SHEET 4: ریز مستندات ۵ شاخص
+    # SHEET 4: ریز مستندات اوزان و شاخص‌ها
     # ==========================================
-    ws_full = wb.create_sheet(title="مستندات شاخص‌ها")
+    ws_full = wb.create_sheet(title="ریز مستندات و اوزان شاخص‌ها")
     ws_full.views.sheetView[0].rightToLeft = True
 
     ws_full.merge_cells('A1:T1')
-    ws_full['A1'] = f"مستندات عملکرد ۵ شاخص و حدود انتظار دوره {cfg['title']} به تفکیک شهرستان‌ها"
+    ws_full['A1'] = f"ریز مستندات و اوزان شاخص‌های دوره {cfg['title']} به تفکیک شهرستان‌ها"
     ws_full['A1'].font = font_title
     ws_full['A1'].alignment = align_center
 
     headers_full = [
         ('ردیف', 6), ('نام ناحیه', 20), ('نمره (۷۰-۱۰۰)', 14), ('سطح', 12), ('رتبه', 8),
-        ('ماه‌های ارسالی', 14), ('حوزه', 8),
+        ('ماه‌ها', 10), ('حوزه', 8),
         ('انتظار حضوری', 14), ('عملکرد حضوری', 14), ('تحقق حضوری', 12),
         ('انتظار مجازی', 14), ('عملکرد مجازی', 14), ('تحقق مجازی', 12),
-        ('انتظار خلاقانه', 14), ('عملکرد خلاقانه', 14), ('تحقق خلاقانه', 12),
-        ('انتظار تولید', 14), ('عملکرد تولید', 14), ('تحقق تولید', 12),
-        ('تحقق کل', 12)
+        ('سهم آموزش (۴۰٪)', 14),
+        ('انتظار خلاقانه', 14), ('عملکرد خلاقانه', 14), ('سهم خلاقانه (۵۰٪)', 16),
+        ('انتظار تولید', 14), ('عملکرد تولید', 14), ('سهم تولید (۱۰٪)', 14)
     ]
 
     for c_idx, (h_title, w) in enumerate(headers_full, start=1):
@@ -676,17 +672,17 @@ def run_period_evaluation(selected_months=None):
         ws_full.cell(row=row_num, column=7, value=r['branches'])
         ws_full.cell(row=row_num, column=8, value=r['t_hoz'])
         ws_full.cell(row=row_num, column=9, value=r['a_hoz'])
-        ws_full.cell(row=row_num, column=10, value=f"{r['pct_hoz']:.1f}%")
+        ws_full.cell(row=row_num, column=10, value=f"{r['pct_hoz_raw']:.1f}%")
         ws_full.cell(row=row_num, column=11, value=r['t_maj'])
         ws_full.cell(row=row_num, column=12, value=r['a_maj'])
-        ws_full.cell(row=row_num, column=13, value=f"{r['pct_maj']:.1f}%")
-        ws_full.cell(row=row_num, column=14, value=r['t_kha'])
-        ws_full.cell(row=row_num, column=15, value=r['a_kha'])
-        ws_full.cell(row=row_num, column=16, value=f"{r['pct_kha']:.1f}%")
-        ws_full.cell(row=row_num, column=17, value=r['t_tol'])
-        ws_full.cell(row=row_num, column=18, value=r['a_tol'])
-        ws_full.cell(row=row_num, column=19, value=f"{r['pct_tol']:.1f}%")
-        ws_full.cell(row=row_num, column=20, value=f"{r['avg_realization']:.1f}%")
+        ws_full.cell(row=row_num, column=13, value=f"{r['pct_maj_raw']:.1f}%")
+        ws_full.cell(row=row_num, column=14, value=f"{r['training_share_pct']:.2f}%")
+        ws_full.cell(row=row_num, column=15, value=r['t_kha'])
+        ws_full.cell(row=row_num, column=16, value=r['a_kha'])
+        ws_full.cell(row=row_num, column=17, value=f"{r['khalagh_share_pct']:.2f}%")
+        ws_full.cell(row=row_num, column=18, value=r['t_tol'])
+        ws_full.cell(row=row_num, column=19, value=r['a_tol'])
+        ws_full.cell(row=row_num, column=20, value=f"{r['tolid_share_pct']:.2f}%")
 
         for c in range(1, 21):
             cell = ws_full.cell(row=row_num, column=c)
@@ -704,20 +700,20 @@ def run_period_evaluation(selected_months=None):
         pass
 
     # Print Clean Console Output
-    print("\n" + "=" * 90)
-    print(f"📋 جدول نمرات دوره {cfg['title']} نواحی نسرا استان اصفهان (مقیاس ۷۰ تا ۱۰۰):")
-    print("=" * 90)
-    print(f"{'ردیف':^6} | {'نام ناحیه (شهرستان)':<20} | {'نمره':^8} | {'سطح کیفی':^10} | {'رتبه':^6} | {'وضعیت ماه‌های ارسالی':<32}")
-    print("-" * 90)
+    print("\n" + "=" * 95)
+    print(f"📋 جدول نمرات دوره {cfg['title']} نواحی نسرا (اوزان: ۱۰٪ حضوری، ۳۰٪ مجازی، ۵۰٪ خلاقانه [سقف ۱۰۰٪]، ۱۰٪ تولیدات):")
+    print("=" * 95)
+    print(f"{'ردیف':^6} | {'نام ناحیه (شهرستان)':<20} | {'نمره':^8} | {'سطح کیفی':^10} | {'رتبه':^6} | {'تحقق کل':^10} | {'وضعیت ماه‌های ارسالی':<30}")
+    print("-" * 95)
     for idx, r in enumerate(results, start=1):
-        print(f"{idx:^6} | {r['district']:<20} | {r['score']:^8.1f} | {r['tier']:^10} | {str(r['rank']):^6} | {r['status_desc']:<32}")
-    print("=" * 90)
+        print(f"{idx:^6} | {r['district']:<20} | {r['score']:^8.1f} | {r['tier']:^10} | {str(r['rank']):^6} | {r['total_realization_pct']:^8.1f}% | {r['status_desc']:<30}")
+    print("=" * 95)
 
     print(f"\n🎉 فایل اکسل متمرکز با موفقیت تولید شد:")
     print(f"   📄 «{os.path.abspath(excel_filename)}»")
     print(f"   (یک کپی با نام «{backup_period_file}» نیز ذخیره شد)")
     print(f"\n💡 در شیت ۱ («فقط نام و نمره»)، ستون‌ها آماده انتخاب و کپی (Ctrl+C) هستند.")
-    print("=" * 90)
+    print("=" * 95)
 
     if sys.platform == 'win32':
         try:
