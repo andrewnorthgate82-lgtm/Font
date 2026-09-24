@@ -493,6 +493,7 @@ def generate(year: int, month: int, person_title: str, person_name: str,
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     month_name = MONTH_NAMES[month - 1]
     out_path = Path(output) if output else OUTPUT_DIR / f"کارکرد-{month_name}-{year}.xlsx"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     wb = build_workbook(days, year, month, person_title, person_name,
                         total, font_name, show_duty, duty)
     wb.save(out_path)
@@ -525,9 +526,49 @@ def interactive() -> argparse.Namespace:
     return ns
 
 
+def parse_months(value: str) -> list[int]:
+    """خواندن فهرست ماه‌ها؛ نمونه‌ها: 5,6,مهر یا 1-12 یا فروردین-خرداد."""
+    value = value.strip().replace(" ", "")
+    if not value:
+        return []
+    months: list[int] = []
+    for part in value.replace("،", ",").split(","):
+        if not part:
+            continue
+        if "-" in part:
+            a, b = part.split("-", 1)
+            start, end = parse_month(a), parse_month(b)
+            step = 1 if start <= end else -1
+            months.extend(range(start, end + step, step))
+        else:
+            months.append(parse_month(part))
+    # حذف تکرار با حفظ ترتیب
+    unique: list[int] = []
+    for month in months:
+        if month not in unique:
+            unique.append(month)
+    return unique
+
+
+def output_path_for(output_dir: str | None, year: int, month: int) -> str | None:
+    if not output_dir:
+        return None
+    month_name = MONTH_NAMES[month - 1]
+    return str(Path(output_dir) / f"کارکرد-{month_name}-{year}.xlsx")
+
+
+def seed_for_month(seed, month: int):
+    """برای تولید چند ماه، seed پایه را ماه‌به‌ماه پایدار اما متفاوت می‌کند."""
+    if seed is None:
+        return None
+    return f"{seed}-{month:02d}"
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="تولید فرم اکسل کارکرد ماهانه")
     parser.add_argument("--month", help="شماره یا نام ماه (مثل 5 یا مرداد)")
+    parser.add_argument("--months", help="فهرست یا بازه ماه‌ها؛ مثل 5,6,مهر یا 1-12")
+    parser.add_argument("--all-months", action="store_true", help="تولید همه ماه‌های سال")
     parser.add_argument("--year", type=int, default=1405, help="سال (پیش‌فرض: 1405)")
     parser.add_argument("--name", default="محسن ابوطالبیان", help="نام و نام خانوادگی")
     parser.add_argument("--title", default="برادر", choices=["برادر", "خواهر"])
@@ -539,20 +580,34 @@ def main(argv=None):
                         help="وضعیت پنجشنبه‌ها: نیمه‌وقت/کامل/تعطیل")
     parser.add_argument("--font", default="B Nazanin", help="فونت اکسل")
     parser.add_argument("--show-duty", action="store_true", help="نمایش موظفی و اضافه‌کار در اکسل")
-    parser.add_argument("--output", default=None, help="مسیر فایل خروجی")
+    parser.add_argument("--output", default=None, help="مسیر فایل خروجی برای تولید تک‌ماه")
+    parser.add_argument("--output-dir", default=None, help="پوشه خروجی برای تولید چندماهه")
     args = parser.parse_args(argv)
 
-    if args.month is None:
+    if args.all_months:
+        months = list(range(1, 13))
+    elif args.months:
+        months = parse_months(str(args.months))
+    elif args.month:
+        months = [parse_month(str(args.month))]
+    else:
         try:
             args = interactive()
+            months = [parse_month(str(args.month))]
         except EOFError:
-            parser.error("ماه مشخص نشده است (--month)")
+            parser.error("ماه مشخص نشده است (--month یا --months یا --all-months)")
 
-    generate(year=args.year, month=parse_month(str(args.month)), person_title=args.title,
-             person_name=args.name, seed=args.seed, factor_min=args.factor_min,
-             factor_max=args.factor_max, fixed_factor=args.factor,
-             thursday_mode=args.thursday_mode, font_name=args.font,
-             show_duty=args.show_duty, output=args.output)
+    if len(months) > 1 and args.output:
+        parser.error("گزینه --output فقط برای یک ماه است؛ برای چند ماه از --output-dir استفاده کنید.")
+
+    for month in months:
+        generate(year=args.year, month=month, person_title=args.title,
+                 person_name=args.name,
+                 seed=seed_for_month(args.seed, month) if len(months) > 1 else args.seed,
+                 factor_min=args.factor_min, factor_max=args.factor_max,
+                 fixed_factor=args.factor, thursday_mode=args.thursday_mode,
+                 font_name=args.font, show_duty=args.show_duty,
+                 output=args.output if len(months) == 1 else output_path_for(args.output_dir, args.year, month))
 
 
 if __name__ == "__main__":
