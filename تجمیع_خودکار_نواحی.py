@@ -47,10 +47,14 @@ def ensure_dependencies():
         print(f"📦 Installing required libraries ({', '.join(missing)})...")
         print("=" * 75)
         try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing + ["--quiet"])
+            subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing + ["--quiet", "--break-system-packages"])
             print("✓ Packages installed successfully.\n")
-        except Exception as e:
-            print(f"⚠️ Warning: Could not auto-install packages: {e}\n")
+        except Exception:
+            try:
+                subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing + ["--quiet"])
+                print("✓ Packages installed successfully.\n")
+            except Exception as e:
+                print(f"⚠️ Warning: Could not auto-install packages: {e}\n")
 
 ensure_dependencies()
 
@@ -474,21 +478,41 @@ def generate_all_images_offline(master_excel="تهیه کارنامه نواحی
     dist_scores = []
     for dn, t in targets.items():
         a = actuals.get(dn, {'hozori': 0, 'majazi': 0, 'khalagh': 0, 'tolid': 0, 'neshast': 0})
-        pcts = []
-        for k in ['hozori', 'majazi', 'khalagh', 'tolid', 'neshast']:
-            tv = t.get(k, 1)
-            av = a.get(k, 0)
-            pcts.append((av / tv * 100) if tv > 0 else 0)
-        sc = sum(pcts) / len(pcts) if pcts else 0
-        a['overall_score'] = sc
-        dist_scores.append((dn, sc))
         
-    dist_scores.sort(key=lambda x: x[1], reverse=True)
+        r_hoz = (a['hozori'] / t['hozori']) if t.get('hozori', 0) > 0 else 0.0
+        r_maj = (a['majazi'] / t['majazi']) if t.get('majazi', 0) > 0 else 0.0
+        r_kha = (a['khalagh'] / t['khalagh']) if t.get('khalagh', 0) > 0 else 0.0
+        r_tol = (a['tolid'] / t['tolid']) if t.get('tolid', 0) > 0 else 0.0
+        
+        # 1. Training (10% Hozori + 30% Majazi -> 40% max, surplus to creative)
+        raw_training = (0.10 * r_hoz) + (0.30 * r_maj)
+        training_share = min(0.40, raw_training)
+        surplus_training = max(0.0, raw_training - 0.40)
+        
+        # 2. Creative (50% max with surplus training added)
+        khalagh_share = min(0.50, (0.50 * r_kha) + surplus_training)
+        
+        # 3. Productions (10% max)
+        tolid_share = min(0.10, 0.10 * r_tol)
+        
+        total_realization = training_share + khalagh_share + tolid_share
+        final_score = round(70.0 + 30.0 * total_realization, 1)
+        
+        a['training_share'] = training_share
+        a['khalagh_share'] = khalagh_share
+        a['tolid_share'] = tolid_share
+        a['total_realization'] = total_realization * 100.0
+        a['final_score'] = final_score
+        a['overall_score'] = final_score
+        
+        dist_scores.append((dn, final_score, total_realization))
+        
+    dist_scores.sort(key=lambda x: (x[1], x[2]), reverse=True)
     
     rank_map = {}
     current_rank = 1
-    for dn, sc in dist_scores:
-        if sc > 0:
+    for dn, sc, real in dist_scores:
+        if sc > 70.0:
             rank_map[dn] = str(current_rank)
             current_rank += 1
         else:
@@ -497,11 +521,11 @@ def generate_all_images_offline(master_excel="تهیه کارنامه نواحی
     count_img = 0
     for dn in DISTRICTS:
         t = targets.get(dn, {})
-        a = actuals.get(dn, {'overall_score': 0})
-        sc = a.get('overall_score', 0)
+        a = actuals.get(dn, {'overall_score': 70.0})
+        sc = a.get('overall_score', 70.0)
         rk = rank_map.get(dn, "عدم فعالیت")
         
-        tier = "عالی" if sc >= 100 else ("خوب" if sc >= 75 else ("متوسط" if sc >= 50 else ("ضعیف" if sc > 0 else "فاقد عملکرد")))
+        tier = "عالی" if sc >= 90.0 else ("متوسط" if sc >= 80.0 else "ضعیف")
         en_name = DISTRICT_EN_NAMES.get(dn, dn)
         
         out_p_month_fa = os.path.join(out_dir_month, f"کارنامه_{dn}.png")
@@ -535,16 +559,16 @@ def generate_all_images_offline(master_excel="تهیه کارنامه نواحی
         ('نشست با انجمن مدرسان (۱ نشست)', int(sum_t_nes), int(sum_a_nes))
     ]
     
-    active_dists = [x for x in dist_scores if x[1] > 0]
-    inactive_dists = [x for x in dist_scores if x[1] == 0]
+    active_dists = [x for x in dist_scores if x[1] > 70.0]
+    inactive_dists = [x for x in dist_scores if x[1] <= 70.0]
     
     top5 = [(i+1, active_dists[i][0], active_dists[i][1]) for i in range(min(5, len(active_dists)))]
     all_sorted = active_dists + inactive_dists
     bot5 = [(i+1, all_sorted[len(all_sorted)-1-i][0], all_sorted[len(all_sorted)-1-i][1]) for i in range(min(5, len(all_sorted)))]
     
-    avg_sc = sum(x[1] for x in dist_scores) / len(dist_scores) if dist_scores else 0
-    top_d = dist_scores[0][0] if dist_scores and dist_scores[0][1] > 0 else "در انتظار"
-    rep_c = sum(1 for x in dist_scores if x[1] > 0)
+    avg_sc = sum(x[1] for x in dist_scores) / len(dist_scores) if dist_scores else 70.0
+    top_d = dist_scores[0][0] if dist_scores and dist_scores[0][1] > 70.0 else "در انتظار"
+    rep_c = sum(1 for x in dist_scores if x[1] > 70.0)
     
     kpi_d = {'avg_score': avg_sc, 'top_district': top_d, 'reported_count': rep_c}
     dash_path_fa = os.path.join(out_dir_month, f"تصویر_داشبورد_مدیریتی_استان_{month}_{year}.png")

@@ -200,13 +200,13 @@ for row_i, name, col_tgt, col_act in indicators_card:
     c_e.border = border_box
 
 # Performance Summary Box
-ws_card.cell(row=11, column=2, value='درصد میانگین تحقق:').font = font_lbl
-ws_card.cell(row=11, column=3, value='=AVERAGE(E5:E9)').font = font_val
+ws_card.cell(row=11, column=2, value='درصد تحقق وزنی اهداف:').font = font_lbl
+ws_card.cell(row=11, column=3, value='=(MIN(0.4, 0.1*E5 + 0.3*E6) + MIN(0.5, 0.5*E7 + MAX(0, 0.1*E5 + 0.3*E6 - 0.4)) + MIN(0.1, 0.1*E8))').font = font_val
 ws_card.cell(row=11, column=3).number_format = '0.0%'
 
-# 70 to 100 Grading Scale Formula!
+# 70 to 100 Grading Scale Formula with spillover!
 # 70 is zero performance, 100 is 100% realization!
-# Formula: 70 + 30 * MIN(1, AVERAGE(E5:E9))
+# Formula: 70 + 30 * MIN(1, MAX(0, C11))
 ws_card.cell(row=12, column=2, value='نمره نهایی کارنامه (مقیاس ۷۰ تا ۱۰۰):').font = Font(name='IRANSans', size=11, bold=True, color='C0392B')
 ws_card.cell(row=12, column=3, value='=ROUND(70 + 30 * MIN(1, MAX(0, C11)), 1)').font = Font(name='IRANSans', size=13, bold=True, color='C0392B')
 ws_card.cell(row=12, column=3).number_format = '0.0'
@@ -214,8 +214,8 @@ ws_card.cell(row=12, column=3).number_format = '0.0'
 ws_card.cell(row=13, column=2, value='رتبه در استان:').font = font_lbl
 ws_card.cell(row=13, column=3, value='=IFERROR(VLOOKUP($C$2, \'داشبورد مانیتورینگ ۳ ماهه\'!$B$31:$U$62, 20, FALSE), "-")').font = font_val
 
-ws_card.cell(row=14, column=2, value='سطح ارزیابی عملکرد ۳ ماهه:').font = font_lbl
-ws_card.cell(row=14, column=3, value='=IF(C12>=100, "عالی (پیشتاز)", IF(C12>=92.5, "خوب", IF(C12>=85, "متوسط", IF(C12>70, "ضعیف", "فاقد عملکرد"))))').font = font_val
+ws_card.cell(row=14, column=2, value='سطح ارزیابی (۳ سطح):').font = font_lbl
+ws_card.cell(row=14, column=3, value='=IF(C12<=70, "ضعیف", IF(C12>=90, "عالی", "متوسط"))').font = font_val
 
 ws_card.cell(row=15, column=2, value='تعداد حوزه مقاومت:').font = font_lbl
 ws_card.cell(row=15, column=3, value='=IFERROR(VLOOKUP($C$2, \'پایگاه داده حد انتظار ۳ ماهه\'!$A$2:$B$33, 2, FALSE), 0)').font = font_cell
@@ -244,7 +244,7 @@ dash_headers = [
     'حد انتظار خلاقانه', 'عملکرد خلاقانه', '% تحقق خلاقانه',
     'حد انتظار تولیدات', 'عملکرد تولیدات', '% تحقق تولیدات',
     'حد انتظار نشست', 'عملکرد نشست', '% تحقق نشست',
-    'میانگین درصد تحقق', 'نمره کارنامه (۷۰-۱۰۰)', 'رتبه استانی'
+    'درصد تحقق وزنی اهداف', 'نمره کارنامه (۷۰-۱۰۰)', 'رتبه استانی', 'سطح ارزیابی (۳ سطح)'
 ]
 
 for c_i, h in enumerate(dash_headers, 1):
@@ -298,20 +298,25 @@ for idx in range(1, 33):
     ws_dash.cell(row=r, column=18, value=f"=IFERROR(Q{r}/P{r}, 0)").number_format = '0.0%'
     ws_dash.cell(row=r, column=18).border = border_box
     
-    # S: Average Realization %
-    ws_dash.cell(row=r, column=19, value=f"=AVERAGE(F{r},I{r},L{r},O{r},R{r})").number_format = '0.0%'
+    # S: Weighted Realization % with spillover
+    ws_dash.cell(row=r, column=19, value=f"=(MIN(0.4, 0.1*F{r} + 0.3*I{r}) + MIN(0.5, 0.5*L{r} + MAX(0, 0.1*F{r} + 0.3*I{r} - 0.4)) + MIN(0.1, 0.1*O{r}))").number_format = '0.0%'
     ws_dash.cell(row=r, column=19).font = font_cell_bold
     ws_dash.cell(row=r, column=19).border = border_box
     
     # T: 70-100 Score!
-    ws_dash.cell(row=r, column=20, value=f"=ROUND(70 + 30 * MIN(1, MAX(0, S{r})), 1)").font = Font(name='IRANSans', size=11, bold=True, color='C0392B')
+    ws_dash.cell(row=r, column=20, value=f"=ROUND(70 + 30 * (MIN(0.4, 0.1*F{r} + 0.3*I{r}) + MIN(0.5, 0.5*L{r} + MAX(0, 0.1*F{r} + 0.3*I{r} - 0.4)) + MIN(0.1, 0.1*O{r})), 1)").font = Font(name='IRANSans', size=11, bold=True, color='C0392B')
     ws_dash.cell(row=r, column=20).number_format = '0.0'
     ws_dash.cell(row=r, column=20).border = border_box
     
     # U: Provincial Rank (based on 70-100 score)
-    ws_dash.cell(row=r, column=21, value=f"=RANK(T{r}, $T$31:$T$62)").alignment = Alignment(horizontal='center', vertical='center')
+    ws_dash.cell(row=r, column=21, value=f'=IF(T{r}>70, RANK(T{r}, $T$31:$T$62), "-")').alignment = Alignment(horizontal='center', vertical='center')
     ws_dash.cell(row=r, column=21).font = font_cell_bold
     ws_dash.cell(row=r, column=21).border = border_box
+
+    # V: Qualitative Tier (3 tiers)
+    ws_dash.cell(row=r, column=22, value=f'=IF(T{r}<=70, "ضعیف", IF(T{r}>=90, "عالی", "متوسط"))').alignment = Alignment(horizontal='center', vertical='center')
+    ws_dash.cell(row=r, column=22).font = font_cell_bold
+    ws_dash.cell(row=r, column=22).border = border_box
 
 # Adjust column widths
 for ws in [ws_dash, ws_card, ws_rep, ws_target]:

@@ -46,10 +46,14 @@ def ensure_dependencies():
         print(f"📦 Installing required libraries ({', '.join(missing)})...")
         print("=" * 75)
         try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing + ["--quiet"])
+            subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing + ["--quiet", "--break-system-packages"])
             print("✓ Packages installed successfully.\n")
-        except Exception as e:
-            print(f"⚠️ Warning: Could not auto-install packages: {e}\n")
+        except Exception:
+            try:
+                subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing + ["--quiet"])
+                print("✓ Packages installed successfully.\n")
+            except Exception as e:
+                print(f"⚠️ Warning: Could not auto-install packages: {e}\n")
 
 ensure_dependencies()
 
@@ -436,36 +440,51 @@ def generate_all_quarterly_images(master_excel="تهیه کارنامه ۳ ما�
                 'files_count': ws_rep.cell(r, 7).value or 0
             }
             
-    # Calculate Realization and 70-100 Score!
-    # Formula: Score = 70.0 + (30.0 * min(1.0, max(0.0, realization_pct / 100.0)))
+    # Calculate Realization and 70-100 Score with approved weights and training surplus spillover!
+    # Approved logic: 10% In-Person, 30% Virtual (combined training up to 40% with surplus overflow to Creative),
+    # 50% Creative Actions (capped at 50% max), 10% Media Productions (capped at 10% max).
+    # Score = 70.0 + (30.0 * Total Realization Ratio)
     dist_scores = []
     for dn, t in targets.items():
         a = actuals.get(dn, {'hozori': 0, 'majazi': 0, 'khalagh': 0, 'tolid': 0, 'neshast': 0, 'files_count': 0})
-        pcts = []
-        for k in ['hozori', 'majazi', 'khalagh', 'tolid', 'neshast']:
-            tv = t.get(k, 1)
-            av = a.get(k, 0)
-            pcts.append((av / tv * 100) if tv > 0 else 0)
-        avg_realization = sum(pcts) / len(pcts) if pcts else 0
-        a['overall_realization'] = avg_realization
         
-        # 70 to 100 Scale:
-        # Zero performance -> 70.0
-        # 100% performance -> 100.0
-        sc_70_100 = round(70.0 + 30.0 * min(1.0, max(0.0, avg_realization / 100.0)), 1)
+        t_hoz = max(1, t.get('hozori', 1))
+        t_maj = max(1, t.get('majazi', 1))
+        t_kha = max(1, t.get('khalagh', 1))
+        t_tol = max(1, t.get('tolid', 1))
+        
+        act_hoz = a.get('hozori', 0)
+        act_maj = a.get('majazi', 0)
+        act_kha = a.get('khalagh', 0)
+        act_tol = a.get('tolid', 0)
+        
+        raw_training = (0.10 * (act_hoz / t_hoz)) + (0.30 * (act_maj / t_maj))
+        training_share = min(0.40, raw_training)
+        training_surplus = max(0.0, raw_training - 0.40)
+        
+        raw_khalagh = 0.50 * (act_kha / t_kha)
+        khalagh_share = min(0.50, raw_khalagh + training_surplus)
+        
+        raw_tolid = act_tol / t_tol
+        tolid_share = 0.10 * min(1.0, raw_tolid)
+        
+        total_realization_ratio = training_share + khalagh_share + tolid_share
+        sc_70_100 = round(70.0 + 30.0 * min(1.0, max(0.0, total_realization_ratio)), 1)
+        
+        a['overall_realization'] = round(total_realization_ratio * 100, 1)
         a['score_70_100'] = sc_70_100
-        dist_scores.append((dn, sc_70_100, avg_realization))
+        dist_scores.append((dn, sc_70_100, a['overall_realization']))
         
     dist_scores.sort(key=lambda x: (x[1], x[2]), reverse=True)
     
     rank_map = {}
     current_rank = 1
     for dn, sc, real in dist_scores:
-        if real > 0:
+        if sc > 70.0:
             rank_map[dn] = str(current_rank)
             current_rank += 1
         else:
-            rank_map[dn] = "عدم فعالیت"
+            rank_map[dn] = "فاقد فعالیت"
             
     count_img = 0
     for dn in DISTRICTS:
@@ -473,18 +492,15 @@ def generate_all_quarterly_images(master_excel="تهیه کارنامه ۳ ما�
         a = actuals.get(dn, {'overall_realization': 0, 'score_70_100': 70.0, 'files_count': 0})
         sc = a.get('score_70_100', 70.0)
         real = a.get('overall_realization', 0.0)
-        rk = rank_map.get(dn, "عدم فعالیت")
+        rk = rank_map.get(dn, "فاقد فعالیت")
         
-        if sc >= 99.9:
-            tier = "عالی (پیشتاز)"
-        elif sc >= 92.5:
-            tier = "خوب"
-        elif sc >= 85.0:
+        # Approved 3 Qualitative Tiers:
+        if sc >= 90.0:
+            tier = "عالی"
+        elif sc >= 80.0:
             tier = "متوسط"
-        elif sc > 70.0:
-            tier = "ضعیف"
         else:
-            tier = "فاقد عملکرد"
+            tier = "ضعیف"
             
         en_name = DISTRICT_EN_NAMES.get(dn, dn)
         out_p_fa = os.path.join(out_dir, f"کارنامه_{dn}.png")

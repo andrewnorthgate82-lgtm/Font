@@ -90,24 +90,24 @@ def generate_scorecard_png(district_name, target_dict, actual_dict, rank="۱", t
     sub_title = f"شهرستان: {district_name}   |   دوره ارزیابی: ماه {month} سال {year}"
     draw.text((width//2, 172), fa(sub_title), fill=(254, 240, 138), font=load_font(26), anchor="mm")
 
-    score_val = actual_dict.get('overall_score', 0)
-    score_str = f"{score_val:.1f}%" if isinstance(score_val, (int, float)) else str(score_val)
-    is_zero = (isinstance(score_val, (int, float)) and score_val == 0)
+    score_val = actual_dict.get('overall_score', 70.0)
+    score_str = f"{score_val:.1f}" if isinstance(score_val, (int, float)) else str(score_val)
+    is_zero = (isinstance(score_val, (int, float)) and score_val <= 70.0)
 
     # 2. Executive Summary Cards (Y: 255 to 455) - RTL arranged
     card_w = 306
     card_h = 200
     y_cards = 255
     
-    # Right: Score
+    # Right: Score (70 to 100 Scale)
     c_right_x = 718
     c1_bg = (248, 249, 250) if is_zero else (235, 245, 251)
     c1_out = (180, 180, 180) if is_zero else (37, 99, 235)
     c1_txt = (100, 110, 120) if is_zero else (20, 38, 68)
     draw.rounded_rectangle([c_right_x, y_cards, c_right_x + card_w, y_cards + card_h], radius=14, fill=c1_bg, outline=c1_out, width=2)
-    draw.text((c_right_x + card_w//2, y_cards + 36), fa("میانگین تحقق اهداف"), fill=c1_out, font=load_font(20), anchor="mm")
+    draw.text((c_right_x + card_w//2, y_cards + 36), fa("نمره عملکرد (۷۰ تا ۱۰۰)"), fill=c1_out, font=load_font(20), anchor="mm")
     draw.text((c_right_x + card_w//2, y_cards + 105), fa(score_str), fill=c1_txt, font=load_font(52), anchor="mm")
-    draw.text((c_right_x + card_w//2, y_cards + 165), fa("کل شاخص‌های ابلاغی"), fill=(71, 85, 105), font=load_font(18), anchor="mm")
+    draw.text((c_right_x + card_w//2, y_cards + 165), fa("مبنا: ۷۰ صفر تا ۱۰۰ عالی"), fill=(71, 85, 105), font=load_font(18), anchor="mm")
 
     # Center: Rank
     c_mid_x = 387
@@ -121,27 +121,23 @@ def generate_scorecard_png(district_name, target_dict, actual_dict, rank="۱", t
     rank_sub = "فاقد گزارش ماهانه" if is_zero else "از میان ۳۲ شهرستان"
     draw.text((c_mid_x + card_w//2, y_cards + 165), fa(rank_sub), fill=(71, 85, 105), font=load_font(18), anchor="mm")
 
-    # Left: Qualitative Tier
+    # Left: Qualitative Tier (3 levels: عالی, متوسط, ضعیف)
     c_left_x = 55
     if is_zero:
         tier_title = "فاقد عملکرد"
-        tier_sub = "عدم ارسال گزارش"
+        tier_sub = "عدم ارسال گزارش (نمره ۷۰)"
         c3_bg, c3_out, c3_txt = (250, 250, 250), (180, 180, 180), (120, 120, 120)
-    elif score_val >= 100:
+    elif tier == "عالی" or (isinstance(score_val, (int, float)) and score_val >= 90):
         tier_title = "سطح عالی"
-        tier_sub = "تحقق بالای ۱۰۰ درصد"
+        tier_sub = f"نمره {score_val:.1f} (تحقق درخشان)"
         c3_bg, c3_out, c3_txt = (254, 252, 232), (234, 179, 8), (161, 98, 7)
-    elif score_val >= 75:
-        tier_title = "سطح خوب"
-        tier_sub = "تحقق ۷۵ تا ۹۹ درصد"
-        c3_bg, c3_out, c3_txt = (239, 246, 255), (59, 130, 246), (29, 78, 216)
-    elif score_val >= 50:
+    elif tier == "متوسط" or (isinstance(score_val, (int, float)) and score_val >= 80):
         tier_title = "سطح متوسط"
-        tier_sub = "تحقق ۵۰ تا ۷۴ درصد"
+        tier_sub = f"نمره {score_val:.1f} (تحقق میانی)"
         c3_bg, c3_out, c3_txt = (255, 251, 235), (245, 158, 11), (180, 83, 9)
     else:
         tier_title = "سطح ضعیف"
-        tier_sub = "تحقق زیر ۵۰ درصد"
+        tier_sub = f"نمره {score_val:.1f} (عدم تحقق مطلوب)"
         c3_bg, c3_out, c3_txt = (254, 242, 242), (239, 68, 68), (185, 28, 28)
 
     draw.rounded_rectangle([c_left_x, y_cards, c_left_x + card_w, y_cards + card_h], radius=14, fill=c3_bg, outline=c3_out, width=2)
@@ -282,8 +278,9 @@ def generate_dashboard_png(macro_data, top5_data, bottom5_data, kpi_data, month=
 
     # Top-Left: Provincial Average
     draw.rounded_rectangle([col_left_x, row1_y, col_left_x + c_w, row1_y + c_h], radius=14, fill=(235, 245, 251), outline=(37, 99, 235), width=2)
-    draw.text((col_left_x + c_w//2, row1_y + 34), fa(f"میانگین عملکرد استان ({month})"), fill=(37, 99, 235), font=load_font(20), anchor="mm")
-    draw.text((col_left_x + c_w//2, row1_y + 80), fa(f"{kpi_data.get('avg_score', 0):.1f}%"), fill=(20, 38, 68), font=load_font(42), anchor="mm")
+    draw.text((col_left_x + c_w//2, row1_y + 34), fa(f"میانگین نمره عملکرد استان ({month})"), fill=(37, 99, 235), font=load_font(20), anchor="mm")
+    avg_sc = kpi_data.get('avg_score', 70.0)
+    draw.text((col_left_x + c_w//2, row1_y + 80), fa(f"{avg_sc:.1f}"), fill=(20, 38, 68), font=load_font(42), anchor="mm")
 
     # Bottom-Right: Top Performer
     draw.rounded_rectangle([col_right_x, row2_y, col_right_x + c_w, row2_y + c_h], radius=14, fill=(236, 253, 245), outline=(16, 185, 129), width=2)
@@ -321,7 +318,8 @@ def generate_dashboard_png(macro_data, top5_data, bottom5_data, kpi_data, month=
         draw.text((150, curr_y + 28), fa(f"{pct:.1f}% تحقق"), fill=pct_color, font=load_font(19), anchor="mm")
 
         # Line 2: Details
-        meta_txt = f"حد انتظار استان: {int(m_tgt):,} نفر   •   عملکرد واقعی: {int(m_act):,} نفر   •   انحراف: {diff_str} نفر"
+        unit = "نشست" if "نشست" in m_name else "نفر"
+        meta_txt = f"حد انتظار استان: {int(m_tgt):,} {unit}   •   عملکرد واقعی: {int(m_act):,} {unit}   •   انحراف: {diff_str} {unit}"
         draw.text((995, curr_y + 60), fa(meta_txt), fill=(51, 65, 85), font=load_font(19), anchor="rm")
 
         # Line 3: Progress bar
