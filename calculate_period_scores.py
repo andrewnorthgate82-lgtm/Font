@@ -412,13 +412,17 @@ def run_period_evaluation(selected_months=None):
         pct_tol_raw = r_tol_raw * 100.0
 
         # 2. Training Basket (40% Total): 10% Hozori + 30% Majazi
-        # In-person and virtual can offset each other smoothly up to the combined 40% cap!
-        training_share = min(WEIGHT_TRAINING_POOL, (WEIGHT_HOZORI * r_hoz_raw) + (WEIGHT_MAJAZI * r_maj_raw))
+        # In-person and virtual offset each other smoothly up to the 40% training cap
+        raw_training_share = (WEIGHT_HOZORI * r_hoz_raw) + (WEIGHT_MAJAZI * r_maj_raw)
+        training_share = min(WEIGHT_TRAINING_POOL, raw_training_share)
+        surplus_training = max(0.0, raw_training_share - WEIGHT_TRAINING_POOL)
 
-        # 3. Creative (50% Weight): Capped strictly at 100% (No artificial spillover!)
-        khalagh_share = WEIGHT_KHALAGH * min(1.0, r_kha_raw)
+        # 3. Creative (50% Weight):
+        # Own creative realization + surplus from training, strictly capped at 50% (100% of creative)
+        raw_khalagh_share = WEIGHT_KHALAGH * r_kha_raw
+        khalagh_share = min(WEIGHT_KHALAGH, raw_khalagh_share + surplus_training)
 
-        # 4. Productions (10% Weight): Capped strictly at 100%
+        # 4. Productions (10% Weight): Capped strictly at 10%
         tolid_share = WEIGHT_TOLID * min(1.0, r_tol_raw)
 
         # Total Realization (0.0 to 1.0)
@@ -450,6 +454,7 @@ def run_period_evaluation(selected_months=None):
             'tier': tier,
             'total_realization_pct': total_realization_pct,
             'training_share_pct': round(training_share * 100.0, 2),
+            'surplus_training_pct': round(surplus_training * 100.0, 2),
             'khalagh_share_pct': round(khalagh_share * 100.0, 2),
             'tolid_share_pct': round(tolid_share * 100.0, 2),
             't_hoz': t_hoz, 'a_hoz': a_hoz, 'pct_hoz_raw': pct_hoz_raw,
