@@ -21,7 +21,6 @@ from pathlib import Path
 import jdatetime
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-from openpyxl.utils import get_column_letter
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
@@ -36,6 +35,11 @@ WEEKDAY_NAMES = ["شنبه", "یکشنبه", "دوشنبه", "سه‌شنبه", 
 
 FULL_DAY_DUTY = 7 * 60 + 33   # موظفی روزانه: ۷ ساعت و ۳۳ دقیقه = ۴۵۳ دقیقه
 THU_HALF_DUTY = 4 * 60        # موظفی پنجشنبه نیمه‌وقت: ۴ ساعت = ۲۴۰ دقیقه
+
+HOLIDAY_WORK_MIN = 60         # کف دورکاری روز تعطیل: ۱ ساعت
+HOLIDAY_WORK_MAX = 150        # سقف دورکاری روز تعطیل: ۲:۳۰
+HOLIDAY_ENTRY_MIN = 540       # ۹:۰۰
+HOLIDAY_ENTRY_MAX = 690       # ۱۱:۳۰
 
 FA_DIGITS = str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹")
 
@@ -87,7 +91,6 @@ def parse_month(value: str) -> int:
     value = value.strip()
     if value in MONTH_NAMES:
         return MONTH_NAMES.index(value) + 1
-    num = int(fa(value).translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))) if False else None
     try:
         num = int(value.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789")))
     except ValueError:
@@ -127,7 +130,7 @@ def distribute_hours(work_days: list[dict], target: int, rng: random.Random) -> 
 
     final = sum(d["minutes"] for d in work_days)
     if final != target:
-        # اختلاف باقی‌مانده (حداکثر چند دقیقه) روی اولین روز ممکن سرشکن می‌شود
+        # اختلاف باقی‌مانده روی اولین روز ممکن سرشکن می‌شود
         rest = target - final
         for day in work_days:
             lo_abs, hi_abs = bounds[day["kind"]][2], bounds[day["kind"]][3]
@@ -149,10 +152,12 @@ def build_descriptions(days: list[dict], activities: dict, regions: list[str],
     ends = activities["end_month"][:]
     rng.shuffle(starts)
     rng.shuffle(ends)
+    hws = activities["holiday_work"][:]
+    rng.shuffle(hws)
     region_pool = regions[:]
     rng.shuffle(region_pool)
 
-    main_idx = start_idx = end_idx = region_idx = routine_idx = 0
+    main_idx = start_idx = end_idx = region_idx = routine_idx = hw_idx = 0
 
     def next_region() -> str:
         nonlocal region_idx
@@ -181,6 +186,19 @@ def build_descriptions(days: list[dict], activities: dict, regions: list[str],
                 else f"تعطیل رسمی ({title})"
         elif kind == "thu_off":
             day["desc"] = "پنجشنبه (تعطیل هفتگی)"
+        elif kind == "worked_holiday":
+            if day["weekday"] == "جمعه":
+                label = "جمعه (تعطیل هفتگی)"
+                if day.get("holiday_title"):
+                    label += f" ـ مصادف با تعطیل رسمی ({day['holiday_title']})"
+            else:
+                label = f"تعطیل رسمی ({day['holiday_title']})"
+            n = 1 if rng.random() < 0.7 else 2
+            items = []
+            for _ in range(n):
+                items.append(fill(hws[hw_idx % len(hws)]))
+                hw_idx += 1
+            day["desc"] = f"{label} ـ {'؛ '.join(items)} (دورکاری)"
         else:
             parts = [fill(routines[routine_idx % len(routines)])]
             routine_idx += 1
@@ -198,20 +216,27 @@ def build_descriptions(days: list[dict], activities: dict, regions: list[str],
 
 
 # ---------------------------------------------------------------- ساخت اکسل
-THIN = Side(style="thin", color="000000")
+PRIMARY = "1F4E5F"      # سرمه‌ای مایل به سبز (نوار عنوان)
+HEADER_BLUE = "2E75B6"  # آبی سرستون‌ها
+LIGHT_BAND = "D9E1F2"   # نوار روشن زیر عنوان
+ZEBRA = "EAF1FA"        # سطرهای یکی‌درمیان
+FILL_OFF = "E7E6E6"     # روزهای کاملاً تعطیل
+FILL_HOLIDAY = "E2EFDA" # تعطیلات دارای دورکاری
+FILL_TOTAL = "FFD966"   # سطر جمع
+GRID = "B0B0B0"
+
+THIN = Side(style="thin", color=GRID)
+MED = Side(style="medium", color=PRIMARY)
 BORDER_ALL = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
-FILL_HEADER = PatternFill("solid", fgColor="D9E1F2")
-FILL_OFF = PatternFill("solid", fgColor="F2F2F2")
-FILL_TOTAL = PatternFill("solid", fgColor="FFF2CC")
 
 
-def style_range(ws, row: int, cols: str, font=None, fill=None, alignment=None):
+def style_range(ws, row: int, cols: str, font=None, fill=None, alignment=None, border=None):
     """اعمال استایل به تک‌تک سلول‌های یک محدوده (برای مربع‌های ادغام‌شده)."""
     from openpyxl.utils import column_index_from_string
     start, end = cols.split(":")
     for col in range(column_index_from_string(start), column_index_from_string(end) + 1):
         cell = ws.cell(row=row, column=col)
-        cell.border = BORDER_ALL
+        cell.border = border or BORDER_ALL
         if font:
             cell.font = font
         if fill:
@@ -234,36 +259,48 @@ def build_workbook(days: list[dict], year: int, month: int, person_title: str,
     ws.title = f"کارکرد {month_name}"
     ws.sheet_view.rightToLeft = True
 
-    widths = {"A": 7, "B": 12, "C": 10, "D": 10, "E": 10, "F": 100}
+    widths = {"A": 7, "B": 12, "C": 10, "D": 10, "E": 10, "F": 95}
     for col, w in widths.items():
         ws.column_dimensions[col].width = w
 
-    f_title = Font(name=font_name, size=16, bold=True)
-    f_sub = Font(name=font_name, size=13, bold=True)
+    f_besmellah = Font(name=font_name, size=15, bold=True, color=PRIMARY)
+    f_band = Font(name=font_name, size=14, bold=True, color="FFFFFF")
+    f_sub = Font(name=font_name, size=12, color=PRIMARY)
+    f_sig = Font(name=font_name, size=12, bold=True, color="FFFFFF")
     f_text = Font(name=font_name, size=12)
-    f_head = Font(name=font_name, size=12, bold=True)
-    f_total = Font(name=font_name, size=13, bold=True)
+    f_head = Font(name=font_name, size=12, bold=True, color="FFFFFF")
+    f_total = Font(name=font_name, size=13, bold=True, color=PRIMARY)
+    f_off = Font(name=font_name, size=12, color="595959")
     center = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    center_wrap = Alignment(horizontal="center", vertical="center", wrap_text=True)
     desc_align = Alignment(horizontal="right", vertical="center", wrap_text=True)
+
+    fill_primary = PatternFill("solid", fgColor=PRIMARY)
+    fill_band = PatternFill("solid", fgColor=LIGHT_BAND)
+    fill_head = PatternFill("solid", fgColor=HEADER_BLUE)
+    fill_zebra = PatternFill("solid", fgColor=ZEBRA)
+    fill_off = PatternFill("solid", fgColor=FILL_OFF)
+    fill_holiday = PatternFill("solid", fgColor=FILL_HOLIDAY)
+    fill_total = PatternFill("solid", fgColor=FILL_TOTAL)
 
     # --- سربرگ ---
     ws.merge_cells("A1:F1")
     ws["A1"] = "بسمه تعالی"
-    style_range(ws, 1, "A:F", font=f_title, alignment=center)
+    style_range(ws, 1, "A:F", font=f_besmellah, alignment=center)
     ws.row_dimensions[1].height = 30
 
     ws.merge_cells("A2:F2")
     ws["A2"] = "فرم ثبت شرح فعالیت روزانه نیروهای خرید خدمت مرکز فضای مجازی بسیج استان اصفهان"
-    style_range(ws, 2, "A:F", font=f_sub, alignment=center)
-    ws.row_dimensions[2].height = 26
+    style_range(ws, 2, "A:F", font=f_band, fill=fill_primary, alignment=center)
+    ws.row_dimensions[2].height = 30
 
     ws.merge_cells("A3:F3")
     ws["A3"] = (f"با احترام، بدینوسیله کارکرد {person_title} {person_name} "
                 f"در {month_name} ماه {fa(year)} بر اساس جدول ذیل حضورتان ارسال می‌گردد:")
-    style_range(ws, 3, "A:F", font=f_text, alignment=center)
+    style_range(ws, 3, "A:F", font=f_sub, fill=fill_band, alignment=center)
     ws.row_dimensions[3].height = 32
-    ws.row_dimensions[4].height = 8
+
+    style_range(ws, 4, "A:F", fill=fill_primary, alignment=center)
+    ws.row_dimensions[4].height = 6
 
     # --- سرستون‌ها ---
     headers = ["ایام ماه", "روز هفته", "ساعت ورود", "ساعت خروج", "جمع ساعت",
@@ -272,16 +309,24 @@ def build_workbook(days: list[dict], year: int, month: int, person_title: str,
     for i, text in enumerate(headers, start=1):
         cell = ws.cell(row=5, column=i, value=text)
         cell.font = f_head
-        cell.fill = FILL_HEADER
-        cell.alignment = center_wrap
+        cell.fill = fill_head
+        cell.alignment = center
         cell.border = BORDER_ALL
-    ws.row_dimensions[5].height = 48
+    ws.row_dimensions[5].height = 50
 
     # --- روزهای ماه ---
     row = 6
+    zebra_on = False
     for day in days:
-        off = day["kind"] in ("friday", "official", "thu_off")
-        fill = FILL_OFF if off else None
+        kind = day["kind"]
+        if kind in ("friday", "official", "thu_off"):
+            fill, desc_font = fill_off, f_off
+        elif kind == "worked_holiday":
+            fill, desc_font = fill_holiday, f_text
+        else:
+            zebra_on = not zebra_on
+            fill, desc_font = (fill_zebra if zebra_on else None), f_text
+        off = kind in ("friday", "official", "thu_off")
         values = [
             fa(day["day"]),
             day["weekday"],
@@ -292,19 +337,37 @@ def build_workbook(days: list[dict], year: int, month: int, person_title: str,
         ]
         for i, value in enumerate(values, start=1):
             cell = ws.cell(row=row, column=i, value=value)
-            cell.font = f_text
+            cell.font = desc_font if i == 6 else f_text
             cell.border = BORDER_ALL
             if fill:
                 cell.fill = fill
-            cell.alignment = desc_align if i == 6 else center_wrap
+            cell.alignment = desc_align if i == 6 else center
         ws.row_dimensions[row].height = estimate_row_height(day["desc"])
         row += 1
+    last_day_row = row - 1
+
+    # قاب متوسط دور جدول
+    for c in range(1, 7):
+        top = ws.cell(row=5, column=c)
+        top.border = Border(top=MED, left=top.border.left, right=top.border.right,
+                            bottom=top.border.bottom)
+        bot = ws.cell(row=last_day_row, column=c)
+        bot.border = Border(top=bot.border.top, left=bot.border.left, right=bot.border.right,
+                            bottom=MED)
+    for r in range(5, last_day_row + 1):
+        left = ws.cell(row=r, column=1)
+        left.border = Border(top=left.border.top, left=MED, right=left.border.right,
+                             bottom=left.border.bottom)
+        right = ws.cell(row=r, column=6)
+        right.border = Border(top=right.border.top, left=right.border.left, right=MED,
+                              bottom=right.border.bottom)
 
     # --- سطر جمع ---
     ws.merge_cells(f"A{row}:F{row}")
     ws.cell(row=row, column=1).value = f"جمع ساعات کارکرد در ماه: {fmt_long(total_minutes)}"
-    style_range(ws, row, "A:F", font=f_total, fill=FILL_TOTAL, alignment=center)
-    ws.row_dimensions[row].height = 28
+    style_range(ws, row, "A:F", font=f_total, fill=fill_total, alignment=center,
+                border=Border(left=MED, right=MED, top=MED, bottom=MED))
+    ws.row_dimensions[row].height = 30
     row += 1
 
     if show_duty:
@@ -312,7 +375,7 @@ def build_workbook(days: list[dict], year: int, month: int, person_title: str,
         ws.merge_cells(f"A{row}:F{row}")
         ws.cell(row=row, column=1).value = (
             f"موظفی ماه: {fmt_long(duty_minutes)} ـ اضافه‌کار: {fmt_long(extra)}")
-        style_range(ws, row, "A:F", font=f_text, alignment=center)
+        style_range(ws, row, "A:F", font=f_sub, alignment=center)
         ws.row_dimensions[row].height = 24
         row += 1
 
@@ -324,29 +387,40 @@ def build_workbook(days: list[dict], year: int, month: int, person_title: str,
             ("C:D", "امضاء مسئول مرکز فضای مجازی"),
             ("E:F", "تأیید مرکز فضای مجازی بسیج استان")]
     for cols, text in sigs:
-        ws.merge_cells(f"{cols.split(':')[0]}{row}:{cols.split(':')[1]}{row}")
-        ws.cell(row=row, column={"A": 1, "C": 3, "E": 5}[cols[0]]).value = text
-        style_range(ws, row, cols, font=f_sub, alignment=center)
-    ws.row_dimensions[row].height = 24
+        a, b = cols.split(":")
+        col0 = {"A": 1, "C": 3, "E": 5}[a]
+        ws.merge_cells(f"{a}{row}:{b}{row}")
+        ws.cell(row=row, column=col0).value = text
+        style_range(ws, row, cols, font=f_sig, fill=fill_primary, alignment=center)
+    ws.row_dimensions[row].height = 26
     row += 1
     for cols, _ in sigs:
-        ws.merge_cells(f"{cols.split(':')[0]}{row}:{cols.split(':')[1]}{row + 1}")
+        a, b = cols.split(":")
+        ws.merge_cells(f"{a}{row}:{b}{row + 1}")
         style_range(ws, row, cols, alignment=center)
         style_range(ws, row + 1, cols, alignment=center)
-    ws.row_dimensions[row].height = 35
-    ws.row_dimensions[row + 1].height = 35
+    ws.row_dimensions[row].height = 38
+    ws.row_dimensions[row + 1].height = 38
+    last_row = row + 1
 
-    # --- تنظیمات چاپ ---
+    # --- تنظیمات چاپ A4 ---
     ws.sheet_properties.pageSetUpPr.fitToPage = True
     ws.page_setup.orientation = "landscape"
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
     ws.page_setup.fitToWidth = 1
     ws.page_setup.fitToHeight = 0
     ws.print_title_rows = "5:5"
-    ws.page_margins.left = 0.4
-    ws.page_margins.right = 0.4
+    ws.print_area = f"A1:F{last_row}"
+    ws.page_margins.left = 0.35
+    ws.page_margins.right = 0.35
     ws.page_margins.top = 0.4
     ws.page_margins.bottom = 0.4
+    ws.print_options.horizontalCentered = True
+    footer_text = f"کارکرد {month_name} {fa(year)} ـ صفحه &P از &N"
+    ws.oddFooter.center.text = footer_text
+    ws.oddFooter.center.size = 9
+    ws.evenFooter.center.text = footer_text
+    ws.evenFooter.center.size = 9
     ws.freeze_panes = "A6"
 
     return wb
@@ -377,6 +451,7 @@ def generate(year: int, month: int, person_title: str, person_name: str,
     rng_hours = random.Random(f"{seed}-hours")
     rng_entry = random.Random(f"{seed}-entry")
     rng_text = random.Random(f"{seed}-text")
+    rng_hol = random.Random(f"{seed}-holiday")
 
     # --- طبقه‌بندی روزها ---
     days: list[dict] = []
@@ -394,23 +469,35 @@ def generate(year: int, month: int, person_title: str, person_name: str,
         days.append({"day": day, "weekday": WEEKDAY_NAMES[weekday],
                      "kind": kind, "holiday_title": title})
 
+    # --- دورکاری یک‌سوم تعطیلات ---
+    off_days = [d for d in days if d["kind"] in ("friday", "official")]
+    rng_hol.shuffle(off_days)
+    n_hol = max(1, int(len(off_days) / 3 + 0.5))
+    for d in off_days[:n_hol]:
+        d["kind"] = "worked_holiday"
+        span = (HOLIDAY_WORK_MAX - HOLIDAY_WORK_MIN) // 5
+        d["minutes"] = HOLIDAY_WORK_MIN + rng_hol.randrange(span + 1) * 5
+        estep = (HOLIDAY_ENTRY_MAX - HOLIDAY_ENTRY_MIN) // 5
+        d["entry"] = HOLIDAY_ENTRY_MIN + rng_hol.randrange(estep + 1) * 5
+    h_minutes = sum(d["minutes"] for d in days if d["kind"] == "worked_holiday")
+
     work_days = [d for d in days if d["kind"] in ("full", "thu")]
 
-    # --- موظفی و هدف ---
+    # --- موظفی و هدف (ضریب روی جمع کل شامل دورکاری تعطیلات اعمال می‌شود) ---
     n_full = sum(1 for d in work_days if d["kind"] == "full")
     n_thu = sum(1 for d in work_days if d["kind"] == "thu")
     duty = n_full * FULL_DAY_DUTY + n_thu * THU_HALF_DUTY
     factor = fixed_factor if fixed_factor is not None else rng_hours.uniform(factor_min, factor_max)
-    target = round(duty * factor / 5) * 5
+    work_target = round((duty * factor - h_minutes) / 5) * 5
 
     # --- توزیع ساعات و ورود/خروج ---
-    distribute_hours(work_days, target, rng_hours)
+    distribute_hours(work_days, work_target, rng_hours)
     for day in work_days:
         day["entry"] = 440 + rng_entry.randrange(11) * 5  # ۷:۲۰ تا ۸:۱۰
 
     build_descriptions(days, activities, regions, rng_text)
 
-    total = sum(d.get("minutes", 0) for d in work_days)
+    total = sum(d.get("minutes", 0) for d in days if d["kind"] in ("full", "thu", "worked_holiday"))
 
     # --- خروجی اکسل ---
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -422,8 +509,9 @@ def generate(year: int, month: int, person_title: str, person_name: str,
 
     # --- گزارش کنسول ---
     print(f"ماه: {month_name} {fa(year)} ـ روزهای ماه: {fa(n_days)} ـ "
-          f"روز کامل: {fa(n_full)} ـ پنجشنبه کاری: {fa(n_thu)}")
-    print(f"موظفی ماه: {fmt_long(duty)}")
+          f"روز کامل: {fa(n_full)} ـ پنجشنبه کاری: {fa(n_thu)} ـ "
+          f"تعطیل: {fa(len(off_days))} (دورکاری: {fa(n_hol)})")
+    print(f"موظفی ماه: {fmt_long(duty)} ـ دورکاری تعطیلات: {fmt_long(h_minutes)}")
     print(f"ضریب اضافه‌کار: {fa(f'{factor:.2f}')} ـ جمع کارکرد: {fmt_long(total)} "
           f"({fa(f'{total / duty * 100:.1f}')}٪ موظفی)")
     print(f"✅ فایل ساخته شد: {out_path}")
