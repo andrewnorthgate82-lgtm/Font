@@ -36,12 +36,8 @@ WEEKDAY_NAMES = ["شنبه", "یکشنبه", "دوشنبه", "سه‌شنبه", 
 FULL_DAY_DUTY = 7 * 60 + 33   # موظفی روزانه: ۷ ساعت و ۳۳ دقیقه = ۴۵۳ دقیقه
 THU_HALF_DUTY = 4 * 60        # موظفی پنجشنبه نیمه‌وقت: ۴ ساعت = ۲۴۰ دقیقه
 
-HOLIDAY_WORK_MIN = 60         # کف دورکاری روز تعطیل: ۱ ساعت
-HOLIDAY_WORK_MAX = 150        # سقف دورکاری روز تعطیل: ۲:۳۰
 ENTRY_MIN = 480               # ۸:۰۰
 ENTRY_MAX = 570               # ۹:۳۰
-HOLIDAY_ENTRY_MIN = 480       # ۸:۰۰
-HOLIDAY_ENTRY_MAX = 570       # ۹:۳۰
 
 FA_DIGITS = str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹")
 
@@ -154,12 +150,11 @@ def build_descriptions(days: list[dict], activities: dict, regions: list[str],
     ends = activities["end_month"][:]
     rng.shuffle(starts)
     rng.shuffle(ends)
-    hws = activities["holiday_work"][:]
-    rng.shuffle(hws)
     region_pool = regions[:]
     rng.shuffle(region_pool)
 
-    main_idx = start_idx = end_idx = region_idx = routine_idx = hw_idx = 0
+    main_idx = start_idx = end_idx = region_idx = routine_idx = 0
+    seen_descriptions: set[str] = set()
 
     def next_region() -> str:
         nonlocal region_idx
@@ -178,7 +173,7 @@ def build_descriptions(days: list[dict], activities: dict, regions: list[str],
     prev_month_name = MONTH_NAMES[month - 2] if month > 1 else MONTH_NAMES[-1]
     report_candidates = [
         d for d in days
-        if 2 <= d["day"] <= 7 and d["kind"] in ("full", "thu", "worked_holiday")
+        if 2 <= d["day"] <= 7 and d["kind"] in ("full", "thu")
     ]
     if not report_candidates:
         report_candidates = [d for d in days if 2 <= d["day"] <= 7]
@@ -188,28 +183,15 @@ def build_descriptions(days: list[dict], activities: dict, regions: list[str],
     for day in days:
         kind = day["kind"]
         if kind == "friday":
-            day["desc"] = "جمعه (تعطیل هفتگی)"
+            day["desc"] = f"جمعه (تعطیل هفتگی ـ روز {fa(day['day'])} {MONTH_NAMES[month - 1]})"
             if day.get("holiday_title"):
                 day["desc"] += f" ـ مصادف با تعطیل رسمی ({day['holiday_title']})"
         elif kind == "official":
             title = day["holiday_title"]
-            day["desc"] = title if title.startswith("تعطیلی عمومی") \
-                else f"تعطیل رسمی ({title})"
+            prefix = title if title.startswith("تعطیلی عمومی") else f"تعطیل رسمی ({title})"
+            day["desc"] = f"{prefix} ـ روز {fa(day['day'])} {MONTH_NAMES[month - 1]}"
         elif kind == "thu_off":
-            day["desc"] = "پنجشنبه (تعطیل هفتگی)"
-        elif kind == "worked_holiday":
-            if day["weekday"] == "جمعه":
-                label = "جمعه (تعطیل هفتگی)"
-                if day.get("holiday_title"):
-                    label += f" ـ مصادف با تعطیل رسمی ({day['holiday_title']})"
-            else:
-                label = f"تعطیل رسمی ({day['holiday_title']})"
-            n = 1 if rng.random() < 0.7 else 2
-            items = []
-            for _ in range(n):
-                items.append(fill(hws[hw_idx % len(hws)]))
-                hw_idx += 1
-            day["desc"] = f"{label} ـ {'؛ '.join(items)} (دورکاری)"
+            day["desc"] = f"پنجشنبه (تعطیل هفتگی ـ روز {fa(day['day'])} {MONTH_NAMES[month - 1]})"
         else:
             parts = [fill(routines[routine_idx % len(routines)])]
             routine_idx += 1
@@ -227,6 +209,11 @@ def build_descriptions(days: list[dict], activities: dict, regions: list[str],
         if day["day"] == report_day:
             day["desc"] = f"{day['desc']}؛ {report_text}"
 
+        # تضمین نهایی: هیچ سلول شرح فعالیت عیناً تکراری نباشد.
+        if day["desc"] in seen_descriptions:
+            day["desc"] = f"{day['desc']}؛ پیگیری تکمیلی روز {fa(day['day'])} {MONTH_NAMES[month - 1]}"
+        seen_descriptions.add(day["desc"])
+
 
 # ---------------------------------------------------------------- ساخت اکسل
 # قالب ساده و کم‌رنگ برای خروجی PDF روی یک صفحه A4
@@ -235,7 +222,6 @@ HEADER_BLUE = "595959"  # خاکستری سرستون‌ها
 LIGHT_BAND = "F2F2F2"   # نوار روشن زیر عنوان
 ZEBRA = "FFFFFF"        # بدون رنگ‌بندی زیاد در ردیف‌های عادی
 FILL_OFF = "F2F2F2"     # روزهای کاملاً تعطیل
-FILL_HOLIDAY = "EAF4EA" # تعطیلات دارای دورکاری (سبز بسیار ملایم)
 FILL_TOTAL = "E7E6E6"   # سطر جمع
 GRID = "A6A6A6"
 
@@ -294,7 +280,6 @@ def build_workbook(days: list[dict], year: int, month: int, person_title: str,
     fill_head = PatternFill("solid", fgColor=HEADER_BLUE)
     fill_zebra = PatternFill("solid", fgColor=ZEBRA)
     fill_off = PatternFill("solid", fgColor=FILL_OFF)
-    fill_holiday = PatternFill("solid", fgColor=FILL_HOLIDAY)
     fill_total = PatternFill("solid", fgColor=FILL_TOTAL)
 
     # --- سربرگ ---
@@ -336,8 +321,6 @@ def build_workbook(days: list[dict], year: int, month: int, person_title: str,
         kind = day["kind"]
         if kind in ("friday", "official", "thu_off"):
             fill, desc_font = fill_off, f_off
-        elif kind == "worked_holiday":
-            fill, desc_font = fill_holiday, f_text
         else:
             zebra_on = not zebra_on
             fill, desc_font = (fill_zebra if zebra_on else None), f_text
@@ -469,7 +452,6 @@ def generate(year: int, month: int, person_title: str, person_name: str,
     rng_hours = random.Random(f"{seed}-hours")
     rng_entry = random.Random(f"{seed}-entry")
     rng_text = random.Random(f"{seed}-text")
-    rng_hol = random.Random(f"{seed}-holiday")
 
     # --- طبقه‌بندی روزها ---
     days: list[dict] = []
@@ -487,26 +469,15 @@ def generate(year: int, month: int, person_title: str, person_name: str,
         days.append({"day": day, "weekday": WEEKDAY_NAMES[weekday],
                      "kind": kind, "holiday_title": title})
 
-    # --- دورکاری یک‌سوم تعطیلات ---
-    off_days = [d for d in days if d["kind"] in ("friday", "official")]
-    rng_hol.shuffle(off_days)
-    n_hol = max(1, int(len(off_days) / 3 + 0.5))
-    for d in off_days[:n_hol]:
-        d["kind"] = "worked_holiday"
-        span = (HOLIDAY_WORK_MAX - HOLIDAY_WORK_MIN) // 5
-        d["minutes"] = HOLIDAY_WORK_MIN + rng_hol.randrange(span + 1) * 5
-        estep = (HOLIDAY_ENTRY_MAX - HOLIDAY_ENTRY_MIN) // 5
-        d["entry"] = HOLIDAY_ENTRY_MIN + rng_hol.randrange(estep + 1) * 5
-    h_minutes = sum(d["minutes"] for d in days if d["kind"] == "worked_holiday")
-
+    off_days = [d for d in days if d["kind"] in ("friday", "official", "thu_off")]
     work_days = [d for d in days if d["kind"] in ("full", "thu")]
 
-    # --- موظفی و هدف (ضریب روی جمع کل شامل دورکاری تعطیلات اعمال می‌شود) ---
+    # --- موظفی و هدف ---
     n_full = sum(1 for d in work_days if d["kind"] == "full")
     n_thu = sum(1 for d in work_days if d["kind"] == "thu")
     duty = n_full * FULL_DAY_DUTY + n_thu * THU_HALF_DUTY
     factor = fixed_factor if fixed_factor is not None else rng_hours.uniform(factor_min, factor_max)
-    work_target = round((duty * factor - h_minutes) / 5) * 5
+    work_target = round((duty * factor) / 5) * 5
 
     # --- توزیع ساعات و ورود/خروج ---
     distribute_hours(work_days, work_target, rng_hours)
@@ -516,7 +487,7 @@ def generate(year: int, month: int, person_title: str, person_name: str,
 
     build_descriptions(days, activities, regions, rng_text, month)
 
-    total = sum(d.get("minutes", 0) for d in days if d["kind"] in ("full", "thu", "worked_holiday"))
+    total = sum(d.get("minutes", 0) for d in work_days)
 
     # --- خروجی اکسل ---
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -529,8 +500,8 @@ def generate(year: int, month: int, person_title: str, person_name: str,
     # --- گزارش کنسول ---
     print(f"ماه: {month_name} {fa(year)} ـ روزهای ماه: {fa(n_days)} ـ "
           f"روز کامل: {fa(n_full)} ـ پنجشنبه کاری: {fa(n_thu)} ـ "
-          f"تعطیل: {fa(len(off_days))} (دورکاری: {fa(n_hol)})")
-    print(f"موظفی ماه: {fmt_long(duty)} ـ دورکاری تعطیلات: {fmt_long(h_minutes)}")
+          f"تعطیل: {fa(len(off_days))}")
+    print(f"موظفی ماه: {fmt_long(duty)}")
     print(f"ضریب اضافه‌کار: {fa(f'{factor:.2f}')} ـ جمع کارکرد: {fmt_long(total)} "
           f"({fa(f'{total / duty * 100:.1f}')}٪ موظفی)")
     print(f"✅ فایل ساخته شد: {out_path}")
