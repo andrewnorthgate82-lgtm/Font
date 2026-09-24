@@ -216,14 +216,15 @@ def build_descriptions(days: list[dict], activities: dict, regions: list[str],
 
 
 # ---------------------------------------------------------------- ساخت اکسل
-PRIMARY = "1F4E5F"      # سرمه‌ای مایل به سبز (نوار عنوان)
-HEADER_BLUE = "2E75B6"  # آبی سرستون‌ها
-LIGHT_BAND = "D9E1F2"   # نوار روشن زیر عنوان
-ZEBRA = "EAF1FA"        # سطرهای یکی‌درمیان
-FILL_OFF = "E7E6E6"     # روزهای کاملاً تعطیل
-FILL_HOLIDAY = "E2EFDA" # تعطیلات دارای دورکاری
-FILL_TOTAL = "FFD966"   # سطر جمع
-GRID = "B0B0B0"
+# قالب ساده و کم‌رنگ برای خروجی PDF روی یک صفحه A4
+PRIMARY = "404040"      # خاکستری تیره برای نوارهای اصلی
+HEADER_BLUE = "595959"  # خاکستری سرستون‌ها
+LIGHT_BAND = "F2F2F2"   # نوار روشن زیر عنوان
+ZEBRA = "FFFFFF"        # بدون رنگ‌بندی زیاد در ردیف‌های عادی
+FILL_OFF = "F2F2F2"     # روزهای کاملاً تعطیل
+FILL_HOLIDAY = "EAF4EA" # تعطیلات دارای دورکاری (سبز بسیار ملایم)
+FILL_TOTAL = "E7E6E6"   # سطر جمع
+GRID = "A6A6A6"
 
 THIN = Side(style="thin", color=GRID)
 MED = Side(style="medium", color=PRIMARY)
@@ -246,8 +247,9 @@ def style_range(ws, row: int, cols: str, font=None, fill=None, alignment=None, b
 
 
 def estimate_row_height(text: str) -> float:
-    lines = max(1, math.ceil(len(text) / 90))
-    return max(28.0, lines * 16.0)
+    # برای جا شدن کل فرم در یک صفحه A4، ارتفاع ردیف‌ها فشرده اما خوانا نگه داشته می‌شود.
+    lines = max(1, math.ceil(len(text) / 115))
+    return min(28.0, max(16.0, lines * 12.5))
 
 
 def build_workbook(days: list[dict], year: int, month: int, person_title: str,
@@ -259,18 +261,18 @@ def build_workbook(days: list[dict], year: int, month: int, person_title: str,
     ws.title = f"کارکرد {month_name}"
     ws.sheet_view.rightToLeft = True
 
-    widths = {"A": 7, "B": 12, "C": 10, "D": 10, "E": 10, "F": 95}
+    widths = {"A": 6, "B": 10, "C": 8.5, "D": 8.5, "E": 8.5, "F": 82}
     for col, w in widths.items():
         ws.column_dimensions[col].width = w
 
-    f_besmellah = Font(name=font_name, size=15, bold=True, color=PRIMARY)
-    f_band = Font(name=font_name, size=14, bold=True, color="FFFFFF")
-    f_sub = Font(name=font_name, size=12, color=PRIMARY)
-    f_sig = Font(name=font_name, size=12, bold=True, color="FFFFFF")
-    f_text = Font(name=font_name, size=12)
-    f_head = Font(name=font_name, size=12, bold=True, color="FFFFFF")
-    f_total = Font(name=font_name, size=13, bold=True, color=PRIMARY)
-    f_off = Font(name=font_name, size=12, color="595959")
+    f_besmellah = Font(name=font_name, size=12, bold=True, color=PRIMARY)
+    f_band = Font(name=font_name, size=11, bold=True, color="FFFFFF")
+    f_sub = Font(name=font_name, size=10, color=PRIMARY)
+    f_sig = Font(name=font_name, size=10, bold=True, color="FFFFFF")
+    f_text = Font(name=font_name, size=9)
+    f_head = Font(name=font_name, size=9, bold=True, color="FFFFFF")
+    f_total = Font(name=font_name, size=10, bold=True, color=PRIMARY)
+    f_off = Font(name=font_name, size=9, color="595959")
     center = Alignment(horizontal="center", vertical="center", wrap_text=True)
     desc_align = Alignment(horizontal="right", vertical="center", wrap_text=True)
 
@@ -286,21 +288,21 @@ def build_workbook(days: list[dict], year: int, month: int, person_title: str,
     ws.merge_cells("A1:F1")
     ws["A1"] = "بسمه تعالی"
     style_range(ws, 1, "A:F", font=f_besmellah, alignment=center)
-    ws.row_dimensions[1].height = 30
+    ws.row_dimensions[1].height = 18
 
     ws.merge_cells("A2:F2")
     ws["A2"] = "فرم ثبت شرح فعالیت روزانه نیروهای خرید خدمت مرکز فضای مجازی بسیج استان اصفهان"
     style_range(ws, 2, "A:F", font=f_band, fill=fill_primary, alignment=center)
-    ws.row_dimensions[2].height = 30
+    ws.row_dimensions[2].height = 20
 
     ws.merge_cells("A3:F3")
     ws["A3"] = (f"با احترام، بدینوسیله کارکرد {person_title} {person_name} "
                 f"در {month_name} ماه {fa(year)} بر اساس جدول ذیل حضورتان ارسال می‌گردد:")
     style_range(ws, 3, "A:F", font=f_sub, fill=fill_band, alignment=center)
-    ws.row_dimensions[3].height = 32
+    ws.row_dimensions[3].height = 20
 
-    style_range(ws, 4, "A:F", fill=fill_primary, alignment=center)
-    ws.row_dimensions[4].height = 6
+    style_range(ws, 4, "A:F", alignment=center)
+    ws.row_dimensions[4].height = 3
 
     # --- سرستون‌ها ---
     headers = ["ایام ماه", "روز هفته", "ساعت ورود", "ساعت خروج", "جمع ساعت",
@@ -312,7 +314,7 @@ def build_workbook(days: list[dict], year: int, month: int, person_title: str,
         cell.fill = fill_head
         cell.alignment = center
         cell.border = BORDER_ALL
-    ws.row_dimensions[5].height = 50
+    ws.row_dimensions[5].height = 28
 
     # --- روزهای ماه ---
     row = 6
@@ -367,7 +369,7 @@ def build_workbook(days: list[dict], year: int, month: int, person_title: str,
     ws.cell(row=row, column=1).value = f"جمع ساعات کارکرد در ماه: {fmt_long(total_minutes)}"
     style_range(ws, row, "A:F", font=f_total, fill=fill_total, alignment=center,
                 border=Border(left=MED, right=MED, top=MED, bottom=MED))
-    ws.row_dimensions[row].height = 30
+    ws.row_dimensions[row].height = 20
     row += 1
 
     if show_duty:
@@ -376,11 +378,11 @@ def build_workbook(days: list[dict], year: int, month: int, person_title: str,
         ws.cell(row=row, column=1).value = (
             f"موظفی ماه: {fmt_long(duty_minutes)} ـ اضافه‌کار: {fmt_long(extra)}")
         style_range(ws, row, "A:F", font=f_sub, alignment=center)
-        ws.row_dimensions[row].height = 24
+        ws.row_dimensions[row].height = 18
         row += 1
 
     row += 1  # یک سطر فاصله
-    ws.row_dimensions[row - 1].height = 10
+    ws.row_dimensions[row - 1].height = 4
 
     # --- بلوک امضا ---
     sigs = [("A:B", "امضاء فرد"),
@@ -392,15 +394,15 @@ def build_workbook(days: list[dict], year: int, month: int, person_title: str,
         ws.merge_cells(f"{a}{row}:{b}{row}")
         ws.cell(row=row, column=col0).value = text
         style_range(ws, row, cols, font=f_sig, fill=fill_primary, alignment=center)
-    ws.row_dimensions[row].height = 26
+    ws.row_dimensions[row].height = 18
     row += 1
     for cols, _ in sigs:
         a, b = cols.split(":")
         ws.merge_cells(f"{a}{row}:{b}{row + 1}")
         style_range(ws, row, cols, alignment=center)
         style_range(ws, row + 1, cols, alignment=center)
-    ws.row_dimensions[row].height = 38
-    ws.row_dimensions[row + 1].height = 38
+    ws.row_dimensions[row].height = 22
+    ws.row_dimensions[row + 1].height = 22
     last_row = row + 1
 
     # --- تنظیمات چاپ A4 ---
@@ -408,14 +410,17 @@ def build_workbook(days: list[dict], year: int, month: int, person_title: str,
     ws.page_setup.orientation = "landscape"
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
     ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 0
+    ws.page_setup.fitToHeight = 1
     ws.print_title_rows = "5:5"
     ws.print_area = f"A1:F{last_row}"
-    ws.page_margins.left = 0.35
-    ws.page_margins.right = 0.35
-    ws.page_margins.top = 0.4
-    ws.page_margins.bottom = 0.4
+    ws.page_margins.left = 0.18
+    ws.page_margins.right = 0.18
+    ws.page_margins.top = 0.20
+    ws.page_margins.bottom = 0.20
+    ws.page_margins.header = 0.10
+    ws.page_margins.footer = 0.10
     ws.print_options.horizontalCentered = True
+    ws.print_options.verticalCentered = True
     footer_text = f"کارکرد {month_name} {fa(year)} ـ صفحه &P از &N"
     ws.oddFooter.center.text = footer_text
     ws.oddFooter.center.size = 9
