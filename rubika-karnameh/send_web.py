@@ -253,7 +253,7 @@ def load_recipients_xlsx(path: Path, cfg: dict) -> dict:
     معتبری ندارد با فهرستِ خالی برمی‌گردد (یعنی آن ناحیه رد می‌شود)."""
     if not path.exists():
         # فایل نیست؛ قالب خالی بساز تا کاربر پرش کند (اگر ممکن باشد)
-        if make_recipients_xlsx(path):
+        if make_recipients_xlsx(path, cfg["roles"]):
             print(f"📘 فایل «{path.name}» پیدا نشد؛ یک نسخه‌ی خالی ساخته شد.")
             print("   برای ارسال واقعی، شماره‌ی مسئولان را داخلش بنویسید.")
         return {}
@@ -353,7 +353,7 @@ def ensure_test_image(cfg: dict) -> Path:
     return folder
 
 
-def make_recipients_xlsx(path: Path):
+def make_recipients_xlsx(path: Path, roles=None):
     """ساختن قالبِ خالیِ فایل مخاطبین (وقتی فایل پیدا نشد)"""
     try:
         from openpyxl import Workbook
@@ -366,15 +366,10 @@ def make_recipients_xlsx(path: Path):
         ws = wb.active
         ws.title = "ناحیه‌ها"
         ws.sheet_view.rightToLeft = True
-        headers = [
-            "نام ناحیه (مثل نام فایل تصویر)",
-            "نام در روبیکا — مسئول نسرا (مهم!)",
-            "شماره موبایل — مسئول نسرا",
-            "نام در روبیکا — فرمانده گردان (مهم!)",
-            "شماره موبایل — فرمانده گردان",
-            "نام در روبیکا — مسئول فضای مجازی (مهم!)",
-            "شماره موبایل — مسئول فضای مجازی",
-        ]
+        roles = list(roles) if roles else ["مسئول نسرا", "فرمانده گردان", "مسئول فضای مجازی"]
+        headers = ["نام ناحیه (مثل نام فایل تصویر)"]
+        for r in roles:
+            headers += [f"نام در روبیکا — {r} (مهم!)", f"شماره موبایل — {r}"]
         thin = Side(style="thin", color="BBBBBB")
         border = Border(left=thin, right=thin, top=thin, bottom=thin)
         for col, h in enumerate(headers, 1):
@@ -385,10 +380,10 @@ def make_recipients_xlsx(path: Path):
             c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         a2 = ws.cell(row=2, column=1, value="ناحیه تست")
         a2.font = Font(bold=True)
-        for col in range(1, 8):
+        for col in range(1, 2 + 2 * len(roles)):
             ws.cell(row=2, column=col).border = border
             ws.cell(row=2, column=col).fill = PatternFill("solid", fgColor="FFF2CC")
-        for i, w in enumerate([22, 26, 22, 26, 22, 26, 22], 1):
+        for i, w in enumerate([22] + [26, 22] * len(roles), 1):
             ws.column_dimensions[get_column_letter(i)].width = w
         ws.freeze_panes = "A2"
         ws.row_dimensions[1].height = 40
@@ -412,6 +407,11 @@ def make_recipients_xlsx(path: Path):
             ("", False, 11),
             ("🧪 برای تست: در ردیف «ناحیه تست»، نام و شماره‌ی کسی که گفتگو دارید", False, 11),
             ("    (یا خودتان) را بنویسید و فایل 2-تست-به-خودم.bat را اجرا کنید.", False, 11),
+            ("", False, 11),
+            ("🗂 دسته‌های ارسال: مسئولین فضای مجازی، فرمانده گردان خواهر،", False, 11),
+            ("    فرمانده گردان برادر، مسئول نسرا خواهر، مسئول نسرا برادر.", False, 11),
+            ("✔ هنگام اجرای فایل ارسال/لیست، از شما پرسیده می‌شود کدام دسته‌ها؛", False, 11),
+            ("    شماره‌ها را بنویسید (مثلاً 4 5) یا 0 برای همه‌ی دسته‌ها.", False, 11),
             ("", False, 11),
             ("⚠️ قبل از اجرای ارسال، این فایل را ذخیره کنید و ببندید.", False, 11),
         ]
@@ -454,7 +454,54 @@ def load_overrides(path: Path) -> dict:
     return res
 
 
-def build_tasks(cfg: dict, only=None) -> dict:
+def parse_role_choice(text, roles):
+    """تبدیل ورودی کاربر به فهرست دسته‌های انتخابی.
+    «0» یا «همه» یا خالی ← همه‌ی دسته‌ها؛ شماره‌ها جدا با فاصله/ویرگول.
+    ورودی نامعتبر ← None"""
+    t = (text or "").strip()
+    if not t or t == "0" or t in ("همه", "all", "*"):
+        return list(roles)
+    sel = []
+    for tok in [x for x in re.split(r"[,\s،]+", t) if x]:
+        d = digits_only(tok)
+        if not d.isdigit():
+            return None
+        i = int(d)
+        if i == 0:
+            return list(roles)
+        if i < 1 or i > len(roles):
+            return None
+        if roles[i - 1] not in sel:
+            sel.append(roles[i - 1])
+    return sel or None
+
+
+def choose_roles(cfg):
+    """منوی تعاملی انتخاب دسته‌ها در پنجره‌ی سیاه؛ خروجی فهرست دسته‌های انتخابی."""
+    roles = list(cfg.get("roles") or [])
+    if not roles:
+        return roles
+    print()
+    print("📋 کارنامه برای کدام دسته(ها) ارسال/پیش‌نمایش شود؟")
+    for i, r in enumerate(roles, 1):
+        print(f"   [{i}] {r}")
+    print("   [0] همه‌ی دسته‌ها")
+    for _ in range(3):
+        try:
+            text = input("   شماره‌ی دسته‌ها را بنویسید (مثلاً: 4 5 — یا 0 برای همه) و Enter بزنید: ")
+        except EOFError:
+            print("   ⚠️ ورودی گرفته نشد — همه‌ی دسته‌ها در نظر گرفته می‌شود")
+            return roles
+        sel = parse_role_choice(text, roles)
+        if sel:
+            return sel
+        print("   ⚠️ ورودی معتبر نیست؛ فقط شماره‌ها را با فاصله بنویسید (مثل: 1 4 5)")
+    print("   ⚠️ بعد از ۳ تلاش ناموفق، همه‌ی دسته‌ها در نظر گرفته می‌شود")
+    return roles
+
+
+def build_tasks(cfg: dict, only=None, sel_roles=None) -> dict:
+    sel = list(sel_roles) if sel_roles else list(cfg["roles"])
     folder = Path(cfg["images_dir"])
     if not folder.is_absolute():
         folder = BASE / folder
@@ -480,7 +527,7 @@ def build_tasks(cfg: dict, only=None) -> dict:
             city, names = f.stem, list(custom)
         else:
             city = city_from_stem(f.stem, cfg["filename_prefix"])
-            names = [f"{role} {city}".strip() for role in cfg["roles"]]
+            names = [f"{role} {city}".strip() for role in sel]
         if only:
             wanted = [flat(o) for o in only]
             c = flat(city)
@@ -492,6 +539,11 @@ def build_tasks(cfg: dict, only=None) -> dict:
             xc = xlsx_lookup.get(flat(city))
             if xc is not None:
                 # اکسل اولویت دارد: ارسال مستقیم با شماره تلفن
+                if sel_roles is not None and xc:
+                    kept = [c for c in xc if c.get("role") in sel]
+                    if not kept:
+                        print(f"   ↷ ناحیه «{city}» برای دسته‌های انتخابی مخاطبی ندارد — رد می‌شود")
+                    xc = kept
                 g["contacts"] = xc
                 if not xc:
                     print(f"   ⚠️ ناحیه «{city}» در اکسل هست ولی شماره‌ای برایش ثبت نشده — رد می‌شود")
@@ -531,7 +583,7 @@ def print_dry_run(cfg: dict, tasks: dict):
     print("📋 حالت آزمایشی (dry-run) — هیچ چیزی ارسال نمی‌شود")
     print(f"   پوشه تصاویر : {Path(cfg['images_dir']) if Path(cfg['images_dir']).is_absolute() else BASE / cfg['images_dir']}")
     print(f"   ماه (کپشن)  : {cfg.get('month', '')}")
-    print(f"   نقش‌ها       : {' | '.join(cfg['roles'])}")
+    print(f"   دسته‌ها      : {' | '.join(cfg.get('_sel_roles') or cfg['roles'])}")
     print(f"   تعداد ناحیه‌ها: {len(tasks)} | تصاویر: {total_images} | پیام‌های ارسالی: {total_msgs}")
     print("   " + "─" * 70)
     for i, (city, g) in enumerate(tasks.items(), 1):
@@ -1527,6 +1579,8 @@ def main():
     ap.add_argument("--month", metavar="نام‌ماه", help="ماه را برای کپشن بازنویسی کند")
     ap.add_argument("--self-test", action="store_true",
                     help="حالت تست: فقط یک پیام آزمایشی برای «ناحیه تست» می‌فرستد")
+    ap.add_argument("--pick-roles", action="store_true",
+                    help="منوی انتخاب دسته‌ها (مسئولین فضای مجازی، فرمانده/نسرا خواهر و برادر)")
     ap.add_argument("--headless", action="store_true", help="بدون پنجره‌ی مرورگر (پیشنهاد نمی‌شود)")
     args = ap.parse_args()
 
@@ -1551,7 +1605,11 @@ def main():
     S = cfg["selectors"]
     setup_logging("karnameh_send.log")
 
-    tasks = build_tasks(cfg, only=args.only)
+    sel_roles = None
+    if args.pick_roles:
+        sel_roles = choose_roles(cfg)
+        cfg["_sel_roles"] = sel_roles
+    tasks = build_tasks(cfg, only=args.only, sel_roles=sel_roles)
     if not tasks:
         if args.self_test:
             sys.exit("هیچ ناحیه‌ای مطابق فیلتر انتخابی پیدا نشد.\n"
@@ -1561,12 +1619,25 @@ def main():
         sys.exit("هیچ ناحیه‌ای مطابق فیلتر انتخابی پیدا نشد.")
 
     if args.self_test:
-        g = next(iter(tasks.values()))
+        # گیرنده‌ی تست همیشه با نقشِ تست (پیش‌فرض: مسئول نسرا) جستجو می‌شود تا
+        # گفتگوی «مسئول نسرا ناحیه تست» کاربر، با دسته‌های جدید هم پیدا شود
+        city = next(iter(tasks))
+        g = tasks[city]
+        tr = (cfg.get("test_role") or "").strip() or "مسئول نسرا"
+        old_c = g["contacts"][0] if g["contacts"] else {}
+        phone = old_c.get("phone")
+        pname = old_c.get("name")
+        search_name = f"{tr} {city}"
+        g["contacts"] = [{
+            "key": phone or search_name, "phone": phone, "name": pname, "role": tr,
+            "label": search_name + (f" — {pname}" if pname else ""),
+            "search_name": search_name,
+        }]
         c = g["contacts"][0]
         if c["phone"]:
             print(f"   📱 گیرنده‌ی تست: شماره {c['phone']}")
         else:
-            print(f"   ⚠️ در اکسل شماره‌ای برای «ناحیه تست» نیست؛ با نام «{c.get('search_name') or c['label']}» جستجو می‌شود")
+            print(f"   ⚠️ در اکسل شماره‌ای برای «ناحیه تست» نیست؛ با نام «{c['search_name']}» جستجو می‌شود")
             print("      💡 بهتر است شماره‌ی خودتان را در فایل مخاطبین.xlsx وارد کنید")
         print()
 

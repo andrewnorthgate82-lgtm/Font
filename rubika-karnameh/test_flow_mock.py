@@ -546,6 +546,64 @@ def test_recipients_xlsx_autocreate():
     print("✅ load_recipients_xlsx: اگر فایل نباشد، قالب خالی خودکار ساخته می‌شود")
 
 
+ROLES5 = ["مسئولین فضای مجازی", "فرمانده گردان خواهر", "فرمانده گردان برادر",
+          "مسئول نسرا خواهر", "مسئول نسرا برادر"]
+
+
+def test_parse_role_choice():
+    assert sw.parse_role_choice("0", ROLES5) == ROLES5
+    assert sw.parse_role_choice("", ROLES5) == ROLES5
+    assert sw.parse_role_choice("همه", ROLES5) == ROLES5
+    assert sw.parse_role_choice("4 5", ROLES5) == ROLES5[3:]
+    assert sw.parse_role_choice("۲،۴", ROLES5) == [ROLES5[1], ROLES5[3]]
+    assert sw.parse_role_choice("1", ROLES5) == ROLES5[:1]
+    assert sw.parse_role_choice("9", ROLES5) is None
+    assert sw.parse_role_choice("abc", ROLES5) is None
+    print("✅ parse_role_choice: ورودی منوی دسته‌ها درست خوانده می‌شود (ارقام فارسی/همه/نامعتبر)")
+
+
+def test_make_recipients_xlsx_five_roles():
+    tmp = Path(tempfile.mkdtemp(prefix="karnameh_xlsx5_"))
+    path = tmp / "مخاطبین.xlsx"
+    assert sw.make_recipients_xlsx(path, ROLES5)
+    from openpyxl import load_workbook
+    ws = load_workbook(path).active
+    hs = [c.value for c in ws[1]]
+    assert len(hs) == 1 + 2 * len(ROLES5)
+    assert "نام در روبیکا — فرمانده گردان خواهر (مهم!)" in hs
+    cfg = {"roles": ROLES5}
+    data = sw.load_recipients_xlsx(path, cfg)
+    assert data == {"ناحیه تست": []}
+    print("✅ make_recipients_xlsx: قالب ۵ دسته (۱۱ ستون) ساخته و خوانده می‌شود")
+
+
+def test_build_tasks_role_selection():
+    from openpyxl import Workbook
+    tmp = Path(tempfile.mkdtemp(prefix="karnameh_sel_"))
+    img_dir = tmp / "کارنامه‌ها"; img_dir.mkdir()
+    (img_dir / "کارنامه_کاشان.png").write_bytes(b"img")
+    wb = Workbook(); ws = wb.active
+    ws.append(["نام ناحیه"] + [x for r in ROLES5 for x in (f"نام {r}", f"شماره {r}")])
+    row = ["کاشان"] + [""] * 10
+    row[2 + 1 * 2] = "09120000001"  # فرمانده گردان خواهر
+    row[2 + 3 * 2] = "09120000003"  # مسئول نسرا خواهر
+    ws.append(row)
+    xlsx = tmp / "m.xlsx"; wb.save(xlsx)
+    cfg = {"images_dir": str(img_dir), "filename_prefix": "کارنامه_",
+           "roles": ROLES5,
+           "image_extensions": [".png"],
+           "overrides_csv": "overrides.csv", "recipients_xlsx": str(xlsx)}
+    tasks = sw.build_tasks(cfg)
+    assert len(tasks["کاشان"]["contacts"]) == 2
+    tasks_sel = sw.build_tasks(cfg, sel_roles=[ROLES5[3]])
+    cs = tasks_sel["کاشان"]["contacts"]
+    assert len(cs) == 1 and cs[0]["phone"] == "09120000003" and cs[0]["role"] == ROLES5[3]
+    # ناحیه‌ای که دسته‌ی انتخابی‌اش خالی است، رد می‌شود
+    tasks_sel2 = sw.build_tasks(cfg, sel_roles=[ROLES5[4]])
+    assert "کاشان" not in tasks_sel2
+    print("✅ build_tasks: فقط دسته‌های انتخابی ارسال می‌شوند؛ ناحیه‌ی بدون آن دسته رد می‌شود")
+
+
 if __name__ == "__main__":
     test_normalize_phone()
     test_make_caption_no_double_district()
@@ -563,6 +621,9 @@ if __name__ == "__main__":
     test_send_image_no_evidence_no_text_only()
     test_send_image_attach_modal()
     test_send_image_modal_button_stuck_no_text_only()
+    test_parse_role_choice()
+    test_make_recipients_xlsx_five_roles()
+    test_build_tasks_role_selection()
     print("\n🎉 همه سناریوهای شبیه‌سازی‌شده پاس شدند!")
     print()
     print("=" * 60)

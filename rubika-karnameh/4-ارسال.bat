@@ -13,7 +13,10 @@ echo   Tip: run the List file first to preview everything.
 echo   Time: about 25 to 40 minutes - do not close the browser!
 echo ==========================================================
 echo.
+echo   Next you choose the category (daste):
+echo   enter numbers (example: 4 5) or 0 for all, then Enter.
+echo.
 pause
-python send_web.py
+python send_web.py --pick-roles
 echo.
 pause
