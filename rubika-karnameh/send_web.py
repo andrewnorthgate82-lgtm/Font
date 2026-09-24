@@ -727,19 +727,19 @@ def open_chat(page, contact, S, cfg) -> tuple:
         return False, "مخاطب در نتیجه‌های جستجو پیدا نشد (نام ذخیره‌شده در دفترچه تلفن را چک کنید)"
     print("   ✅ گفتگو باز شد")
 
-    # بررسی ایمنی: عنوان گفتگو باید شامل نام مخاطب باشد
+    # بررسی ایمنی: عنوان گفتگو باید «دقیقاً» همان نام جستجوشده باشد
     if cfg.get("verify_chat_title", True):
-        ok, seen_title = verify_chat_title(page, contact, S)
-        if ok is False:
-            if cfg.get("_self_test"):
-                # در حالت تست، مخاطبِ شماره‌ی خودِ کاربر است؛ روبیکا ممکن است عنوان را
-                # با نام پروفایل نشان دهد نه نام دفترچه تلفن — ادامه می‌دهیم.
-                print(f"   ⚠️ عنوان گفتگو «{seen_title}» با نام مخاطب نمی‌خواند — "
+        _, seen_title = verify_chat_title(page, contact, S)
+        if seen_title:
+            if flat(seen_title) == flat(contact):
+                print(f"   ✅ عنوان گفتگو درست است: «{seen_title}»")
+            elif cfg.get("_self_test"):
+                print(f"   ⚠️ عنوان گفتگو «{seen_title}» دقیقاً «{contact}» نیست — "
                       "چون حالت تست است، ادامه می‌دهیم")
             else:
-                return False, (f"عنوان گفتگوی بازشده «{seen_title}» با نام مخاطب "
-                               f"«{contact}» نمی‌خواند (برای اطمینان ارسال نشد)")
-        elif ok is None:
+                return False, (f"عنوان گفتگوی بازشده «{seen_title}» دقیقاً «{contact}» نیست "
+                               "(برای اطمینان از ارسال به فرد درست، ارسال نشد)")
+        else:
             print("   ℹ️ عنوان گفتگو پیدا نشد؛ بدون بررسی عنوان ادامه می‌دهیم")
     return True, None
 
@@ -788,7 +788,13 @@ def dump_search_dom(page, term, fname="dom_search_number.json"):
             """() => {
                 const out = {url: location.href,
                              anyText: (document.body.innerText||'').replace(/\\s+/g,' ').slice(0,600),
-                             items: []};
+                             items: [], buttons: []};
+                for (const el of Array.from(document.querySelectorAll('button, [role="button"], [aria-label]')).slice(0,25)){
+                    const lbl = el.getAttribute('aria-label') || el.getAttribute('title')
+                                || (el.innerText||'').replace(/\\s+/g,' ').trim();
+                    if (lbl) out.buttons.push(lbl.slice(0,40));
+                    if (out.buttons.length>=15) break;
+                }
                 const sels = ['[class*="result" i]','[role="option"]','li',
                               '[class*="item" i]','[class*="chat" i]','[class*="list" i]'];
                 const seen = new Set();
@@ -823,6 +829,9 @@ def print_page_snapshot(data, max_items=6):
         print(f"   📄 متنِ صفحه در همان لحظه: «{txt[:280]}»")
     for it in (data.get("items") or [])[:max_items]:
         print(f"      • ({it['sel']}) «{it['text'][:60]}»")
+    btns = [b for b in (data.get("buttons") or []) if b]
+    if btns:
+        print(f"   🔘 دکمه‌های قابل‌دیدن: {' | '.join(btns[:8])}")
 
 
 def open_chat_by_phone(page, phone, S, self_test=False) -> tuple:
@@ -1197,17 +1206,24 @@ def run_sending(cfg, S, tasks, args):
                     seq += 1
                     how = contact["phone"] if contact["phone"] else "جستجو با نام"
                     print(f"   [{seq}] {contact['label']} — {how}")
+                    # زنجیره‌ی جستجو: نامِ واقعی (اکسل) → شماره → نامِ الگو
+                    chain = []
+                    if contact.get("name"):
+                        chain.append(("نام", contact["name"]))
                     if contact["phone"]:
-                        ok, err = open_chat_by_phone(page, contact["phone"], S,
-                                                     self_test=bool(cfg.get("_self_test")))
-                        if not ok and cfg.get("_self_test"):
-                            # در حالت تست: روبیکا شماره‌ی خودِ کاربر را با جستجوی شماره
-                            # نشان نمی‌دهد؛ با نامِ مخاطبِ ذخیره‌شده در گوشی امتحان می‌کنیم
-                            sname = contact.get("search_name") or contact["label"]
-                            print(f"   ⤵ شماره پیدا نشد؛ تلاش با نام مخاطبِ «{sname}» ...")
-                            ok, err = open_chat(page, sname, S, cfg)
-                    else:
-                        ok, err = open_chat(page, contact.get("search_name") or contact["label"], S, cfg)
+                        chain.append(("شماره", contact["phone"]))
+                    chain.append(("الگو", contact.get("search_name") or contact["label"]))
+                    ok = False
+                    for i, (kind, term) in enumerate(chain):
+                        if i > 0:
+                            print(f"   ⤵ تلاش بعدی با {kind} «{term}» ...")
+                        if kind == "شماره":
+                            ok, err = open_chat_by_phone(page, term, S,
+                                                         self_test=bool(cfg.get("_self_test")))
+                        else:
+                            ok, err = open_chat(page, term, S, cfg)
+                        if ok:
+                            break
                     if not ok:
                         stats["fail"] += 1
                         failures.append({"contact": contact["label"], "stage": "باز کردن گفتگو", "error": err})

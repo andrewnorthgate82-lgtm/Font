@@ -327,7 +327,7 @@ def test_verify_chat_title_mismatch():
     """اگر هدر چت با نام مخاطب نخواند، نباید اجازه‌ی ارسال داده شود"""
     page = MockPage({"مسئول نسرا کاشان": "علی محمدی — نام نمایشیِ متفاوت"})
     ok, err = sw.open_chat(page, "مسئول نسرا کاشان", S, CFG)
-    assert not ok and "نمی‌خواند" in err, (ok, err)
+    assert not ok and "نیست" in err, (ok, err)
     print("✅ verify_chat_title: ناهمخوانی عنوان گفتگو ← جلوگیری از ارسال اشتباه")
 
 
