@@ -43,7 +43,7 @@ def main() -> int:
     send_when("سقف کاراکتر", "\r")
     send_when("پیوست لینک", "\r")                   # خیر
     send_when("گام ۶", "\r")                       # Word: بله
-    send_when("فایل Excel", "\r")                  # Excel: بله
+    send_when("فایل Excel", "y\r")                 # Excel: بله
     send_when("پوشه‌ی خروجی", "\r")                 # پیش‌فرض
     send_when("مسیر لوگو", "\r")                    # بدون لوگو
     send_when("گزارش آماده شد", "\r")               # بستن مرورگر (بله) → ادامه

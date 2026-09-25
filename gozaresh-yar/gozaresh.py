@@ -1556,88 +1556,173 @@ def write_html(path: str, md: str, title: str) -> None:
         f.write(markdown_to_html(md, title))
 
 
-def write_docx(path: str, md: str, title: str, tables: List[Tuple[List[str], List[List[Any]]]],
+def _docx_set_rtl_paragraph(p) -> None:
+    """راست‌به‌چپ کردن یک پاراگراف Word."""
+    try:
+        from docx.oxml.ns import qn
+        pPr = p._p.get_or_add_pPr()
+        bidi = pPr.makeelement(qn("w:bidi"), {})
+        pPr.append(bidi)
+    except Exception:
+        pass
+
+
+def _docx_add_page_number_footer(doc, text_right: str) -> None:
+    """درج پاصفحه با شماره‌ی صفحه (فیلد PAGE)."""
+    try:
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
+        for section in doc.sections:
+            footer = section.footer
+            para = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
+            para.text = ""
+            run = para.add_run(text_right + "    |    صفحه ")
+            fld = OxmlElement("w:fldSimple")
+            fld.set(qn("w:instr"), "PAGE")
+            run._r.addnext(fld)
+            for r in para.runs:
+                r.font.size = _docx_pt(9)
+    except Exception:
+        pass
+
+
+def _docx_pt(value: int):
+    from docx.shared import Pt
+    return Pt(value)
+
+
+def write_docx(path: str, md: str, title: str,
+               tables: List[Tuple[str, List[str], List[List[Any]]]],
                font_path: Optional[str] = None, logo_path: Optional[str] = None) -> bool:
-    """تولید فایل Word با python-docx (در صورت نصب بودن)."""
+    """تولید فایل Word (docx) راست‌به‌چپ با عنوان، متن گزارش و پیوست جدول‌ها."""
     try:
         from docx import Document
-        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
         from docx.oxml.ns import qn
-        from docx.shared import Pt, RGBColor
+        from docx.shared import Cm, Pt, RGBColor
     except ImportError:
         return False
 
+    FONT = "IRANSans"
+    DARK = RGBColor(0x1B, 0x2A, 0x4A)
+    GOLD = RGBColor(0xC8, 0xA2, 0x4A)
+
     doc = Document()
-    # راست‌به‌چپ کردن کل سند
+
+    # --- تنظیم کلی: راست‌به‌چپ، فونت فارسی، اندازه‌ی صفحه
+    style = doc.styles["Normal"]
+    style.font.name = FONT
+    style.font.size = Pt(12)
+    style.paragraph_format.line_spacing = 1.15
+    try:
+        style.element.rPr.rFonts.set(qn("w:cs"), FONT)
+        style.element.rPr.rFonts.set(qn("w:eastAsia"), FONT)
+    except Exception:
+        pass
     for section in doc.sections:
         try:
             section._sectPr.xpath("./w:bidi")[0].set(qn("w:val"), "1")
         except Exception:
             pass
+        section.top_margin = Cm(2.2)
+        section.bottom_margin = Cm(2.0)
+        section.left_margin = Cm(2.2)
+        section.right_margin = Cm(2.2)
 
-    style = doc.styles["Normal"]
-    style.font.name = "IRANSans"
-    style.font.size = Pt(12)
-    try:
-        style.element.rPr.rFonts.set(qn("w:cs"), "IRANSans")
-        style.element.rPr.rFonts.set(qn("w:eastAsia"), "IRANSans")
-    except Exception:
-        pass
+    def make_para(text: str, size: int = 12, bold: bool = False, center: bool = False,
+                  color: Optional[Any] = None, space_after: int = 6, bullet: bool = False):
+        paragraph = doc.add_paragraph(style="List Bullet" if bullet else None)
+        run = paragraph.add_run(text)
+        run.font.name = FONT
+        run.font.size = Pt(size)
+        run.font.bold = bold
+        if color is not None:
+            run.font.color.rgb = color
+        try:
+            run._element.rPr.rFonts.set(qn("w:cs"), FONT)
+            run._element.rPr.rFonts.set(qn("w:rtl"), "1")
+        except Exception:
+            pass
+        paragraph.alignment = (WD_ALIGN_PARAGRAPH.CENTER if center else WD_ALIGN_PARAGRAPH.RIGHT)
+        paragraph.paragraph_format.space_after = Pt(space_after)
+        _docx_set_rtl_paragraph(paragraph)
+        return paragraph
 
+    # --- سرصفحه: لوگو (اختیاری) و عنوان
     if logo_path and os.path.exists(logo_path):
         try:
-            doc.add_picture(logo_path, width=Pt(180))
+            doc.add_picture(logo_path, width=Cm(4))
+            doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
         except Exception:
             pass
 
+    doc.add_paragraph().paragraph_format.space_after = Pt(2)
+    make_para(title, size=17, bold=True, center=True, color=DARK, space_after=2)
+    make_para("گزارش رسمی — تهیه‌شده با گزارش‌یار هوشمند سازمانی", size=10,
+              center=True, color=GOLD, space_after=14)
+
+    # --- بدنه‌ی گزارش از متن Markdown
     for raw in md.split("\n"):
         line = raw.rstrip()
         if not line.strip():
             continue
         if line.startswith("# "):
-            p = doc.add_heading(line[2:], level=0)
-        elif line.startswith("## "):
-            p = doc.add_heading(line[3:], level=1)
+            continue  # عنوان در بالای سند درج شد
+        text = re.sub(r"\*\*(.+?)\*\*", r"\1", line)
+        if line.startswith("## "):
+            make_para(text[3:], size=14, bold=True, color=DARK, space_after=6)
         elif line.startswith(("• ", "- ")) or line.startswith("  - "):
-            indent = 1 if line.startswith("  - ") else 0
-            text = re.sub(r"^(\s*[-•]\s*)", "", line)
-            p = doc.add_paragraph(re.sub(r"\*\*(.+?)\*\*", r"\1", text), style="List Bullet")
+            indent = line.startswith("  - ")
+            body = re.sub(r"^(\s*[-•]\s*)", "", text)
+            paragraph = make_para(body, size=11 if indent else 12, bullet=True,
+                                  space_after=3)
             if indent:
-                p.paragraph_format.left_indent = Pt(28)
+                paragraph.paragraph_format.left_indent = Pt(22)
         else:
-            p = doc.add_paragraph(re.sub(r"\*\*(.+?)\*\*", r"\1", line))
-        try:
-            p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            for run in p.runs:
-                run.font.name = "IRANSans"
-                run.font.size = Pt(12)
-                run._element.rPr.rFonts.set(qn("w:cs"), "IRANSans")
-                if p.style.name.startswith("Heading"):
-                    run.font.color.rgb = RGBColor(0x1B, 0x2A, 0x4A)
-        except Exception:
-            pass
+            make_para(text, size=12, space_after=6)
 
-    for headers, rows in tables:
-        if not rows:
-            continue
-        t = doc.add_table(rows=1, cols=len(headers))
-        t.style = "Light Grid Accent 1"
-        for i, h in enumerate(headers):
-            cell = t.rows[0].cells[i]
-            cell.text = str(h)
-        for row in rows[:60]:
-            cells = t.add_row().cells
-            for i, v in enumerate(row):
-                cells[i].text = persian_number(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else str(v)
-        # راست‌به‌چپ جدول
-        try:
-            tblPr = t._tbl.tblPr
-            bidi = tblPr.makeelement(qn("w:bidiVisual"), {})
-            tblPr.append(bidi)
-        except Exception:
-            pass
-        doc.add_paragraph("")
+    # --- پیوست: جدول‌های آماری
+    if tables:
+        doc.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
+        make_para("پیوست: جدول‌های آماری", size=15, bold=True, color=DARK, space_after=10)
+        for caption, headers, rows in tables:
+            if not rows:
+                continue
+            make_para(caption, size=13, bold=True, color=DARK, space_after=4)
+            table = doc.add_table(rows=1, cols=len(headers))
+            try:
+                table.style = "Table Grid"
+            except Exception:
+                pass
+            header_cells = table.rows[0].cells
+            for i, h in enumerate(headers):
+                header_cells[i].text = str(h)
+                for para in header_cells[i].paragraphs:
+                    for run in para.runs:
+                        run.font.bold = True
+                        run.font.size = Pt(10)
+                        run.font.name = FONT
+            for row in rows[:80]:
+                cells = table.add_row().cells
+                for i, v in enumerate(row):
+                    txt = (persian_number(v) if isinstance(v, (int, float))
+                           and not isinstance(v, bool) else str(v))
+                    if isinstance(v, float) and 0 <= v <= 3 and "٪" in str(headers[i]):
+                        txt = persian_percent(v)
+                    cells[i].text = txt
+                    for para in cells[i].paragraphs:
+                        for run in para.runs:
+                            run.font.size = Pt(10)
+                            run.font.name = FONT
+            try:
+                tblPr = table._tbl.tblPr
+                bidi = tblPr.makeelement(qn("w:bidiVisual"), {})
+                tblPr.append(bidi)
+            except Exception:
+                pass
+            doc.add_paragraph().paragraph_format.space_after = Pt(8)
 
+    _docx_add_page_number_footer(doc, title)
     doc.save(path)
     return True
 
@@ -2096,7 +2181,7 @@ def render_outputs(outdir: str, dataset: Dataset, records: Sequence[Record], rep
                    title: str, categories: Dict[str, Dict[str, Any]], include: Sequence[str],
                    exclude: Sequence[str], months: Sequence[str], want_docx: bool,
                    want_xlsx: bool, logo_path: Optional[str], font_path: Optional[str],
-                   log) -> List[str]:
+                   log, counties: Sequence[str] = ()) -> List[str]:
     ensure_dir(outdir)
     md = report["markdown"]
     stamp = _dt.datetime.now().strftime("%Y%m%d-%H%M")
@@ -2108,9 +2193,25 @@ def render_outputs(outdir: str, dataset: Dataset, records: Sequence[Record], rep
     write_html(base + ".html", md, title)
     made.append(base + ".html")
 
-    tables = [table_county(categories, include, exclude, records),
-              table_sheets(records),
-              table_months(dataset, records, months)]
+    county_headers, county_rows = table_county(categories, include, exclude, records)
+    sheet_headers, sheet_rows = table_sheets(records)
+    month_headers, month_rows = table_months(dataset, records, months)
+    comp_headers, comp_rows = table_compliance(dataset, records, months, counties)
+    gap_rows = []
+    have = {r.county for r in records}
+    for mk in (months or dataset.months):
+        missing = [c for c in EXPECTED_COUNTIES if c not in
+                   {r.county for r in records if r.month_key == mk}]
+        gap_rows.append([dataset.month_label(mk),
+                         "، ".join(missing) if missing else "—"])
+    tables: List[Tuple[str, List[str], List[List[Any]]]] = [
+        ("جدول ۱ — خلاصه‌ی عملکرد نواحی", county_headers, county_rows),
+        ("جدول ۲ — سهم انواع فعالیت", sheet_headers, sheet_rows),
+        ("جدول ۳ — مقایسه‌ی دوره‌ها", month_headers, month_rows),
+    ]
+    if comp_rows:
+        tables.append(("جدول ۴ — درصد تحقق نسبت به حد انتظار", comp_headers, comp_rows))
+    tables.append(("جدول ۵ — نواحی بدون گزارش در هر دوره", ["دوره", "نواحی بدون گزارش"], gap_rows))
 
     if want_docx:
         if write_docx(base + ".docx", md, title, tables, font_path, logo_path):
@@ -2256,8 +2357,10 @@ def run_interactive(ui: UI) -> int:
 
     # ۶) خروجی
     ui.head("گام ۶ از ۶ — فایل‌های خروجی")
-    want_word = ui.ask_yes_no("فایل Word (docx) ساخته شود؟", default=True)
-    want_excel = ui.ask_yes_no("فایل Excel (xlsx) ساخته شود؟", default=True)
+    ui.info("قالب پیشنهادی و اصلی: فایل Word. (Markdown و HTML همیشه ساخته می‌شوند.)")
+    want_word = ui.ask_yes_no("فایل Word (docx) ساخته شود؟ (خروجی اصلی)", default=True)
+    want_excel = ui.ask_yes_no("فایل Excel (xlsx) هم ساخته شود؟ (جدول‌ها و کنترل کیفیت)",
+                               default=False)
     outdir_custom = ui.ask_text("پوشه‌ی خروجی — خالی = پیش‌فرض", outdir)
     logo = ui.ask_text("مسیر لوگو (png/jpg) — خالی = بدون لوگو", "")
     font_path = find_persian_font([root, here, os.path.dirname(root)])
@@ -2279,7 +2382,8 @@ def run_interactive(ui: UI) -> int:
 
     made = render_outputs(outdir_custom, ds, records, report, title, DEFAULT_CATEGORIES,
                           include, exclude, months, want_word, want_excel,
-                          logo if logo and os.path.exists(logo) else None, font_path, log)
+                          logo if logo and os.path.exists(logo) else None, font_path, log,
+                          counties)
 
     ui.head("گزارش آماده شد")
     ui.ok(f"{persian_number(len(records))} اقدام غیرروتین در گزارش آمده است.")
@@ -2357,7 +2461,7 @@ def run_batch(args) -> int:
                           details=bool(args.details))
     made = render_outputs(outdir, ds, records, report, title, DEFAULT_CATEGORIES, include,
                           exclude, months, not args.no_docx, not args.no_xlsx,
-                          args.logo, find_persian_font([root, here]), log)
+                          args.logo, find_persian_font([root, here]), log, counties)
     log(f"گزارش ساخته شد: {persian_number(len(records))} اقدام، "
         f"{persian_number(report['word_count'])} واژه", level="ok")
     for m in made:
