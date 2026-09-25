@@ -969,13 +969,20 @@ def discover_inputs(paths: Sequence[str]
                                  f"و به‌عنوان داده‌ی فعالیت خوانده نمی‌شود.")
                 else:
                     add(_period_name(os.path.dirname(p)) or "دوره ۱", p)
+            elif p.lower().endswith(".json"):
+                json_files.append(p)      # خودِ فایل خروجی تلگرام داده شده است
+            elif os.path.basename(p).lower().endswith((".html", ".txt", ".csv")):
+                warns.append(f"این فایل «خروجی JSON تلگرام» نیست؛ در تلگرام قالب "
+                             f"JSON را انتخاب کنید: {os.path.basename(p)}")
             else:
-                warns.append(f"فایل پشتیبانی‌نشده (فقط xlsx/xlsm): {p}")
+                warns.append(f"فایل پشتیبانی‌نشده (فقط xlsx/xlsm و خروجی JSON تلگرام): {p}")
             continue
 
         # پوشه: ابتدا فایل‌های اکسل خودِ پوشه
         direct = sorted([os.path.join(p, f) for f in os.listdir(p)
                          if f.lower().endswith((".xlsx", ".xlsm")) and not f.startswith("~$")])
+        json_files += [os.path.join(p, f) for f in sorted(os.listdir(p))
+                       if f.lower().endswith(".json") and not f.startswith("~$")]
         subdirs = sorted([os.path.join(p, d) for d in os.listdir(p)
                           if os.path.isdir(os.path.join(p, d)) and not d.startswith(".")])
 

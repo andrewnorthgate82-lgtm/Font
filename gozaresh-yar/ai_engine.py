@@ -432,6 +432,23 @@ class AIEngine:
                           "(اصل بی‌تغییر ماند).")
         if "##" not in polished:
             return text, "ویرایش هوش مصنوعی ساختار بخش‌ها را از دست داده بود؛ رد شد."
+
+        def headings(t: str) -> list:
+            return [re.sub(r"\s+", " ", ln.strip()) for ln in t.split("\n")
+                    if ln.strip().startswith("#")]
+
+        def body_lines(t: str) -> int:
+            return len([ln for ln in t.split("\n") if ln.strip()])
+
+        if headings(text) != headings(polished):
+            return text, ("ویرایش هوش مصنوعی عنوان بخش‌ها را تغییر داده بود؛ رد شد "
+                          "(ساختار گزارش بی‌تغییر ماند).")
+        if body_lines(polished) < body_lines(text) * 0.85:
+            return text, ("ویرایش هوش مصنوعی سطرهای گزارش را به‌هم ریخته بود؛ رد شد "
+                          "(ساختار گزارش بی‌تغییر ماند).")
+        if text.count("• ") != polished.count("• "):
+            return text, ("ویرایش هوش مصنوعی فهرست اقدامات را کم/زیاد کرده بود؛ رد شد "
+                          "(ساختار گزارش بی‌تغییر ماند).")
         if max_words and len(polished.split()) > max_words:
             return text, "ویرایش هوش مصنوعی از سقف واژه گذشت؛ رد شد."
         return polished, ""

@@ -8,6 +8,15 @@ cd /d "%~dp0"
 
 set PY=python
 where py >nul 2>nul && set PY=py
+where %PY% >nul 2>nul || (
+  echo.
+  echo   [!] پایتون روی این رایانه نصب نیست.
+  echo       لطفاً از سایت python.org نسخه‌ی Python 3 را نصب کنید و
+  echo       هنگام نصب، تیک "Add python.exe to PATH" را بزنید.
+  echo.
+  pause >nul
+  exit /b 1
+)
 
 echo.
 echo   بررسی و نصب پیش‌نیازها (فقط بار اول کمی طول می‌کشد) ...

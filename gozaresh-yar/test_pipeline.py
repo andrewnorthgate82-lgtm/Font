@@ -121,6 +121,30 @@ class TestAIGuards(unittest.TestCase):
         self.assertEqual(warn, "")
         self.assertIn("۱۲", result)
 
+    def test_polish_rejects_structure_collapse(self):
+        """مدلی که سطرها/سرتیترها را به‌هم بریزد نباید پذیرفته شود."""
+        text = ("# گزارش\n\n## مقدمه‌ی آماری\nدر این بازه ۱۲ اقدام ثبت شد.\n\n"
+                "## سیمای کلی\n• **کاشان** — کارگاه (تاریخ ۱۴۰۵/۰۶/۱۲، جایگاه)\n")
+
+        class Collapse(ai_engine.AIEngine):
+            def complete(self, *a, **k):
+                return ai_engine.AIResult(True, raw=" ".join(text.split("\n")))
+
+        collapsed = Collapse(backend="mock")
+        result, warn = collapsed.polish_report(text, 200)
+        self.assertEqual(result, text)
+        self.assertNotEqual(warn, "")
+
+        class DropBullets(ai_engine.AIEngine):
+            def complete(self, *a, **k):
+                return ai_engine.AIResult(
+                    True, raw="# گزارش\n\n## مقدمه‌ی آماری\nدر این بازه ۱۲ اقدام ثبت شد.\n\n"
+                              "## سیمای کلی\nخلاصه‌ی کلی بدون جزئیات.\n")
+
+        dropped = DropBullets(backend="mock")
+        result, warn = dropped.polish_report(text, 200)
+        self.assertEqual(result, text)
+
     def test_confidence_gate(self):
         rec = gz.Record(county_raw="", county="", month_key="1405-06", sheet="حضوری",
                         people=0, uid=1)
@@ -207,7 +231,21 @@ class TestPipeline(unittest.TestCase):
         self.assertIn("منبع", headers)
         self.assertIn("شماره پست", headers)
 
-    def test_06_no_data_excel(self):
+    def test_06_telegram_paths(self):
+        """مسیر پوشه‌ی کانال یا خودِ فایل JSON باید مستقیم شناسایی شود."""
+        folder = os.path.join(DEMO, "channel")
+        code = run_cli("--input", folder, "--from", "شهریور", "--to", "شهریور",
+                       "--no-docx", "--no-xlsx", "--max-words", "300")
+        self.assertEqual(code, 0)
+        md = open(sorted(self._outputs(".md"))[-1], encoding="utf-8").read()
+        self.assertIn("خروجی JSON کانال تلگرام", md)
+
+        file_path = os.path.join(folder, "result.json")
+        code = run_cli("--input", file_path, "--from", "شهریور", "--to", "شهریور",
+                       "--no-docx", "--no-xlsx", "--max-words", "300")
+        self.assertEqual(code, 0)
+
+    def test_07_no_data_excel(self):
         """فایل اکسل بدون داده باید با پیام روشن رد شود (نه خطای برنامه)."""
         empty = os.path.join(HERE, "demo-input", "empty-test.xlsx")
         import openpyxl
