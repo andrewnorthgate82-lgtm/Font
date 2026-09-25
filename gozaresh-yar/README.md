@@ -183,8 +183,9 @@ python3 make_demo_telegram.py  # ساخت نمونه‌ی Export کانال (ف�
 python3 make_demo_channel.py   # ساخت نمونه‌ی کامل‌تر کانال با تاریخ‌های شهریور (فرضی)
 python3 gozaresh.py            # اجرای تعاملی؛ مسیر پیش‌فرض: demo-input
 
-python3 test_pipeline.py       # ۱۸ آزمون خودکار: تاریخ، استخراج، کنترل‌های ایمنی هوش مصنوعی، سه حالت منبع داده
-python3 test_interactive.py    # آزمون خودکار مسیر تعاملی (نیازمند pexpect)
+python3 test_pipeline.py             # ۲۰ آزمون خودکار: تاریخ، استخراج، کنترل‌های ایمنی هوش مصنوعی، سه حالت منبع داده
+python3 test_interactive.py          # آزمون خودکار مسیر تعاملی با فایل‌های اکسل (نیازمند pexpect)
+python3 test_interactive_telegram.py # آزمون خودکار مسیر تعاملی «فقط خروجی تلگرام» (نیازمند pexpect)
 ```
 > این داده‌ها کاملاً فرضی و آزمایشی هستند و فقط برای اطمینان از درستی کار ابزار ساخته شده‌اند.
 
@@ -227,7 +228,8 @@ gozaresh-yar/
 ├── make_demo_data.py        ← ساخت داده‌ی نمونه (فرضی)
 ├── make_demo_telegram.py    ← ساخت Export نمونه‌ی تلگرام (فرضی)
 ├── make_demo_channel.py     ← ساخت Export نمونه‌ی کانال با تاریخ (فرضی)
-├── test_pipeline.py         ← ۱۸ آزمون خودکار خط تولید و کنترل‌های ایمنی
+├── test_pipeline.py         ← ۲۰ آزمون خودکار خط تولید و کنترل‌های ایمنی
+├── test_interactive_telegram.py ← آزمون خودکار مسیر تعاملی حالت تلگرام
 ├── test_interactive.py      ← آزمون خودکار مسیر تعاملی (نیازمند pexpect)
 ├── requirements-dev.txt     ← پیش‌نیازهای توسعه (اختیاری)
 └── demo-input/              ← فایل‌های نمونه (با اجرای اسکریپت‌های بالا ساخته می‌شود)
