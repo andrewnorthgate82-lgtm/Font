@@ -33,20 +33,21 @@ def main() -> int:
         child.send(keys)
 
     send_when("گام ۱", "\r")                       # مسیر پیشنهادی داده
-    send_when("دسته‌بندی لحاظ شود", "\r")            # بله: خروجی تلگرام
-    send_when("گام ۲", "\r")                       # تأیید دوره‌ها
-    send_when("گام ۳", "\r")                       # همه‌ی نواحی
-    send_when("گام ۴", "\r")                       # دسته‌های پیش‌فرض
-    send_when("گام ۵", "\r")                       # قالب ۱ (سیمای کلی)
+    send_when("منبع داده", "\r")                    # اکسل (پیش‌فرض)
+    send_when("گام ۳", "\r")                       # هوش مصنوعی: خیر
+    send_when("گام ۴", "\r")                       # تأیید دوره‌ها
+    send_when("گام ۵", "\r")                       # همه‌ی نواحی
+    send_when("گام ۶", "\r")                       # دسته‌های پیش‌فرض
+    send_when("گام ۷", "\r")                       # قالب ۱ (سیمای کلی)
     send_when("متن درخواست مدیر", "گزارش حداکثر 500 کلمه باشد\r")
     send_when("سقف واژه", "\r")
     send_when("سقف کاراکتر", "\r")
     send_when("پیوست لینک", "\r")                   # خیر
-    send_when("گام ۶", "\r")                       # Word: بله
-    send_when("فایل Excel", "y\r")                 # Excel: بله
-    send_when("پوشه‌ی خروجی", "\r")                 # پیش‌فرض
-    send_when("مسیر لوگو", "\r")                    # بدون لوگو
-    send_when("گزارش آماده شد", "\r")               # بستن مرورگر (بله) → ادامه
+    send_when("فایل Word", "\r")                    # Word: بله
+    send_when("فایل Excel", "y\r")                  # Excel: بله
+    send_when("پوشه‌ی خروجی", "\r")                  # پیش‌فرض
+    send_when("مسیر لوگو", "\r")                     # بدون لوگو
+    send_when("گزارش آماده شد", "\r")                # باز شدن مرورگر
     child.expect(pexpect.EOF)
 
     made = sorted(glob.glob(os.path.join(OUT, "*")))

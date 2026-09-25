@@ -11,3 +11,9 @@ venv/
 
 # موقت اکسل
 ~$*.xlsx
+
+# تنظیمات و حافظه‌ی موقت هوش مصنوعی (ممکن است کلید سرویس داشته باشد)
+gozaresh-yar/ai-settings.json
+gozaresh-yar/.ai-cache.json
+.ai-cache.json
+ai-settings.json
