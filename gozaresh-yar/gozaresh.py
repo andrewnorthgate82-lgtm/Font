@@ -3193,6 +3193,8 @@ def run_interactive(ui: UI) -> int:
     ui.head("گام ۷ از ۷ — قالب، محدودیت و فایل‌های خروجی")
     tpl_opts = [(str(k), f"{k}) {v}") for k, v in TEMPLATES.items()]
     template_id = int(ui.select("قالب گزارش:", tpl_opts, default_index=0))
+    default_title = REPORT_TITLES.get(template_id, REPORT_TITLES[1])
+    custom_title = ui.ask_text("عنوان گزارش" + f" [{default_title}]", "").strip()
     ui.say("")
     ui.say("  اگر «درخواست مدیر» را دارید، متن آن را بچسبانید تا سقف‌هایش خودکار اعمال شود.")
     req_text = ui.ask_text("متن درخواست مدیر (اختیاری — Enter برای رد کردن)", "")
@@ -3221,7 +3223,7 @@ def run_interactive(ui: UI) -> int:
     logo = ui.ask_text("مسیر لوگو (png/jpg) — خالی = بدون لوگو", "")
     font_path = find_persian_font([root, here, os.path.dirname(root)])
 
-    title = REPORT_TITLES.get(template_id, REPORT_TITLES[1])
+    title = custom_title or default_title
     ui.say("\n  در حال ساخت گزارش …")
     records = select_records(ds, include, exclude, months, counties)
     if not records:
