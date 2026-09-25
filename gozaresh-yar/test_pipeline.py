@@ -82,6 +82,62 @@ class TestExtraction(unittest.TestCase):
         self.assertEqual(rec.county, "گلپایگان")
         self.assertTrue(rec.production_kind)
 
+    def _labeled(self, text):
+        """پست قالبی کانال گزارش عملکرد (برچسب‌دار) → رکورد."""
+        post = {"id": 9001, "ts": gz.jalali_to_unix(1405, 6, 3), "text": gz.normalize_text(text),
+                "raw_text": text, "channel": "کانال آزمون", "username": "", "source_file": "t.json"}
+        return gz.rule_record_from_post(post, 1)
+
+    def test_labeled_post_fields(self):
+        rec = self._labeled(
+            "📅 تاریخ درج در کانال: ۱۴۰۵/۰۶/۰۵\n"
+            "✅ نام استان: #اصفهان\n"
+            "📍 ناحیه برگزار کننده: #آران_بیدگل\n"
+            "⭕️ نوع کلاس: #حضوری\n"
+            "📄 موضوع: کارگاه سواد رسانه\n"
+            "🗓 ماه: #شهریور1405\n"
+            "👨‍🏫 مدرس یا سخنران : سرکار خانم رضایی\n"
+            "📅 تاریخ برگزاری: ۱۴۰۵/۰۶/۰۴\n"
+            "⏰ مدت زمان برگزاری: ۹۰ دقیقه\n"
+            "🚻 تعداد نفرات شرکت کننده: ۴۵نفر\n"
+            "👥 نوع مخاطبین: #عموم\n"
+            "🏢 بستر / مکان برگزاری: مسجد جامع")
+        self.assertEqual(rec.county, "آران و بیدگل")
+        self.assertEqual(rec.month_key, "1405-06")
+        self.assertEqual(rec.date, (1405, 6, 4))
+        self.assertEqual(rec.people, 45)
+        self.assertEqual(rec.minutes, 90)
+        self.assertEqual(rec.sheet, "حضوری")
+        self.assertIn("سواد رسانه", rec.topic)
+        self.assertIn("رضایی", rec.teacher)
+
+    def test_labeled_post_production_and_audience(self):
+        rec = self._labeled(
+            "🔻 ناحیه: #شهرضا\n🗓 ماه: #مرداد ۱۴۰۵\n📄موضوع: اینفوگرافیک حقوق شهروندی\n"
+            "نوع فایل: اینفوگرافیک\n👥 نوع مخاطبین: #ارکان گردان")
+        self.assertEqual(rec.sheet, "تولیدات")
+        self.assertEqual(rec.production_kind, "اینفوگرافیک")
+        self.assertEqual(rec.county, "شهرضا")
+        self.assertEqual(rec.month_key, "1405-05")
+
+        rec2 = self._labeled(
+            "🔻 ناحیه: #نطنز\n🗓 ماه: #مرداد1405\n📄موضوع: جلسه توجیهی ارکان\n"
+            "⭕️ نوع کلاس: #حضوری\n👥 نوع مخاطبین: #گردان")
+        self.assertEqual(rec2.sheet, "گردان")
+
+    def test_month_based_range_filter(self):
+        """فیلتر بازه بر پایه‌ی «ماه گزارش» پست عمل می‌کند، نه تاریخ انتشار."""
+        tf = gz.jalali_to_unix(1405, 7, 2)      # پستی که اوایل مهر منتشر شده…
+        post = {"id": 9100, "ts": tf, "text": gz.normalize_text("ماه: شهریور1405"),
+                "raw_text": "🔻 ناحیه: #کاشان\n🗓 ماه: #شهریور1405\n📄موضوع: کارگاه سواد رسانه",
+                "channel": "کانال آزمون", "username": "", "source_file": "t.json"}
+        rec = gz.rule_record_from_post(post, 1)
+        self.assertEqual(rec.month_key, "1405-06")
+        rng = gz.resolve_date_range("مرداد", "شهریور", 1405)
+        self.assertTrue(gz.record_in_range(rec, rng))
+        rng_tir = gz.resolve_date_range("تیر", "تیر", 1405)
+        self.assertFalse(gz.record_in_range(rec, rng_tir))
+
     def test_no_county(self):
         rec = self._rec("یادآوری: مستندات در سامانه بارگذاری شود")
         self.assertEqual(rec.county, "")

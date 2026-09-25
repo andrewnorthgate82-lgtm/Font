@@ -125,20 +125,26 @@ DEFAULT_CATEGORIES: Dict[str, Dict[str, Any]] = {
     "crisis": {
         "title": "بحران و مسئله ویژه",
         "mode": "keywords",
-        "keywords": ["بحران", "شایعه", "واکنش", "فوری", "ویژه", "اضطراری", "حادثه",
-                     "زلزله", "سیل", "اعتراض", "اغتشاش", "تخریب", "هجمه"],
+        "keywords": ["بحران", "شایعه", "واکنش", "فوری", "اضطراری", "حادثه", "مسئله ویژه",
+                     "مساله ویژه", "زلزله", "سیل", "اعتراض", "اغتشاش", "تخریب", "هجمه",
+                     "روشنگری", "جنگ شناختی", "اخبار جعلی", "خبر جعلی"],
     },
     "campaign": {
         "title": "تولیدات و پویش‌های جریان‌ساز",
-        "mode": "sheets",
+        "mode": "sheets+keywords",
         "sheets": ["تولیدات"],
+        "keywords": ["پویش", "کمپین", "هشتگ", "چالش", "مسابقه", "جریان سازی", "جریان‌سازی",
+                     "میدان یار", "سپر سایبری"],
     },
     "synergy": {
         "title": "هم‌افزایی و اقدامات مشترک",
         "mode": "keywords",
-        "keywords": ["مشترک", "همکاری", "تفاهم‌نامه", "تفاهم نامه", "همراه با", "نهاد",
-                     "سازمان", "سپاه", "آموزش‌وپرورش", "آموزش و پرورش", "دانشگاه",
-                     "بسیج", "اداره", "شهرداری", "بیمه سلامت"],
+        "keywords": ["مشترک", "همکاری", "هم‌افزایی", "تفاهم‌نامه", "تفاهم نامه", "همراه با",
+                     "با مشارکت", "با همت", "نهاد", "سازمان", "سپاه", "آموزش‌وپرورش",
+                     "آموزش و پرورش", "دانشگاه", "بسیج", "اداره", "شهرداری", "بیمه سلامت",
+                     "تبلیغات اسلامی", "هلال احمر", "اورژانس", "دادگستری", "دادسرا",
+                     "مرکز بهداشت", "بهزیستی", "ورزش و جوانان", "فرهنگ و ارشاد",
+                     "مدارس", "مساجد", "هیئت", "کانون مساجد", "امام جمعه"],
     },
     "special": {
         "title": "برنامه‌ها و رویدادهای ویژه",
@@ -563,6 +569,7 @@ STOP_ENTITY_WORDS = {
     "نیز", "مورد", "توسط", "اعضای", "دانشآموزان", "دانشآموز", "معلمان", "معلم",
     "افتتاح", "اجرا", "داشت", "بود", "شهرستان", "ناحیه", "حوزه", "منطقه", "پایان",
     "برگزارگردید", "برپا", "صورت", "گرفت", "همراه", "همراهی", "مشارکت", "کلاس", "جلسه",
+    "یا", "سخنران", "مدرس", "نام", "عنوان", "سازنده", "پژوهنده", "محتوا", "تولیدکننده",
 }
 
 
@@ -599,6 +606,28 @@ def detect_tg_type(text: str) -> str:
     return "حضوری"
 
 
+TG_BOILERPLATE = ("اللهم عجل", "بسم الله", "صلی الله", "﷽", "صلوات", "اللهم صل",
+                   "گزارش عملکرد", "کانال", "درج در کانال", "ادامه مطلب", "لینک")
+
+
+def tg_topic_fallback(raw_text: str) -> str:
+    """موضوع جایگزین از متن پست: حذف سطرهای تزئینی، برچسب‌ها و عبارت‌های تکراری."""
+    for line in str(raw_text or "").split("\n"):
+        clean = tg_clean_value(TG_EMOJI_RE.sub(" ", line))
+        if not clean or ":" in line or "\uff1a" in line:
+            continue
+        if len(clean.split()) < 2:
+            continue
+        if any(b in clean for b in TG_BOILERPLATE):
+            continue
+        if not re.search(r"[آ-ی]{3,}", clean):
+            continue
+        words = clean.split()
+        out = " ".join(words[:9])
+        return out[:70] + ("…" if len(out) > 70 else "")
+    return ""
+
+
 def detect_topic(text: str) -> str:
     best = ""
     for t in TOPIC_VOCAB:
@@ -628,6 +657,250 @@ def detect_county(text: str) -> str:
         if ck and ck in hay and len(ck) > len(county_key(best)):
             best = c
     return best
+
+
+# ---- تجزیه‌ی پست‌های قالبی (برچسب‌دار) کانال گزارش عملکرد --------------------
+TG_EMOJI_RE = re.compile("[\U0001F000-\U0001FAFF\U0001F1E6-\U0001F1FF\u2600-\u27BF"
+                         "\u2B00-\u2BFF\u2190-\u21FF\u2300-\u23FF\u25A0-\u25FF"
+                         "\uFE0F\u200d\u200b\u2022\u00b7]+")
+TG_LABEL_LINE_RE = re.compile(r"^\s*([^:\n]{2,40}?)\s*[:\uff1a]\s*(.*)$")
+TG_JALALI_RE = re.compile(r"(1[34]\d{2})\s*/\s*(\d{1,2})\s*/\s*(\d{1,2})")
+
+# گروه‌های برچسب: نام میدانی ← همه‌ی نام‌های ممکن برچسب (به ترتیب اولویت)
+TG_FIELD_GROUPS: List[Tuple[str, List[str]]] = [
+    ("county", ["ناحیه برگزار کننده", "ناحیه سازنده", "حوزه برگزار کننده", "ناحیه", "برگزار کننده"]),
+    ("province", ["نام استان", "استان"]),
+    ("vice", ["نام معاونت", "معاونت"]),
+    ("month", ["ماه"]),
+    ("topic", ["موضوع"]),
+    ("operation", ["نام عملیات", "عملیات"]),
+    ("kind", ["نوع کلاس/ برنامه", "نوع کلاس", "نوع برنامه", "نوع فعالیت", "نوع دوره"]),
+    ("media", ["نوع فایل", "نوع تولید", "نوع محتوا", "قالب تولید"]),
+    ("teacher", ["مدرس یا سخنران", "سخنران یا مدرس", "مدرس/سخنران", "سخنران/ استاد",
+                 "سخنران/استاد", "سخنرانان", "سخنران", "مدرس", "استاد"]),
+    ("event_date", ["تاریخ برگزاری", "تاریخ اجرا", "تاریخ برگزاری دوره", "زمان برگزاری"]),
+    ("event_time", ["ساعت برگزاری", "ساعت"]),
+    ("minutes", ["مدت زمان برگزاری", "مدت برگزاری", "مدت"]),
+    ("people", ["تعداد نفرات شرکت کننده", "تعداد نفرات", "تعداد شرکت کنندگان",
+                "تعداد شرکت‌کنندگان", "تعداد مخاطبین", "تعداد"]),
+    ("audience", ["نوع مخاطبین", "نوع مخاطب", "مخاطبین", "مخاطب"]),
+    ("place", ["بستر / مکان برگزاری", "بستر ومکان برگزاری", "بستر/مکان برگزاری",
+               "بستر/ مکان برگزاری", "مکان / بستر برگزاری", "مکان یا لینک",
+               "مکان برگزاری", "بستر برگزاری", "مکان"]),
+    ("posted", ["تاریخ درج در کانال", "تاریخ درج"]),
+]
+
+
+def tg_label_key(label: str) -> str:
+    """کلید مقایسه‌ی برچسب: فقط حرف و رقم (ایموجی/فاصله/نشانه‌ها حذف می‌شوند)."""
+    x = fa_digits(str(label)).replace("‌", "").replace("ي", "ی").replace("ك", "ک")
+    return re.sub(r"[^0-9A-Za-z\u0600-\u06FF]+", "", x)
+
+
+def tg_clean_value(value: str) -> str:
+    """پاک‌سازی مقدار یک برچسب: حذف ایموجی، #، زیرخط و فاصله‌های اضافه."""
+    raw = "".join(ch for ch in str(value or "")
+                  if unicodedata.category(ch) not in ("So", "Sk", "Cf", "Cs", "Co", "Cn")
+                  and ch not in ("\ufe0f", "\u200b"))
+    x = TG_EMOJI_RE.sub(" ", raw)
+    x = x.replace("#", " ").replace("_", " ").replace("‌", " ")
+    x = fa_digits(x)
+    x = re.sub(r"\s+", " ", x).strip(" .،؛:-|")
+    return x
+
+
+def parse_tg_fields(raw_text: str) -> Dict[str, str]:
+    """استخراج فیلدهای قالبی از متن خام پست (اولین مقدار غیرخالی هر برچسب)."""
+    found: Dict[str, str] = {}
+    for line in str(raw_text or "").split("\n"):
+        line = line.strip()
+        if not line or ":" not in line and "\uff1a" not in line:
+            continue
+        m = TG_LABEL_LINE_RE.match(line)
+        if not m:
+            continue
+        key = tg_label_key(m.group(1))
+        value = tg_clean_value(m.group(2))
+        for name, labels in TG_FIELD_GROUPS:
+            if name in found:
+                continue
+            for lb in labels:
+                lk = tg_label_key(lb)
+                if key == lk or (len(lk) >= 4 and key.startswith(lk)):
+                    if value:
+                        found[name] = value
+                    break
+    return found
+
+
+def county_ckey(text: Any) -> str:
+    """کلید مقایسه‌ی نام ناحیه (حذف فاصله/نشانه‌ها/«و»/«ع»)."""
+    x = fa_digits(str(text or "")).replace("ي", "ی").replace("ك", "ک")
+    x = re.sub(r"\([^)]*\)", "", x)
+    x = re.sub(r"[\s‌_\-#.,،؛:/\\|«»\"'\[\]{}]+", "", x)
+    return x.replace("و", "").replace("ع", "")
+
+
+def canonical_county(value: Any) -> str:
+    """تبدیل مقدار برچسب ناحیه (مثل «#آران_بیدگل») به نام استاندارد ناحیه/شهرستان."""
+    raw = tg_clean_value(value)
+    if not raw:
+        return ""
+    ck = county_ckey(raw)
+    if not ck:
+        return ""
+    best = ""
+    for c in EXPECTED_COUNTIES:
+        cc = county_ckey(c)
+        if not cc:
+            continue
+        if ck == cc:
+            return c
+        if len(cc) >= 4 and cc in ck and len(cc) > len(county_ckey(best)):
+            best = c
+    return best or raw
+
+
+def tg_month_from(value: Any) -> Optional[Tuple[int, int]]:
+    """خواندن «ماه گزارش» از مقادیری مثل «#مرداد1405» یا «شهریورماه ۱۴۰۵»."""
+    x = fa_digits(str(value or ""))
+    ym = re.search(r"(1[34]\d{2})", x)
+    year = int(ym.group(1)) if ym else 0
+    month = 0
+    for i, name in enumerate(JALALI_MONTHS, start=1):
+        if name in x:
+            month = i
+            break
+    if not month:
+        return None
+    return (year or 1405, month)
+
+
+def tg_minutes_from(value: Any) -> int:
+    x = fa_digits(str(value or ""))
+    hm = re.search(r"(\d{1,2})\s*[:٫]\s*(\d{2})", x)
+    if hm:
+        return int(hm.group(1)) * 60 + int(hm.group(2))
+    m = re.search(r"(\d{1,4})", x)
+    return int(m.group(1)) if m else 0
+
+
+def tg_people_from(value: Any) -> int:
+    x = fa_digits(str(value or ""))
+    m = re.search(r"(\d{1,6})", x)
+    return int(m.group(1)) if m else 0
+
+
+TG_KIND_MAP: List[Tuple[str, List[str]]] = [
+    ("مجازی", ["مجازی", "انلاین", "آنلاین", "غیر حضوری", "غیرحضوری", "وبینار", "لایو"]),
+    ("خلاقانه", ["خلاقانه", "سواد رسانه خلاقانه", "پویش", "مسابقه", "کمپین"]),
+    ("گردان", ["گردان", "توانمندسازی"]),
+    ("حضوری", ["حضوری"]),
+]
+
+
+def tg_kind_from(kind_value: str, media_value: str, text: str) -> Tuple[str, str]:
+    """تعیین نوع فعالیت (نام شیت) و نوع تولید محتوا."""
+    media = tg_clean_value(media_value)
+    if media:
+        return "تولیدات", media
+    k = tg_clean_value(kind_value)
+    for sheet, words in TG_KIND_MAP:
+        if any(w in k for w in words):
+            return sheet, ""
+    if any(w in k for w in ("افلاین", "آفلاین")):
+        return "مجازی", ""
+    return "", ""
+
+
+def rule_record_from_post(post: Dict[str, Any], uid: int) -> Record:
+    """تبدیل یک پست تلگرام به رکورد؛ ابتدا فیلدهای قالبی، سپس الگوهای عمومی."""
+    text = post["text"]
+    raw = post.get("raw_text") or text
+    f = parse_tg_fields(raw)
+    jy_post, jm_post, jd_post = unix_to_jalali(post["ts"])
+
+    # --- ناحیه
+    county = canonical_county(f.get("county", ""))
+    if not county:
+        county = detect_county(text)
+
+    # --- تاریخ و ماه گزارش
+    month_key = ""
+    date: Optional[Tuple[int, int, int]] = None
+    em = TG_JALALI_RE.search(fa_digits(f.get("event_date", "")))
+    if em:
+        date = (int(em.group(1)), int(em.group(2)), int(em.group(3)))
+    mp = tg_month_from(f.get("month", ""))
+    if mp:
+        month_key = f"{mp[0]}-{mp[1]:02d}"
+        if date is None:
+            date = (mp[0], mp[1], min(jd_post, jalali_days_in_month(mp[0], mp[1])))
+    if not month_key:
+        src_date = date or (jy_post, jm_post, jd_post)
+        month_key = f"{src_date[0]}-{src_date[1]:02d}"
+    if date is None:
+        date = (jy_post, jm_post, jd_post)
+
+    # --- نوع فعالیت
+    kind, production_kind = tg_kind_from(f.get("kind", ""), f.get("media", ""), text)
+    audience = tg_clean_value(f.get("audience", ""))
+    if kind in ("", "حضوری") and ("گردان" in audience or "ارکان" in audience):
+        kind = "گردان"          # جلسات توانمندسازی گردان‌ها
+    if not kind:
+        kind = detect_tg_type(text)
+    if kind != "تولیدات":
+        production_kind = ""
+    if kind == "تولیدات" and not production_kind:
+        production_kind = next((w for w in TYPE_RULES[0][1]
+                                if normalize_key(w) in normalize_key(text)), "")
+
+    # --- تعداد نفرات، مدرس، مکان، موضوع
+    people = tg_people_from(f.get("people", "")) or first_number(text, PEOPLE_PATTERNS)
+    teacher = clean_entity(f.get("teacher", ""), max_words=4)
+    if not teacher:
+        for pat in TEACHER_PATTERNS:
+            m = re.search(pat, text)
+            if m:
+                teacher = clean_entity(m.group(1), max_words=3)
+                break
+    place = clean_entity(f.get("place", ""), max_words=6)
+    if not place:
+        for pat in PLACE_PATTERNS:
+            m = re.search(pat, text)
+            if m:
+                place = clean_entity(m.group(1), max_words=6)
+                break
+    topic = tg_clean_value(f.get("topic", "")) or tg_clean_value(f.get("operation", ""))
+    if not topic:
+        topic = tg_topic_fallback(raw) or detect_topic(text)
+    if kind == "تولیدات" and not production_kind:
+        production_kind = next((w for w in TYPE_RULES[0][1]
+                                if normalize_key(w) in normalize_key(raw)), "")
+
+    minutes = tg_minutes_from(f.get("minutes", ""))
+    platform = ""
+    if kind == "مجازی":
+        platform = (place if place and len(place) <= 25 else
+                    next((x for x in ["تلگرام", "ایتا", "روبیکا", "اینستاگرام", "شاد",
+                                      "واتساپ", "سامانه نسرا", "اسکای روم", "گوگل میت"]
+                          if normalize_key(x) in normalize_key(raw + " " + audience)), "")
+                    or "فضای مجازی")
+
+    link = ""
+    if post.get("username") and post.get("id"):
+        link = f"https://t.me/{post['username']}/{post['id']}"
+
+    return Record(
+        county_raw=(f.get("county") or county), county=county,
+        month_key=month_key, sheet=kind, date_raw=f.get("event_date") or None, date=date,
+        topic=topic, teacher=teacher, people=people, place=place,
+        production_kind=production_kind, platform=platform, minutes=minutes,
+        link=link, content=text,
+        source_file=post.get("source_file", ""), source_row=post.get("id", 0),
+        post_id=post.get("id", 0), channel=post.get("channel", ""), uid=uid,
+        origin="telegram",
+    )
 
 
 def read_telegram_posts(paths: Sequence[str]) -> Tuple[List[Dict[str, Any]], List[str]]:
@@ -702,43 +975,6 @@ def filter_posts(posts: Sequence[Dict[str, Any]], start: Optional[int],
     return out
 
 
-def rule_record_from_post(post: Dict[str, Any], uid: int) -> Record:
-    """تبدیل یک پست تلگرام به رکورد، با الگوهای قاعده‌محور (بدون هوش مصنوعی)."""
-    text = post["text"]
-    jy, jm, jd = unix_to_jalali(post["ts"])
-    kind = detect_tg_type(text)
-    people = first_number(text, PEOPLE_PATTERNS)
-    teacher = ""
-    for pat in TEACHER_PATTERNS:
-        m = re.search(pat, text)
-        if m:
-            teacher = clean_entity(m.group(1), max_words=3)
-            break
-    place = ""
-    for pat in PLACE_PATTERNS:
-        m = re.search(pat, text)
-        if m:
-            place = clean_entity(m.group(1), max_words=5)
-            break
-    link = ""
-    if post.get("username") and post.get("id"):
-        link = f"https://t.me/{post['username']}/{post['id']}"
-    return Record(
-        county_raw=detect_county(text), county=detect_county(text),
-        month_key=f"{jy}-{jm:02d}", sheet=kind, date_raw=None, date=(jy, jm, jd),
-        topic=detect_topic(text), teacher=teacher, people=people, place=place,
-        production_kind=(next((w for w in TYPE_RULES[0][1] if normalize_key(w) in normalize_key(text)), "")
-                         if kind == "تولیدات" else ""),
-        platform=("" if kind != "مجازی" else next(
-            (x for x in ["تلگرام", "ایتا", "روبیکا", "اینستاگرام", "شاد", "سامانه‌نسرا", "واتساپ"]
-             if normalize_key(x) in normalize_key(text)), "فضای مجازی")),
-        link=link, content=text,
-        source_file=post.get("source_file", ""), source_row=post.get("id", 0),
-        post_id=post.get("id", 0), channel=post.get("channel", ""), uid=uid,
-        origin="telegram",
-    )
-
-
 AI_MIN_CONFIDENCE = 25   # حداقل اطمینان مدل برای جایگزینی مقادیر قاعده‌محور
 
 
@@ -779,8 +1015,9 @@ def apply_ai_extraction(rec: Record, ai_row: Dict[str, Any]) -> bool:
             changed = True
         kind = normalize_text(ai_row.get("نوع") or "")
         if kind in ("حضوری", "مجازی", "گردان", "خلاقانه", "تولیدات") and rec.sheet != kind:
-            rec.sheet = kind
-            changed = True
+            if conf0 >= 40 or not conf0:      # فقط با اطمینان کافیِ خودِ مدل
+                rec.sheet = kind
+                changed = True
         try:
             conf = int(float(fa_digits(str(ai_row.get("اطمینان", 0)))))
         except (TypeError, ValueError):
@@ -789,15 +1026,41 @@ def apply_ai_extraction(rec: Record, ai_row: Dict[str, Any]) -> bool:
     return changed
 
 
+def record_in_range(rec: Record, date_range: Optional[Dict[str, Any]]) -> bool:
+    """
+    آیا رکورد تلگرامی داخل بازه‌ی زمانی خواسته‌شده است؟
+    ملاک اصلی، «ماه گزارش» خودِ پست است (هم‌پوشانی ماه با بازه)؛ اگر ماه نامشخص بود،
+    تاریخ برگزاری و در نهایت تاریخ انتشار پست بررسی می‌شود.
+    """
+    if not date_range:
+        return True
+    start, end = date_range.get("start"), date_range.get("end")
+    if start is None and end is None:
+        return True
+    try:
+        y, m = (int(x) for x in rec.month_key.split("-"))
+        m_start = jalali_to_unix(y, m, 1)
+        m_end = jalali_to_unix(y, m, jalali_days_in_month(y, m), end_of_day=True)
+        if (start is None or m_end >= start) and (end is None or m_start <= end):
+            return True
+        return False
+    except (ValueError, TypeError):
+        pass
+    ts = jalali_to_unix(*rec.date) if rec.date else 0
+    return bool(ts) and (start is None or ts >= start) and (end is None or ts <= end)
+
+
 def build_telegram_dataset(posts: Sequence[Dict[str, Any]], log, ai=None,
-                           tasks: Sequence[str] = (), fill_gaps_links: Sequence[str] = ()
+                           tasks: Sequence[str] = (), fill_gaps_links: Sequence[str] = (),
+                           date_range: Optional[Dict[str, Any]] = None
                            ) -> Tuple[List[Record], Dict[str, Any]]:
     """
-    ساخت رکوردها از پست‌های تلگرام (به‌همراه استفاده‌ی اختیاری از هوش مصنوعی).
+    ساخت رکوردها از پست‌های تلگرام (به‌همراه استفاده‌ی اختیاری از هوش مصنوعی و فیلتر بازه).
     خروجی: (رکوردها، آمار)
     """
-    stats: Dict[str, Any] = {"posts": len(posts), "records": 0, "ai_used": 0,
-                             "no_county": 0, "no_data": [], "skipped_existing": 0}
+    stats: Dict[str, Any] = {"posts": len(posts), "in_range": 0, "out_range": 0,
+                             "records": 0, "ai_used": 0, "no_county": 0, "no_data": [],
+                             "skipped_existing": 0, "no_event_date": 0}
     existing_ids = set()
     for link in fill_gaps_links:
         pid = telegram_post_id(link)
@@ -822,6 +1085,12 @@ def build_telegram_dataset(posts: Sequence[Dict[str, Any]], log, ai=None,
             continue
         rec = rule_record_from_post(post, uid)
         uid += 1
+        if not record_in_range(rec, date_range):
+            stats["out_range"] += 1
+            continue
+        stats["in_range"] += 1
+        if not rec.date_raw:
+            stats["no_event_date"] += 1
         used_ai = False
         if pid in ai_rows:
             used_ai = apply_ai_extraction(rec, ai_rows[pid])
@@ -1401,6 +1670,10 @@ def classify_records(dataset: Dataset, categories: Dict[str, Dict[str, Any]]) ->
             if mode == "sheets":
                 if rec.sheet in spec.get("sheets", []):
                     positive.append(name)
+            elif mode == "sheets+keywords":
+                if rec.sheet in spec.get("sheets", []) or any(
+                        kw_in(kw, hay_text, hay_key) for kw in spec.get("keywords", [])):
+                    positive.append(name)
             elif mode == "keywords":
                 for kw in spec.get("keywords", []):
                     if kw_in(kw, hay_text, hay_key):
@@ -1583,7 +1856,8 @@ def enforce_word_limit(text: str, max_words: int) -> str:
 
     # ۰) حذف سطرهای اختیاری (فهرست نواحی بدون گزارش و ...) — این‌ها در فایل اکسل باقی می‌مانند
     if _words(lines) > budget:
-        OPTIONAL_PREFIXES = ("- نواحی بدون گزارش", "- پنج ناحیه با کمترین اقدام")
+        OPTIONAL_PREFIXES = ("- نواحی بدون گزارش", "- پنج ناحیه با کمترین اقدام",
+                             "توزیع فعالیت‌ها")
         lines = [l for l in lines if not l.strip().startswith(OPTIONAL_PREFIXES)]
 
     # ۱) حذف لینک‌های مستند
@@ -1637,8 +1911,9 @@ def compact_impact(rec: Record, max_words: int = 16) -> str:
     first = re.split(r"[؛.]", text)[0].strip()
     words = first.split()
     if len(words) > max_words:
-        first = " ".join(words[:max_words]).rstrip("،") + "…"
-    return first + "." if first and not first.endswith(".") else first
+        first = " ".join(words[:max_words]).rstrip("،")
+        return first + "…"
+    return first + "." if first and not first.endswith((".", "…")) else first
 
 
 def impact_sentence(rec: Record) -> str:
@@ -1648,8 +1923,10 @@ def impact_sentence(rec: Record) -> str:
     if rec.sheet == "تولیدات":
         kind = rec.production_kind or "محتوای رسانه‌ای"
         pages = f" ({persian_number(rec.pages)} صفحه)" if rec.pages else ""
-        return (f"تولید و انتشار {kind}{pages} با موضوع «{rec.topic or '—'}»؛ "
-                f"غنی‌سازی جریان محتوایی کانال‌های رسمی و دسترسی مخاطبان به روایت دقیق.")
+        people = (f"؛ دسترسی {persian_number(rec.people)} مخاطب/بازدید"
+                  if rec.people else "")
+        return (f"تولید و انتشار {kind}{pages} در بسترهای رسمی{people}؛ "
+                f"جریان‌سازی و غنی‌سازی محتوای کانال‌های سازمانی.")
     if rec.people > 0:
         if rec.sheet == "خلاقانه":
             return (f"دسترسی {persian_number(rec.people)} مخاطب/بازدید در بستر "
@@ -1706,7 +1983,17 @@ def build_report(dataset: Dataset, records: Sequence[Record], title: str,
     lines.append("")
 
     # مقدمه‌ی آماری
-    intro = (f"در بازه‌ی {period_lbl}، در مجموع {persian_number(agg['total_activities'])} اقدام "
+    tg_all = (dataset.tg_stats or {}).get("posts", 0) if dataset.source == "telegram" else 0
+    tg_posts = ((dataset.tg_stats or {}).get("in_range") or tg_all) if dataset.source == "telegram" else 0
+    if dataset.source == "telegram" and tg_posts:
+        intro = (f"در بازه‌ی {period_lbl}، از {persian_number(tg_posts)} پست منتشرشده در کانال "
+                 f"گزارش عملکرد، {persian_number(agg['total_activities'])} اقدام غیرروتین در "
+                 f"{persian_number(agg['counties'])} ناحیه/شهرستان استخراج شد که مجموع "
+                 f"{persian_number(agg['total_people'])} نفر مخاطب را پوشش داده است. "
+                 f"در این اقدامات {persian_number(agg['teachers'])} مدرس/سخنران و "
+                 f"{persian_number(agg['locations'])} مکان/بستر برگزاری نقش داشته‌اند.")
+    else:
+        intro = (f"در بازه‌ی {period_lbl}، در مجموع {persian_number(agg['total_activities'])} اقدام "
              f"غیرروتین در {persian_number(agg['counties'])} ناحیه/شهرستان ثبت شده است که "
              f"{persian_number(agg['total_people'])} نفر مخاطب را پوشش داده و "
              f"{persian_number(agg['unique_links'])} پست/مستند رسانه‌ای برای آن بارگذاری شده است. "
@@ -1717,25 +2004,36 @@ def build_report(dataset: Dataset, records: Sequence[Record], title: str,
              f"لینک مستند رسانه‌ای ثبت شده است"
              + (f" و متن {persian_number(agg['with_content'])} پست از خروجی تلگرام "
                 f"بازخوانی و در دسته‌بندی لحاظ شده است." if agg["with_content"] else "."))
+    if compact and tg_posts:
+        pass  # متن فشرده‌ی منبع تلگرام در بالا ساخته شد
+    tg_all = (dataset.tg_stats or {}).get("posts", 0) if dataset.source == "telegram" else 0
+    tg_posts = ((dataset.tg_stats or {}).get("in_range") or tg_all) if dataset.source == "telegram" else 0
     if compact:
-        intro = (f"در بازه‌ی {period_lbl}، {persian_number(agg['total_activities'])} اقدام "
-                 f"غیرروتین در {persian_number(agg['counties'])} ناحیه با "
-                 f"{persian_number(agg['total_people'])} مخاطب و "
-                 f"{persian_number(agg['unique_links'])} مستند رسانه‌ای ثبت شده است.")
+        if tg_posts:
+            intro = (f"در بازه‌ی {period_lbl}، از {persian_number(tg_posts)} پست کانال، "
+                     f"{persian_number(agg['total_activities'])} اقدام غیرروتین در "
+                     f"{persian_number(agg['counties'])} ناحیه/شهرستان با مجموع "
+                     f"{persian_number(agg['total_people'])} مخاطب استخراج و تحلیل شد.")
+        else:
+            intro = (f"در بازه‌ی {period_lbl}، {persian_number(agg['total_activities'])} اقدام "
+                     f"غیرروتین در {persian_number(agg['counties'])} ناحیه با "
+                     f"{persian_number(agg['total_people'])} مخاطب و "
+                     f"{persian_number(agg['unique_links'])} مستند رسانه‌ای ثبت شده است.")
     lines.append("## مقدمه‌ی آماری")
     lines.append(intro)
-    lines.append("")
-
-    # سیمای کلی: سهم هر نوع فعالیت + پوشش نواحی
-    lines.append("## سیمای کلی فعالیت‌ها")
-    total_act = len(records) or 1
     if compact:
         dist = "، ".join(
             f"{SHEET_LABELS[k]} {persian_number(agg['by_sheet'][k])}"
             for k in ["حضوری", "مجازی", "گردان", "خلاقانه", "تولیدات"] if agg["by_sheet"].get(k))
-        lines.append(f"- توزیع فعالیت‌ها: {dist} — نواحی دارای گزارش: "
-                     f"{persian_number(agg['counties'])} از {persian_number(len(EXPECTED_COUNTIES))}")
-    else:
+        lines.append(f"توزیع فعالیت‌ها: {dist} — نواحی دارای گزارش: "
+                     f"{persian_number(agg['counties'])} از {persian_number(len(EXPECTED_COUNTIES))}.")
+    lines.append("")
+
+    # سیمای کلی: سهم هر نوع فعالیت + پوشش نواحی
+    total_act = len(records) or 1
+    if not compact:
+        lines.append("## سیمای کلی فعالیت‌ها")
+    if not compact:
         for key in ["حضوری", "مجازی", "گردان", "خلاقانه", "تولیدات"]:
             cnt = agg["by_sheet"].get(key, 0)
             if not cnt:
@@ -1746,7 +2044,10 @@ def build_report(dataset: Dataset, records: Sequence[Record], title: str,
             lines.append(f"- {SHEET_LABELS[key]}: {persian_number(cnt)} اقدام "
                          f"({persian_percent(cnt / total_act)}){extra}")
     by_county = agg["by_county"]
-    counted = [(c, n) for c, n in by_county.items() if c]
+    counted = [(c, n) for c, n in by_county.items() if c in EXPECTED_COUNTIES]
+    others_units = [(c, n) for c, n in by_county.items()
+                    if c and c not in EXPECTED_COUNTIES]
+    others_units.sort(key=lambda x: (-x[1], x[0]))
     counted.sort(key=lambda x: (-x[1], x[0]))
     top5 = counted[:5]
     zero_counties = [c for c in EXPECTED_COUNTIES if c not in by_county]
@@ -1774,6 +2075,10 @@ def build_report(dataset: Dataset, records: Sequence[Record], title: str,
         if dataset.tg_stats.get("ai_used"):
             lines.append(f"- رکوردهای استخراج‌شده با کمک مدل هوش مصنوعی: "
                          f"{persian_number(dataset.tg_stats['ai_used'])}")
+    if others_units and not compact:
+        lines.append(f"- واحدهای گزارش‌دهنده‌ی دیگر ({persian_number(len(others_units))} مورد): "
+                     + "، ".join(f"{c} ({persian_number(n)})" for c, n in others_units[:6])
+                     + (" و موارد دیگر." if len(others_units) > 6 else ""))
     if zero_counties and not compact:
         shown = zero_counties[:8]
         more = len(zero_counties) - len(shown)
@@ -1799,7 +2104,7 @@ def build_report(dataset: Dataset, records: Sequence[Record], title: str,
         counties_in = len({r.county for r in sec_recs})
         if compact:
             extra = f"، {persian_number(people)} مخاطب" if people else ""
-            return f"{persian_number(len(sec_recs))} اقدام{extra}، {persian_number(counties_in)} ناحیه"
+            return f"{persian_number(len(sec_recs))} اقدام{extra}"
         if people:
             return (f"**خلاصه‌ی آماری:** {persian_number(len(sec_recs))} اقدام در "
                     f"{persian_number(counties_in)} ناحیه؛ مجموع مخاطبان "
@@ -1832,20 +2137,37 @@ def build_report(dataset: Dataset, records: Sequence[Record], title: str,
                 out.append(section_stats(sec_recs))
             out.append("")
             want = max(0, min(alloc.get(sec, 0), len(sec_recs)))
-            picked = []
-            for r in sec_recs:
+            picked: List[Record] = []
+            seen_pairs: set = set()
+            for r in sec_recs:                      # دور اول: با رعایت تنوع (ناحیه + موضوع)
                 if len(picked) >= want:
                     break
                 key = getattr(r, "uid", None) or id(r)
                 if key in shown_ids:
                     continue
+                pair = (r.county, " ".join((r.topic or "").split()[:3]))
+                if pair in seen_pairs:
+                    continue
                 picked.append(r)
+                seen_pairs.add(pair)
+            if len(picked) < want:                  # دور دوم: بدون قاعده‌ی تنوع
+                for r in sec_recs:
+                    if len(picked) >= want:
+                        break
+                    key = getattr(r, "uid", None) or id(r)
+                    if key in shown_ids or r in picked:
+                        continue
+                    picked.append(r)
             for r in picked:
                 shown_ids.add(getattr(r, "uid", None) or id(r))
                 where = r.place or r.platform or "—"
                 if compact:
-                    out.append(f"• **{county_label(r)}** — {r.topic or SHEET_LABELS.get(r.sheet, r.sheet)}"
-                               f" ({fa_date(r.date)}، {where}) — نتیجه و اثر: {compact_impact(r)}")
+                    title_txt = r.topic or SHEET_LABELS.get(r.sheet, r.sheet)
+                    title_txt = " ".join(title_txt.split()[:6])[:40]
+                    title_txt = re.sub(r"\s+(?:از|به|در|و|برای|با|که|تا|بر|این|آن|های)$",
+                                       "", title_txt.strip()).strip(" ،-")
+                    out.append(f"• **{county_label(r)}** — {title_txt} — نتیجه: "
+                               f"{compact_impact(r, 12)}")
                 else:
                     out.append(f"• **{county_label(r)}** — {r.topic or SHEET_LABELS.get(r.sheet, r.sheet)}"
                                f" (تاریخ {fa_date(r.date)}، {where})")
@@ -1887,9 +2209,8 @@ def build_report(dataset: Dataset, records: Sequence[Record], title: str,
                     f"{persian_number(peak[0][1])} اقدام") if peak else "—"
         if compact:
             top_txt = "، ".join(f"{c} ({persian_number(n)})" for c, n in top[:3]) or "—"
-            tail.append(f"بیشترین اقدامات در {top_txt} ثبت شده و پرتکرارترین قالب، {peak_txt} است؛ "
-                        f"مجموع مخاطبان {persian_number(agg['total_people'])} نفر "
-                        f"(میانگین {persian_number(agg['total_people'] / agg['total_activities'] if agg['total_activities'] else 0)} نفر).")
+            tail.append(f"پرتکرارترین قالب، {peak_txt}؛ بیشترین اقدامات در {top_txt}؛ "
+                        f"مجموع مخاطبان {persian_number(agg['total_people'])} نفر.")
         else:
             top_txt = "، ".join(f"{c} ({persian_number(n)} اقدام)" for c, n in top) if top else "—"
             tail.append(f"بیشترین حجم اقدامات به‌ترتیب در نواحی {top_txt} ثبت شده و پرتکرارترین قالب، "
@@ -1912,9 +2233,28 @@ def build_report(dataset: Dataset, records: Sequence[Record], title: str,
     # ---- تخصیص تعداد اقدامات هر محور با توجه به سقف واژه ----------------------
     alloc: Dict[str, int] = {}
     if max_words:
-        per_item = 22 if compact else 42          # برآورد واژه برای هر اقدام
-        base_words = (_words(lines) + _words(render_sections({})) + _words(tail_lines))
+        base_words = _words(lines) + _words(render_sections({})) + _words(tail_lines)
+        one_each = {sec: 1 for sec, _t, rs in prepared if rs}
+        sample_words = _words(render_sections(one_each)) - _words(render_sections({}))
+        per_item = max(16, round(sample_words / max(1, len(one_each))))   # اندازه‌ی واقعی هر اقدام
         capacity = max(0, (max_words - base_words)) // per_item
+        need = len(one_each)      # دست‌کم یک اقدام برای هر محورِ دارای داده
+        # در صورت کمبود جا، سطرهای کم‌اهمیت‌تر را حذف کن تا همه‌ی محورها دیده شوند
+        if os.environ.get("GOZARESH_DEBUG_BUDGET"):
+            print(f"[بودجه] base={base_words} per_item={per_item} capacity={capacity} "
+                  f"need={need} max={max_words}")
+        if compact and capacity < need:
+            lines = [ln for ln in lines if not ln.startswith("توزیع فعالیت‌ها")]
+            base_words = _words(lines) + _words(render_sections({})) + _words(tail_lines)
+            capacity = max(0, (max_words - base_words)) // per_item
+        if compact and capacity < need:
+            lines = [ln for ln in lines if not ln.strip().startswith("- ")]
+            base_words = _words(lines) + _words(render_sections({})) + _words(tail_lines)
+            capacity = max(0, (max_words - base_words)) // per_item
+        if compact and capacity < need:
+            tail_lines = [ln for ln in tail_lines if not ln.strip()]
+            base_words = _words(lines) + _words(render_sections({})) + _words(tail_lines)
+            capacity = max(0, (max_words - base_words)) // per_item
     else:
         capacity = MAX_ITEMS_PER_SECTION * max(1, len(prepared))
 
@@ -2427,7 +2767,17 @@ def write_xlsx(path: str, dataset: Dataset, records: Sequence[Record],
 
     ws6 = wb.create_sheet("کنترل کیفیت")
     ws6.append(["موضوع", "شرح"])
-    ws6.append(["تعداد فایل‌های خوانده‌شده", len(dataset.files)])
+    ws6.append(["تعداد فایل‌های اکسل خوانده‌شده", len(dataset.files)])
+    if dataset.tg_stats:
+        tg = dataset.tg_stats
+        ws6.append(["پست‌های خوانده‌شده از تلگرام", tg.get("posts", 0)])
+        if tg.get("in_range") is not None:
+            ws6.append(["پست‌های داخل بازه‌ی زمانی", tg.get("in_range", 0)])
+            ws6.append(["پست‌های خارج از بازه", tg.get("out_range", 0)])
+        ws6.append(["پست‌های بدون نام ناحیه", tg.get("no_county", 0)])
+        ws6.append(["پست‌های بدون داده‌ی ساختاریافته", len(tg.get("no_data") or [])])
+        if dataset.date_range_label:
+            ws6.append(["بازه‌ی گزارش (به‌خواسته‌ی مدیر)", dataset.date_range_label])
     ws6.append(["تعداد سطرهای خام خوانده‌شده", len(dataset.records)])
     ws6.append(["دوره‌های موجود", "، ".join(dataset.month_label(m) for m in dataset.months)])
     ws6.append(["نواحی دارای داده", "، ".join(dataset.counties)])
@@ -2782,14 +3132,10 @@ def load_dataset(periods: Dict[str, List[str]], log,
         if not posts_all:
             ds.warnings.append("خروجی تلگرام خوانده نشد یا هیچ پستی در آن نبود.")
             log("خروجی تلگرام خوانده نشد یا خالی بود.", level="warn")
+        posts = posts_all
         if date_range and (date_range.get("start") or date_range.get("end")):
-            posts = filter_posts(posts_all, date_range.get("start"), date_range.get("end"))
-            removed = len(posts_all) - len(posts)
             ds.date_range_label = date_range.get("label", "")
-            log(f"بازه‌ی زمانی اعمال شد ({ds.date_range_label}): "
-                f"{persian_number(len(posts))} پست در بازه، {persian_number(removed)} پست خارج از بازه.")
-        else:
-            posts = posts_all
+            log(f"بازه‌ی زمانی «{ds.date_range_label}» روی ماه گزارش هر پست اعمال می‌شود.")
         log(f"خروجی تلگرام: {persian_number(len(posts))} پست از "
             f"{persian_number(len(tg_files))} فایل خوانده شد.", level="ok")
 
@@ -2799,9 +3145,13 @@ def load_dataset(periods: Dict[str, List[str]], log,
 
     if source == "telegram":
         log("استخراج داده‌ی ساختاریافته از متن پست‌ها …")
-        recs, tg_stats = build_telegram_dataset(posts, log, ai, ai_tasks)
+        recs, tg_stats = build_telegram_dataset(posts, log, ai, ai_tasks, date_range=date_range)
         ds.records.extend(recs)
         ds.tg_stats = tg_stats
+        if date_range and (date_range.get("start") or date_range.get("end")):
+            log(f"   در بازه: {persian_number(tg_stats.get('in_range', 0))} پست، "
+                f"خارج از بازه: {persian_number(tg_stats.get('out_range', 0))} پست.",
+                level="ok")
         log(f"از {persian_number(tg_stats['posts'])} پست، {persian_number(tg_stats['records'])} "
             f"رکورد اقدام ساخته شد"
             + (f" ({persian_number(tg_stats['ai_used'])} رکورد با کمک مدل)."
@@ -2815,7 +3165,8 @@ def load_dataset(periods: Dict[str, List[str]], log,
         if source == "both" and posts:
             links = [r.link for r in ds.records if r.link]
             recs, tg_stats = build_telegram_dataset(posts, log, ai, ai_tasks,
-                                                     fill_gaps_links=links)
+                                                     fill_gaps_links=links,
+                                                     date_range=date_range)
             ds.tg_stats = tg_stats
             if recs:
                 log(f"{persian_number(len(recs))} پست که در اکسل نبود، به‌عنوان اقدام تکمیلی "
