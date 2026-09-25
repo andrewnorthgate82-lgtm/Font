@@ -245,7 +245,37 @@ class TestPipeline(unittest.TestCase):
                        "--no-docx", "--no-xlsx", "--max-words", "300")
         self.assertEqual(code, 0)
 
-    def test_07_no_data_excel(self):
+    def test_07_one_page_compact(self):
+        """گزارش یک‌صفحه‌ای (سقف ۳۰۰ واژه): همه‌ی محورها با یک اقدام مشخص."""
+        code = run_cli("--source", "telegram", "--telegram", os.path.join(DEMO, "channel"),
+                       "--from", "مرداد", "--to", "شهریور", "--max-words", "300",
+                       "--out", OUT, "--no-docx", "--no-xlsx")
+        self.assertEqual(code, 0)
+        md = open(sorted(self._outputs(".md"))[-1], encoding="utf-8").read()
+        self.assertLessEqual(len(md.split()), 300)
+        axes = ["بحران و مسئله ویژه", "تولیدات و پویش‌های جریان‌ساز",
+                "هم‌افزایی و اقدامات مشترک", "برنامه‌ها و رویدادهای ویژه"]
+        for ax in axes:
+            self.assertIn(ax, md)
+        # هر محور باید دست‌کم یک اقدام مشخص (نه فقط آماره) داشته باشد
+        blocks = md.split("## بخش: ")[1:]
+        for b in blocks:
+            if b.startswith("سایر اقدامات"):
+                continue
+            self.assertIn("• **", b, "محور بدون اقدام مشخص: " + b.split("\n")[0])
+
+    def test_08_request_text_sets_cap(self):
+        """متن «درخواست مدیر» باید سقف واژه را (حتی با ارقام ترکیبی 3۰۰) اعمال کند."""
+        req = ("یک گزارش حداکثر یک‌صفحه‌ای (3۰۰ کلمه) از اقدامات مهم طی دو ماه مرداد و شهریور "
+               "ارسال کنند؛ از ذکر اقدامات روتین خودداری شود.")
+        code = run_cli("--source", "telegram", "--telegram", os.path.join(DEMO, "channel"),
+                       "--from", "مرداد", "--to", "شهریور", "--request", req,
+                       "--out", OUT, "--no-docx", "--no-xlsx")
+        self.assertEqual(code, 0)
+        md = open(sorted(self._outputs(".md"))[-1], encoding="utf-8").read()
+        self.assertLessEqual(len(md.split()), 300)
+
+    def test_09_no_data_excel(self):
         """فایل اکسل بدون داده باید با پیام روشن رد شود (نه خطای برنامه)."""
         empty = os.path.join(HERE, "demo-input", "empty-test.xlsx")
         import openpyxl

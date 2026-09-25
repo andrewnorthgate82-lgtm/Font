@@ -1631,6 +1631,16 @@ def enforce_char_limit(text: str, max_chars: int) -> str:
     return text[:max(200, max_chars - len(note))].rstrip() + note
 
 
+def compact_impact(rec: Record, max_words: int = 16) -> str:
+    """«نتیجه و اثر» کوتاه برای گزارش‌های یک‌صفحه‌ای (نخستین عبارت کلیدی)."""
+    text = impact_sentence(rec)
+    first = re.split(r"[؛.]", text)[0].strip()
+    words = first.split()
+    if len(words) > max_words:
+        first = " ".join(words[:max_words]).rstrip("،") + "…"
+    return first + "." if first and not first.endswith(".") else first
+
+
 def impact_sentence(rec: Record) -> str:
     """تولید «نتیجه و اثر» برای هر اقدام، بدون اغراق و بدون داده‌ی ساختگی."""
     if rec.ai_impact:
@@ -1669,11 +1679,17 @@ def build_report(dataset: Dataset, records: Sequence[Record], title: str,
     months_lbl = "، ".join(dataset.month_label(m) for m in months) if months else "کل بازه"
     period_lbl = months_lbl
 
+    # در سقف‌های واژه‌ی کم، سطرهای اختیاری حذف و متن‌ها فشرده می‌شوند
+    compact = bool(max_words) and max_words < 420
+
     lines: List[str] = []
     lines.append(f"# {title}")
     lines.append("")
-    lines.append(f"**بازه‌ی گزارش:** {period_lbl}   |   **تعداد نواحی/شهرستان‌های دارای داده:** "
-                 f"{persian_number(agg['counties'])} از {persian_number(len(EXPECTED_COUNTIES))}")
+    if compact:
+        lines.append(f"**بازه‌ی گزارش:** {period_lbl}")
+    else:
+        lines.append(f"**بازه‌ی گزارش:** {period_lbl}   |   **تعداد نواحی/شهرستان‌های دارای داده:** "
+                     f"{persian_number(agg['counties'])} از {persian_number(len(EXPECTED_COUNTIES))}")
 
     if dataset.source == "telegram":
         used = dataset.tg_stats.get("records", 0)
@@ -1688,9 +1704,6 @@ def build_report(dataset: Dataset, records: Sequence[Record], title: str,
     if dataset.ai_note:
         lines.append(f"**تحلیل هوشمند:** {dataset.ai_note}")
     lines.append("")
-
-    # در سقف‌های واژه‌ی کم، سطرهای اختیاری حذف و متن‌ها فشرده می‌شوند
-    compact = bool(max_words) and max_words < 420
 
     # مقدمه‌ی آماری
     intro = (f"در بازه‌ی {period_lbl}، در مجموع {persian_number(agg['total_activities'])} اقدام "
@@ -1718,10 +1731,10 @@ def build_report(dataset: Dataset, records: Sequence[Record], title: str,
     total_act = len(records) or 1
     if compact:
         dist = "، ".join(
-            f"{SHEET_LABELS[k]} {persian_number(agg['by_sheet'][k])} "
-            f"({persian_percent(agg['by_sheet'][k] / total_act)})"
+            f"{SHEET_LABELS[k]} {persian_number(agg['by_sheet'][k])}"
             for k in ["حضوری", "مجازی", "گردان", "خلاقانه", "تولیدات"] if agg["by_sheet"].get(k))
-        lines.append(f"- توزیع فعالیت‌ها: {dist}")
+        lines.append(f"- توزیع فعالیت‌ها: {dist} — نواحی دارای گزارش: "
+                     f"{persian_number(agg['counties'])} از {persian_number(len(EXPECTED_COUNTIES))}")
     else:
         for key in ["حضوری", "مجازی", "گردان", "خلاقانه", "تولیدات"]:
             cnt = agg["by_sheet"].get(key, 0)
@@ -1737,9 +1750,10 @@ def build_report(dataset: Dataset, records: Sequence[Record], title: str,
     counted.sort(key=lambda x: (-x[1], x[0]))
     top5 = counted[:5]
     zero_counties = [c for c in EXPECTED_COUNTIES if c not in by_county]
-    lines.append("- نواحی دارای گزارش: " + persian_number(len(counted)) + " از "
-                 + persian_number(len(EXPECTED_COUNTIES)))
-    if top5:
+    if not compact:
+        lines.append("- نواحی دارای گزارش: " + persian_number(len(counted)) + " از "
+                     + persian_number(len(EXPECTED_COUNTIES)))
+    if top5 and not compact:
         lines.append("- پنج ناحیه‌ی فعال: " + "، ".join(
             f"{c} ({persian_number(n)})" for c, n in top5))
     least5 = sorted(counted, key=lambda x: (x[1], x[0]))[:5]
@@ -1749,7 +1763,7 @@ def build_report(dataset: Dataset, records: Sequence[Record], title: str,
             [c for c, _ in least5] != [c for c, _ in top5]:
         lines.append("- پنج ناحیه با کمترین اقدام: " + "، ".join(
             f"{c} ({persian_number(n)})" for c, n in least5))
-    if dataset.tg_stats:
+    if dataset.tg_stats and not compact:
         no_data = dataset.tg_stats.get("no_data") or []
         lines.append(f"- پست‌های خوانده‌شده از تلگرام: "
                      f"{persian_number(dataset.tg_stats.get('posts', 0))}"
@@ -1780,103 +1794,155 @@ def build_report(dataset: Dataset, records: Sequence[Record], title: str,
         prepared.append((sec, sec_title,
                          sorted(sec_recs, key=lambda r: (r.people, r.minutes), reverse=True)))
 
+    def section_stats(sec_recs: List[Record]) -> str:
+        people = sum(r.people for r in sec_recs)
+        counties_in = len({r.county for r in sec_recs})
+        if compact:
+            extra = f"، {persian_number(people)} مخاطب" if people else ""
+            return f"{persian_number(len(sec_recs))} اقدام{extra}، {persian_number(counties_in)} ناحیه"
+        if people:
+            return (f"**خلاصه‌ی آماری:** {persian_number(len(sec_recs))} اقدام در "
+                    f"{persian_number(counties_in)} ناحیه؛ مجموع مخاطبان "
+                    f"{persian_number(people)} نفر؛ میانگین "
+                    f"{persian_number(people / len(sec_recs))} نفر به‌ازای هر اقدام.")
+        return (f"**خلاصه:** {persian_number(len(sec_recs))} اقدام تولیدی/رسانه‌ای در "
+                f"{persian_number(counties_in)} ناحیه (بدون مخاطب مستقیم).")
+
     def render_sections(alloc: Dict[str, int]) -> List[str]:
         out: List[str] = []
+        shown_ids: set = set()      # هر اقدام فقط یک‌بار در گزارش (در نخستین محور خود) می‌آید
         for sec, sec_title, sec_recs in prepared:
-            out.append(f"## بخش: {sec_title}")
-            if not sec_recs:
-                out.append("در این بخش، داده‌ی قابل استنادی در بازه‌ی مورد نظر ثبت نشده است.")
+            if compact and sec == "others" and sec_recs:
+                out.append(f"- {persian_number(len(sec_recs))} اقدام دیگر در سایر محورها "
+                           f"(فهرست کامل در فایل پیوست «اقدامات»).")
                 out.append("")
                 continue
-            people = sum(r.people for r in sec_recs)
-            counties_in = len({r.county for r in sec_recs})
-            n = len(sec_recs)
+            if not sec_recs:
+                if sec == "others":
+                    continue
+                out.append(f"## بخش: {sec_title}")
+                out.append("در این محور، داده‌ی قابل استنادی در بازه‌ی مورد نظر ثبت نشده است.")
+                out.append("")
+                continue
+            # در حالت فشرده، آماره‌ی بخش در خود عنوان می‌آید تا یک سطر صرفه‌جویی شود
             if compact:
-                extra = f"{persian_number(people)} مخاطب، " if people else "بدون مخاطب مستقیم، "
-                out.append(f"**خلاصه:** {persian_number(n)} اقدام، {extra}"
-                           f"{persian_number(counties_in)} ناحیه.")
-            elif people:
-                out.append(f"**خلاصه‌ی آماری:** {persian_number(n)} اقدام در "
-                           f"{persian_number(counties_in)} ناحیه؛ مجموع مخاطبان "
-                           f"{persian_number(people)} نفر؛ میانگین "
-                           f"{persian_number(people / n)} نفر به‌ازای هر اقدام.")
+                out.append(f"## بخش: {sec_title} ({section_stats(sec_recs)})")
             else:
-                out.append(f"**خلاصه:** {persian_number(n)} اقدام تولیدی/رسانه‌ای در "
-                           f"{persian_number(counties_in)} ناحیه (بدون مخاطب مستقیم).")
+                out.append(f"## بخش: {sec_title}")
+                out.append(section_stats(sec_recs))
             out.append("")
-            shown = max(0, min(alloc.get(sec, 0), n))
-            for r in sec_recs[:shown]:
+            want = max(0, min(alloc.get(sec, 0), len(sec_recs)))
+            picked = []
+            for r in sec_recs:
+                if len(picked) >= want:
+                    break
+                key = getattr(r, "uid", None) or id(r)
+                if key in shown_ids:
+                    continue
+                picked.append(r)
+            for r in picked:
+                shown_ids.add(getattr(r, "uid", None) or id(r))
                 where = r.place or r.platform or "—"
-                out.append(f"• **{county_label(r)}** — {r.topic or SHEET_LABELS.get(r.sheet, r.sheet)} "
-                           f"(تاریخ {fa_date(r.date)}، {where})")
-                out.append(f"  - نتیجه و اثر: {impact_sentence(r)}")
-                if details and r.link:
-                    out.append(f"  - مستند: {r.link}")
-            rest = n - shown
-            if rest > 0:
-                if shown == 0:
-                    out.append(f"- {persian_number(rest)} اقدام این دسته در فایل پیوست "
+                if compact:
+                    out.append(f"• **{county_label(r)}** — {r.topic or SHEET_LABELS.get(r.sheet, r.sheet)}"
+                               f" ({fa_date(r.date)}، {where}) — نتیجه و اثر: {compact_impact(r)}")
+                else:
+                    out.append(f"• **{county_label(r)}** — {r.topic or SHEET_LABELS.get(r.sheet, r.sheet)}"
+                               f" (تاریخ {fa_date(r.date)}، {where})")
+                    out.append(f"  - نتیجه و اثر: {impact_sentence(r)}")
+                    if details and r.link:
+                        out.append(f"  - مستند: {r.link}")
+            rest = len(sec_recs) - len(picked)
+            if rest > 0 and not compact:      # در حالت فشرده، آماره‌ی محور در خود عنوان آمده است
+                if not picked:
+                    out.append(f"- {persian_number(rest)} اقدام این محور در فایل پیوست "
                                f"«اقدامات» فهرست شده است.")
                 else:
-                    out.append(f"- و {persian_number(rest)} اقدام دیگر در همین دسته "
+                    out.append(f"- و {persian_number(rest)} اقدام دیگر در همین محور "
                                f"(فهرست کامل در فایل پیوست «اقدامات»).")
             out.append("")
         return out
 
-    # ---- تخصیص تعداد اقدامات هر بخش با توجه به سقف واژه ----------------------
+    def build_tail() -> List[str]:
+        """بخش‌های پایانی (درصد تحقق و جمع‌بندی) — پیش از تخصیص بودجه ساخته می‌شود."""
+        tail: List[str] = []
+        compliance = compute_compliance(dataset, records, months, counties)
+        if compliance and not compact:
+            tail.append("## درصد تحقق نسبت به حد انتظار")
+            for row in compliance[:8]:
+                tail.append(f"- {row['county']}: حضوری {persian_percent(row['p_hazeri'])}"
+                            f"، مجازی {persian_percent(row['p_majazi'])}"
+                            f"، خلاقانه {persian_percent(row['p_khalaghane'])}"
+                            f"، تولیدات {persian_percent(row['p_toliat'])}"
+                            f" (میانگین {persian_percent(row['p_total'])})")
+            if len(compliance) > 8:
+                tail.append(f"- و {persian_number(len(compliance) - 8)} ناحیه‌ی دیگر "
+                            f"(جدول کامل در شیت «تحقق انتظار» فایل اکسل).")
+            tail.append("")
+
+        tail.append("## جمع‌بندی")
+        top = agg["by_county"].most_common(5)
+        peak = agg["by_sheet"].most_common(1)
+        peak_txt = (f"{SHEET_LABELS.get(peak[0][0], peak[0][0])} با "
+                    f"{persian_number(peak[0][1])} اقدام") if peak else "—"
+        if compact:
+            top_txt = "، ".join(f"{c} ({persian_number(n)})" for c, n in top[:3]) or "—"
+            tail.append(f"بیشترین اقدامات در {top_txt} ثبت شده و پرتکرارترین قالب، {peak_txt} است؛ "
+                        f"مجموع مخاطبان {persian_number(agg['total_people'])} نفر "
+                        f"(میانگین {persian_number(agg['total_people'] / agg['total_activities'] if agg['total_activities'] else 0)} نفر).")
+        else:
+            top_txt = "، ".join(f"{c} ({persian_number(n)} اقدام)" for c, n in top) if top else "—"
+            tail.append(f"بیشترین حجم اقدامات به‌ترتیب در نواحی {top_txt} ثبت شده و پرتکرارترین قالب، "
+                        f"{peak_txt} است. مجموع مخاطبان مستقیم این بازه "
+                        f"{persian_number(agg['total_people'])} نفر و میانگین مخاطب هر اقدام "
+                        f"{persian_number(agg['total_people'] / agg['total_activities'] if agg['total_activities'] else 0)} نفر است.")
+            if len(months) > 1:
+                mom = month_over_month(records, months)
+                growths = [m for m in mom if m["growth_activities"] is not None]
+                if growths:
+                    g = growths[-1]["growth_activities"]
+                    direction = "رشد" if g >= 0 else "کاهش"
+                    tail.append(f"روند ماه‌به‌ماه تعداد اقدامات در آخرین دوره نسبت به دوره‌ی قبل، "
+                                f"{direction} {persian_percent(abs(g))} را نشان می‌دهد.")
+        tail.append("")
+        return tail
+
+    tail_lines = build_tail()
+
+    # ---- تخصیص تعداد اقدامات هر محور با توجه به سقف واژه ----------------------
     alloc: Dict[str, int] = {}
-    capacity = MAX_ITEMS_PER_SECTION * max(1, len(prepared))
     if max_words:
-        base_words = _words(lines) + _words(render_sections({})) + 45  # + برآورد جمع‌بندی
-        capacity = max(0, (max_words - base_words) // 42)              # ≈۴۲ واژه برای هر اقدام
+        per_item = 22 if compact else 42          # برآورد واژه برای هر اقدام
+        base_words = (_words(lines) + _words(render_sections({})) + _words(tail_lines))
+        capacity = max(0, (max_words - base_words)) // per_item
+    else:
+        capacity = MAX_ITEMS_PER_SECTION * max(1, len(prepared))
+
+    # در گزارش یک‌صفحه‌ای، «سایر اقدامات» فقط یک سطر خلاصه می‌گیرد و بودجه مصرف نمی‌کند
+    alloc_pool = [p for p in prepared if not (compact and p[0] == "others")]
+
+    # گام ۱: هر محورِ دارای داده، دست‌کم یک اقدام مشخص داشته باشد
+    for sec, _sec_title, sec_recs in alloc_pool:
+        if capacity <= 0:
+            break
+        if sec_recs:
+            alloc[sec] = 1
+            capacity -= 1
+    # گام ۲: توزیع چرخشی باقی‌مانده‌ی بودجه
     i = 0
-    while capacity > 0 and prepared:
-        sec, _sec_title, sec_recs = prepared[i % len(prepared)]
+    while capacity > 0 and alloc_pool:
+        sec, _sec_title, sec_recs = alloc_pool[i % len(alloc_pool)]
         cap = min(MAX_ITEMS_PER_SECTION, len(sec_recs))
         if alloc.get(sec, 0) < cap:
             alloc[sec] = alloc.get(sec, 0) + 1
             capacity -= 1
-        elif all(alloc.get(s, 0) >= min(MAX_ITEMS_PER_SECTION, len(rs)) for s, _t, rs in prepared):
+        elif all(alloc.get(s_, 0) >= min(MAX_ITEMS_PER_SECTION, len(rs))
+                 for s_, _t, rs in alloc_pool):
             break
         i += 1
 
     lines.extend(render_sections(alloc))
-
-    # درصد تحقق نسبت به «حد انتظار» (در صورت وجود فایل کارنامه)
-    compliance = compute_compliance(dataset, records, months, counties)
-    if compliance and not compact:
-        lines.append("## درصد تحقق نسبت به حد انتظار")
-        for row in compliance[:8]:
-            lines.append(f"- {row['county']}: حضوری {persian_percent(row['p_hazeri'])}"
-                         f"، مجازی {persian_percent(row['p_majazi'])}"
-                         f"، خلاقانه {persian_percent(row['p_khalaghane'])}"
-                         f"، تولیدات {persian_percent(row['p_toliat'])}"
-                         f" (میانگین {persian_percent(row['p_total'])})")
-        if len(compliance) > 8:
-            lines.append(f"- و {persian_number(len(compliance) - 8)} ناحیه‌ی دیگر "
-                         f"(جدول کامل در شیت «تحقق انتظار» فایل اکسل).")
-        lines.append("")
-
-    # جمع‌بندی
-    lines.append("## جمع‌بندی")
-    top = agg["by_county"].most_common(5)
-    top_txt = "، ".join(f"{c} ({persian_number(n)} اقدام)" for c, n in top) if top else "—"
-    peak = agg["by_sheet"].most_common(1)
-    peak_txt = (f"{SHEET_LABELS.get(peak[0][0], peak[0][0])} با "
-                f"{persian_number(peak[0][1])} اقدام") if peak else "—"
-    lines.append(f"بیشترین حجم اقدامات به‌ترتیب در نواحی {top_txt} ثبت شده و پرتکرارترین قالب، "
-                 f"{peak_txt} است. مجموع مخاطبان مستقیم این بازه "
-                 f"{persian_number(agg['total_people'])} نفر و میانگین مخاطب هر اقدام "
-                 f"{persian_number(agg['total_people'] / agg['total_activities'] if agg['total_activities'] else 0)} نفر است.")
-    if len(months) > 1:
-        mom = month_over_month(records, months)
-        growths = [m for m in mom if m["growth_activities"] is not None]
-        if growths:
-            g = growths[-1]["growth_activities"]
-            direction = "رشد" if g >= 0 else "کاهش"
-            lines.append(f"روند ماه‌به‌ماه تعداد اقدامات در آخرین دوره نسبت به دوره‌ی قبل، "
-                         f"{direction} {persian_percent(abs(g))} را نشان می‌دهد.")
-    lines.append("")
+    lines.extend(tail_lines)
 
     body = "\n".join(lines)
     body = enforce_word_limit(body, max_words)
