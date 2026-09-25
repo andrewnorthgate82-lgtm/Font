@@ -9,6 +9,7 @@ import json
 import os
 import shutil
 import sys
+import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -17,7 +18,7 @@ sys.path.insert(0, HERE)
 import ai_engine            # noqa: E402
 import gozaresh as gz       # noqa: E402
 
-OUT = os.path.abspath(os.path.join(HERE, "..", "گزارش‌های-ساخته‌شده"))
+OUT = os.path.join(tempfile.gettempdir(), "gozaresh-test-out")   # پوشه‌ی موقت آزمون
 DEMO = os.path.join(HERE, "demo-input")
 
 

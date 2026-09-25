@@ -6,12 +6,13 @@
 import glob
 import os
 import sys
+import tempfile
 import time
 
 import pexpect
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.abspath(os.path.join(HERE, "..", "گزارش‌های-ساخته‌شده"))
+OUT = os.path.join(tempfile.gettempdir(), "gozaresh-test-out")   # پوشه‌ی موقت آزمون
 CHANNEL = os.path.join(HERE, "demo-input", "channel")
 
 
@@ -54,7 +55,7 @@ def main() -> int:
     send_when("پیوست لینک", "\r")                      # خیر
     send_when("فایل Word", "\r")                       # Word: بله
     send_when("فایل Excel", "y\r")                     # Excel: بله
-    send_when("پوشه‌ی خروجی", "\r")                     # پیش‌فرض
+    send_when("پوشه‌ی خروجی", OUT + "\r")          # پوشه‌ی موقت آزمون
     send_when("مسیر لوگو", "\r")                        # بدون لوگو
     send_when("گزارش آماده شد", "\r")                   # باز شدن مرورگر
     child.expect(pexpect.EOF)
