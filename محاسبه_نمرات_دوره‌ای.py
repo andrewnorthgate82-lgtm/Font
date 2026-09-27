@@ -223,19 +223,34 @@ def extract_sheet_metrics(ws):
         'classes_count': active_classes
     }
 
-def get_tier_3_levels(score):
+def get_tier_3_levels(score, scale_mode='0-100'):
     """
     ۳ سطح کیفی مصوب:
-    1. عالی: نمره ۹۰ تا ۱۰۰
-    2. متوسط: نمره ۸۰ تا ۸۹.۹
-    3. ضعیف: نمره زیر ۸۰ (شامل نمره ۷۰ عدم فعالیت یا کسری)
+    در مقیاس واقعی (۰ تا ۱۰۰):
+      1. عالی: نمره ۸۵ تا ۱۰۰ (تحقق درخشان)
+      2. متوسط: نمره ۵۰ تا ۸۴.۹ (تحقق میانی)
+      3. ضعیف: نمره زیر ۵۰ (شامل نمره ۰ عدم فعالیت)
+
+    در مقیاس نسرا (۷۰ تا ۱۰۰):
+      1. عالی: نمره ۹۰ تا ۱۰۰
+      2. متوسط: نمره ۸۰ تا ۸۹.۹
+      3. ضعیف: نمره زیر ۸۰ (شامل نمره ۷۰ عدم فعالیت)
     """
-    if score >= 90.0:
-        return "عالی"
-    elif score >= 80.0:
-        return "متوسط"
+    if scale_mode == '70-100':
+        if score >= 90.0:
+            return "عالی"
+        elif score >= 80.0:
+            return "متوسط"
+        else:
+            return "ضعیف"
     else:
-        return "ضعیف"
+        # Real Scale 0-100
+        if score >= 85.0:
+            return "عالی"
+        elif score >= 50.0:
+            return "متوسط"
+        else:
+            return "ضعیف"
 
 def prompt_period():
     print("=" * 80)
@@ -258,6 +273,27 @@ def prompt_period():
 
     map_choice = {'1': 2, '2': 3, '3': 6}
     return map_choice.get(choice, 3)
+
+def prompt_scale():
+    print("-" * 80)
+    print("انتخاب مبنا و مقیاس محاسبه نمرات (Scoring Scale Mode):\n")
+    print("  [1] مقیاس واقعی از ۰ تا ۱۰۰ (Real Scale: 0 to 100)")
+    print("      • عملکرد صفر = نمره ۰.۰ | تحقق کامل اهداف = نمره ۱۰۰.۰")
+    print("      • نمره مستقیم = درصد واقعی تحقق وزنی اهداف\n")
+    print("  [2] مقیاس استاندارد نسرا از ۷۰ تا ۱۰۰ (Nasra Scale: 70 to 100)")
+    print("      • عملکرد صفر = نمره ۷۰.۰ | تحقق کامل اهداف = نمره ۱۰۰.۰")
+    print("      • فرمول: نمره = ۷۰ + ۳۰ × (درصد تحقق وزنی اهداف)")
+    print("-" * 80)
+    
+    choice = "1"
+    try:
+        user_in = input("لطفاً عدد ۱ یا ۲ را وارد نمایید [پیش‌فرض: 1 (واقعی 0 تا 100)]: ").strip()
+        if user_in in ['1', '2']:
+            choice = user_in
+    except (EOFError, KeyboardInterrupt):
+        choice = "1"
+
+    return '0-100' if choice == '1' else '70-100'
 
 def scan_reports_directory(reports_dir='reports'):
     os.makedirs(reports_dir, exist_ok=True)
@@ -286,15 +322,24 @@ def scan_reports_directory(reports_dir='reports'):
             
     return subdirs, files_list
 
-def run_period_evaluation(selected_months=None):
+def run_period_evaluation(selected_months=None, selected_scale=None):
     if selected_months in [2, 3, 6]:
         n_months = selected_months
     else:
         n_months = prompt_period()
 
+    if selected_scale in ['0-100', '70-100']:
+        scale_mode = selected_scale
+    else:
+        scale_mode = prompt_scale()
+
     cfg = PERIOD_CONFIGS[n_months]
+    scale_label_fa = "مقیاس واقعی (۰ تا ۱۰۰)" if scale_mode == '0-100' else "مقیاس استاندارد نسرا (۷۰ تا ۱۰۰)"
+    score_header_fa = "نمره واقعی (۰-۱۰۰)" if scale_mode == '0-100' else "نمره نسرا (۷۰-۱۰۰)"
+
     print("\n" + "=" * 80)
     print(f"📌 دوره انتخابی: عملکرد {cfg['title']} ({cfg['title_en']})")
+    print(f"📊 مقیاس انتخابی نمره‌دهی: {scale_label_fa}")
     print(f"🎯 حدانتظارها: ضریب {n_months} برابری اهداف ماهانه")
     print("⚖️ اوزان ارزیابی: ۱۰٪ حضوری | ۳۰٪ مجازی (سرشکن در سبد ۴۰٪ آموزش) | ۵۰٪ خلاقانه (سقف ۱۰۰٪) | ۱۰٪ تولیدات")
     print("=" * 80)
@@ -429,9 +474,17 @@ def run_period_evaluation(selected_months=None):
         total_realization_ratio = training_share + khalagh_share + tolid_share
         total_realization_pct = round(total_realization_ratio * 100.0, 2)
 
-        # Final Score in 70.0 to 100.0 scale:
-        final_score = round(70.0 + (30.0 * total_realization_ratio), 1)
-        tier = get_tier_3_levels(final_score)
+        # Both scores computed for full visibility:
+        score_real = round(total_realization_ratio * 100.0, 1)
+        score_nasra = round(70.0 + (30.0 * total_realization_ratio), 1)
+
+        # Final chosen score according to selected scale mode:
+        if scale_mode == '0-100':
+            final_score = score_real
+            tier = get_tier_3_levels(score_real, '0-100')
+        else:
+            final_score = score_nasra
+            tier = get_tier_3_levels(score_nasra, '70-100')
 
         if f_cnt >= n_months:
             status_desc = f"کامل ({len(m_found)} از {n_months} ماه)"
@@ -451,6 +504,8 @@ def run_period_evaluation(selected_months=None):
             'missing_months': missing_months,
             'status_desc': status_desc,
             'score': final_score,
+            'score_real': score_real,
+            'score_nasra': score_nasra,
             'tier': tier,
             'total_realization_pct': total_realization_pct,
             'training_share_pct': round(training_share * 100.0, 2),
@@ -463,12 +518,13 @@ def run_period_evaluation(selected_months=None):
             't_tol': t_tol, 'a_tol': a_tol, 'pct_tol_raw': pct_tol_raw
         })
 
+    active_threshold = 0.0 if scale_mode == '0-100' else 70.0
     sorted_by_score = sorted(results, key=lambda x: (x['score'], x['total_realization_pct']), reverse=True)
     rank_map = {}
     active_rank = 1
     for item in sorted_by_score:
         dn = item['district']
-        if item['score'] > 70.0:
+        if item['score'] > active_threshold:
             rank_map[dn] = active_rank
             active_rank += 1
         else:
@@ -486,12 +542,14 @@ def run_period_evaluation(selected_months=None):
     font_th = Font(name='Calibri', size=11, bold=True, color='FFFFFF')
     font_td = Font(name='Calibri', size=11, bold=False, color='0F172A')
     font_score = Font(name='Calibri', size=12, bold=True, color='047857')
+    font_score_alt = Font(name='Calibri', size=11, bold=True, color='1E40AF')
     font_copy_th = Font(name='Calibri', size=12, bold=True, color='FFFFFF')
     font_copy_dn = Font(name='Calibri', size=12, bold=True, color='0F172A')
     font_copy_sc = Font(name='Calibri', size=12, bold=True, color='047857')
 
     fill_th_navy = PatternFill(start_color='1E3A8A', end_color='1E3A8A', fill_type='solid')
     fill_copy_header = PatternFill(start_color='059669', end_color='059669', fill_type='solid')
+    fill_compare_header = PatternFill(start_color='1F4E79', end_color='1F4E79', fill_type='solid')
     
     fill_tier_ali = PatternFill(start_color='D1FAE5', end_color='D1FAE5', fill_type='solid')      # Green
     fill_tier_motevaset = PatternFill(start_color='FEF3C7', end_color='FEF3C7', fill_type='solid')# Yellow
@@ -515,7 +573,7 @@ def run_period_evaluation(selected_months=None):
     ws_raw.views.sheetView[0].rightToLeft = True
     
     ws_raw['A1'] = "نام ناحیه"
-    ws_raw['B1'] = "نمره (۷۰-۱۰۰)"
+    ws_raw['B1'] = score_header_fa
     ws_raw['A1'].font = font_copy_th
     ws_raw['B1'].font = font_copy_th
     ws_raw['A1'].fill = fill_copy_header
@@ -534,21 +592,75 @@ def run_period_evaluation(selected_months=None):
         ws_raw.cell(row=idx, column=2).border = border_thin
 
     ws_raw.column_dimensions['A'].width = 25
-    ws_raw.column_dimensions['B'].width = 18
+    ws_raw.column_dimensions['B'].width = 22
 
     # ==========================================
-    # SHEET 2: جدول نمرات و تحلیل ماه‌ها
+    # SHEET 2: مقایسه هر دو مقیاس (۰-۱۰۰ و ۷۰-۱۰۰)
+    # ==========================================
+    ws_comp = wb.create_sheet(title="مقایسه دو مقیاس")
+    ws_comp.views.sheetView[0].rightToLeft = True
+
+    ws_comp.merge_cells('A1:H1')
+    ws_comp['A1'] = f"جدول مقایسه نمرات دوره {cfg['title']} در دو مقیاس واقعی (۰ تا ۱۰۰) و استاندارد نسرا (۷۰ تا ۱۰۰)"
+    ws_comp['A1'].font = font_title
+    ws_comp['A1'].alignment = align_center
+
+    headers_comp = [
+        ('ردیف', 8), ('نام ناحیه (شهرستان)', 24), ('نمره واقعی (۰ تا ۱۰۰)', 20),
+        ('نمره نسرا (۷۰ تا ۱۰۰)', 20), ('سطح کیفی', 16), ('رتبه استانی', 14),
+        ('درصد تحقق وزنی', 18), ('وضعیت و ماه‌های کارنکرده', 38)
+    ]
+
+    for c_idx, (h_title, w) in enumerate(headers_comp, start=1):
+        cell = ws_comp.cell(row=3, column=c_idx, value=h_title)
+        cell.font = font_copy_th
+        cell.fill = fill_compare_header
+        cell.alignment = align_center
+        cell.border = border_thin
+        ws_comp.column_dimensions[get_column_letter(c_idx)].width = w
+
+    for idx, r in enumerate(results, start=1):
+        row_num = 3 + idx
+        ws_comp.cell(row=row_num, column=1, value=idx).alignment = align_center
+        ws_comp.cell(row=row_num, column=2, value=r['district']).alignment = align_right
+        ws_comp.cell(row=row_num, column=3, value=r['score_real']).alignment = align_center
+        ws_comp.cell(row=row_num, column=4, value=r['score_nasra']).alignment = align_center
+        ws_comp.cell(row=row_num, column=5, value=r['tier']).alignment = align_center
+        ws_comp.cell(row=row_num, column=6, value=r['rank']).alignment = align_center
+        ws_comp.cell(row=row_num, column=7, value=f"{r['total_realization_pct']:.1f}%").alignment = align_center
+        ws_comp.cell(row=row_num, column=8, value=r['status_desc']).alignment = align_right
+
+        ws_comp.cell(row=row_num, column=1).font = font_td
+        ws_comp.cell(row=row_num, column=2).font = font_copy_dn
+        ws_comp.cell(row=row_num, column=3).font = font_copy_sc
+        ws_comp.cell(row=row_num, column=4).font = font_score_alt
+        ws_comp.cell(row=row_num, column=3).fill = fill_score_col
+
+        tier_cell = ws_comp.cell(row=row_num, column=5)
+        if r['tier'] == 'عالی': tier_cell.fill = fill_tier_ali
+        elif r['tier'] == 'متوسط': tier_cell.fill = fill_tier_motevaset
+        else: tier_cell.fill = fill_tier_zaeef
+
+        ws_comp.cell(row=row_num, column=6).font = font_td
+        ws_comp.cell(row=row_num, column=7).font = font_td
+        ws_comp.cell(row=row_num, column=8).font = font_td
+
+        for c in range(1, 9):
+            ws_comp.cell(row=row_num, column=c).border = border_thin
+
+    # ==========================================
+    # SHEET 3: جدول نمرات و تحلیل ماه‌ها
     # ==========================================
     ws_copy = wb.create_sheet(title="جدول نمرات و تحلیل ماه‌ها")
     ws_copy.views.sheetView[0].rightToLeft = True
 
     ws_copy.merge_cells('A1:G1')
-    ws_copy['A1'] = f"جدول ارزیابی عملکرد {cfg['title']} نواحی نسرا (۱۰٪ حضوری، ۳۰٪ مجازی، ۵۰٪ خلاقانه، ۱۰٪ تولیدات)"
+    ws_copy['A1'] = f"جدول ارزیابی عملکرد {cfg['title']} نواحی نسرا ({scale_label_fa})"
     ws_copy['A1'].font = font_title
     ws_copy['A1'].alignment = align_center
 
     headers_s2 = [
-        ('ردیف', 8), ('نام ناحیه (شهرستان)', 24), ('نمره عملکرد (۷۰-۱۰۰)', 22),
+        ('ردیف', 8), ('نام ناحیه (شهرستان)', 24), (score_header_fa, 22),
         ('سطح کیفی (۳ سطح)', 18), ('رتبه استانی', 14), ('تعداد ماه‌های ارسالی', 20),
         ('وضعیت و ماه‌های کارنکرده', 40)
     ]
@@ -589,19 +701,19 @@ def run_period_evaluation(selected_months=None):
             ws_copy.cell(row=row_num, column=c).border = border_thin
 
     # ==========================================
-    # SHEET 3: جدول رتبه‌بندی استانی
+    # SHEET 4: جدول رتبه‌بندی استانی
     # ==========================================
     ws_rank = wb.create_sheet(title="رتبه‌بندی استانی")
     ws_rank.views.sheetView[0].rightToLeft = True
 
-    ws_rank.merge_cells('A1:F1')
-    ws_rank['A1'] = f"رتبه‌بندی استانی عملکرد {cfg['title']} ۳۲ شهرستان (به ترتیب رتبه)"
+    ws_rank.merge_cells('A1:G1')
+    ws_rank['A1'] = f"رتبه‌بندی استانی عملکرد {cfg['title']} ۳۲ شهرستان ({scale_label_fa})"
     ws_rank['A1'].font = font_title
     ws_rank['A1'].alignment = align_center
 
     headers_s3 = [
-        ('رتبه', 10), ('نام ناحیه (شهرستان)', 24), ('نمره عملکرد (۷۰-۱۰۰)', 22),
-        ('سطح کیفی', 16), ('درصد تحقق وزنی', 18), ('تعداد ماه‌های ارسالی', 20)
+        ('رتبه', 10), ('نام ناحیه (شهرستان)', 24), (score_header_fa, 22),
+        ('نمره مقیاس دیگر', 18), ('سطح کیفی', 16), ('درصد تحقق وزنی', 18), ('تعداد ماه‌های ارسالی', 20)
     ]
 
     for c_idx, (h_title, w) in enumerate(headers_s3, start=1):
@@ -614,43 +726,46 @@ def run_period_evaluation(selected_months=None):
 
     for idx, r in enumerate(sorted_by_score, start=1):
         row_num = 3 + idx
+        other_sc = r['score_nasra'] if scale_mode == '0-100' else r['score_real']
         ws_rank.cell(row=row_num, column=1, value=r['rank']).alignment = align_center
         ws_rank.cell(row=row_num, column=2, value=r['district']).alignment = align_right
         ws_rank.cell(row=row_num, column=3, value=r['score']).alignment = align_center
-        ws_rank.cell(row=row_num, column=4, value=r['tier']).alignment = align_center
-        ws_rank.cell(row=row_num, column=5, value=f"{r['total_realization_pct']:.1f}%").alignment = align_center
-        ws_rank.cell(row=row_num, column=6, value=f"{r['files_count']} از {n_months} ماه").alignment = align_center
+        ws_rank.cell(row=row_num, column=4, value=other_sc).alignment = align_center
+        ws_rank.cell(row=row_num, column=5, value=r['tier']).alignment = align_center
+        ws_rank.cell(row=row_num, column=6, value=f"{r['total_realization_pct']:.1f}%").alignment = align_center
+        ws_rank.cell(row=row_num, column=7, value=f"{r['files_count']} از {n_months} ماه").alignment = align_center
 
         ws_rank.cell(row=row_num, column=1).font = font_td
         ws_rank.cell(row=row_num, column=2).font = font_copy_dn
         ws_rank.cell(row=row_num, column=3).font = font_copy_sc
+        ws_rank.cell(row=row_num, column=4).font = font_score_alt
         ws_rank.cell(row=row_num, column=3).fill = fill_score_col
 
-        tier_cell = ws_rank.cell(row=row_num, column=4)
+        tier_cell = ws_rank.cell(row=row_num, column=5)
         if r['tier'] == 'عالی': tier_cell.fill = fill_tier_ali
         elif r['tier'] == 'متوسط': tier_cell.fill = fill_tier_motevaset
         else: tier_cell.fill = fill_tier_zaeef
 
-        ws_rank.cell(row=row_num, column=5).font = font_td
         ws_rank.cell(row=row_num, column=6).font = font_td
+        ws_rank.cell(row=row_num, column=7).font = font_td
 
-        for c in range(1, 7):
+        for c in range(1, 8):
             ws_rank.cell(row=row_num, column=c).border = border_thin
 
     # ==========================================
-    # SHEET 4: ریز مستندات اوزان و شاخص‌ها
+    # SHEET 5: ریز مستندات اوزان و شاخص‌ها
     # ==========================================
     ws_full = wb.create_sheet(title="ریز مستندات و اوزان شاخص‌ها")
     ws_full.views.sheetView[0].rightToLeft = True
 
-    ws_full.merge_cells('A1:T1')
+    ws_full.merge_cells('A1:U1')
     ws_full['A1'] = f"ریز مستندات و اوزان شاخص‌های دوره {cfg['title']} به تفکیک شهرستان‌ها"
     ws_full['A1'].font = font_title
     ws_full['A1'].alignment = align_center
 
     headers_full = [
-        ('ردیف', 6), ('نام ناحیه', 20), ('نمره (۷۰-۱۰۰)', 14), ('سطح', 12), ('رتبه', 8),
-        ('ماه‌ها', 10), ('حوزه', 8),
+        ('ردیف', 6), ('نام ناحیه', 20), ('نمره واقعی (۰-۱۰۰)', 18), ('نمره نسرا (۷۰-۱۰۰)', 18),
+        ('سطح', 12), ('رتبه', 8), ('ماه‌ها', 10), ('حوزه', 8),
         ('انتظار حضوری', 14), ('عملکرد حضوری', 14), ('تحقق حضوری', 12),
         ('انتظار مجازی', 14), ('عملکرد مجازی', 14), ('تحقق مجازی', 12),
         ('سهم آموزش (۴۰٪)', 14),
@@ -670,26 +785,27 @@ def run_period_evaluation(selected_months=None):
         row_num = 3 + idx
         ws_full.cell(row=row_num, column=1, value=idx)
         ws_full.cell(row=row_num, column=2, value=r['district'])
-        ws_full.cell(row=row_num, column=3, value=r['score'])
-        ws_full.cell(row=row_num, column=4, value=r['tier'])
-        ws_full.cell(row=row_num, column=5, value=r['rank'])
-        ws_full.cell(row=row_num, column=6, value=f"{r['files_count']} از {n_months}")
-        ws_full.cell(row=row_num, column=7, value=r['branches'])
-        ws_full.cell(row=row_num, column=8, value=r['t_hoz'])
-        ws_full.cell(row=row_num, column=9, value=r['a_hoz'])
-        ws_full.cell(row=row_num, column=10, value=f"{r['pct_hoz_raw']:.1f}%")
-        ws_full.cell(row=row_num, column=11, value=r['t_maj'])
-        ws_full.cell(row=row_num, column=12, value=r['a_maj'])
-        ws_full.cell(row=row_num, column=13, value=f"{r['pct_maj_raw']:.1f}%")
-        ws_full.cell(row=row_num, column=14, value=f"{r['training_share_pct']:.2f}%")
-        ws_full.cell(row=row_num, column=15, value=r['t_kha'])
-        ws_full.cell(row=row_num, column=16, value=r['a_kha'])
-        ws_full.cell(row=row_num, column=17, value=f"{r['khalagh_share_pct']:.2f}%")
-        ws_full.cell(row=row_num, column=18, value=r['t_tol'])
-        ws_full.cell(row=row_num, column=19, value=r['a_tol'])
-        ws_full.cell(row=row_num, column=20, value=f"{r['tolid_share_pct']:.2f}%")
+        ws_full.cell(row=row_num, column=3, value=r['score_real'])
+        ws_full.cell(row=row_num, column=4, value=r['score_nasra'])
+        ws_full.cell(row=row_num, column=5, value=r['tier'])
+        ws_full.cell(row=row_num, column=6, value=r['rank'])
+        ws_full.cell(row=row_num, column=7, value=f"{r['files_count']} از {n_months}")
+        ws_full.cell(row=row_num, column=8, value=r['branches'])
+        ws_full.cell(row=row_num, column=9, value=r['t_hoz'])
+        ws_full.cell(row=row_num, column=10, value=r['a_hoz'])
+        ws_full.cell(row=row_num, column=11, value=f"{r['pct_hoz_raw']:.1f}%")
+        ws_full.cell(row=row_num, column=12, value=r['t_maj'])
+        ws_full.cell(row=row_num, column=13, value=r['a_maj'])
+        ws_full.cell(row=row_num, column=14, value=f"{r['pct_maj_raw']:.1f}%")
+        ws_full.cell(row=row_num, column=15, value=f"{r['training_share_pct']:.2f}%")
+        ws_full.cell(row=row_num, column=16, value=r['t_kha'])
+        ws_full.cell(row=row_num, column=17, value=r['a_kha'])
+        ws_full.cell(row=row_num, column=18, value=f"{r['khalagh_share_pct']:.2f}%")
+        ws_full.cell(row=row_num, column=19, value=r['t_tol'])
+        ws_full.cell(row=row_num, column=20, value=r['a_tol'])
+        ws_full.cell(row=row_num, column=21, value=f"{r['tolid_share_pct']:.2f}%")
 
-        for c in range(1, 21):
+        for c in range(1, 22):
             cell = ws_full.cell(row=row_num, column=c)
             cell.font = font_td
             cell.border = border_thin
@@ -697,6 +813,7 @@ def run_period_evaluation(selected_months=None):
 
         ws_full.cell(row=row_num, column=3).font = font_score
         ws_full.cell(row=row_num, column=3).fill = fill_score_col
+        ws_full.cell(row=row_num, column=4).font = font_score_alt
 
     wb.save(excel_filename)
     try:
@@ -705,20 +822,23 @@ def run_period_evaluation(selected_months=None):
         pass
 
     # Print Clean Console Output
-    print("\n" + "=" * 95)
-    print(f"📋 جدول نمرات دوره {cfg['title']} نواحی نسرا (اوزان: ۱۰٪ حضوری، ۳۰٪ مجازی، ۵۰٪ خلاقانه [سقف ۱۰۰٪]، ۱۰٪ تولیدات):")
-    print("=" * 95)
-    print(f"{'ردیف':^6} | {'نام ناحیه (شهرستان)':<20} | {'نمره':^8} | {'سطح کیفی':^10} | {'رتبه':^6} | {'تحقق کل':^10} | {'وضعیت ماه‌های ارسالی':<30}")
-    print("-" * 95)
+    print("\n" + "=" * 105)
+    print(f"📋 جدول نمرات دوره {cfg['title']} نواحی نسرا - {scale_label_fa}:")
+    print("=" * 105)
+    print(f"{'ردیف':^6} | {'نام ناحیه (شهرستان)':<20} | {score_header_fa:^18} | {'مقیاس دیگر':^14} | {'سطح کیفی':^10} | {'رتبه':^6} | {'تحقق کل':^10} | {'وضعیت ماه‌های ارسالی':<26}")
+    print("-" * 105)
     for idx, r in enumerate(results, start=1):
-        print(f"{idx:^6} | {r['district']:<20} | {r['score']:^8.1f} | {r['tier']:^10} | {str(r['rank']):^6} | {r['total_realization_pct']:^8.1f}% | {r['status_desc']:<30}")
-    print("=" * 95)
+        other_sc = r['score_nasra'] if scale_mode == '0-100' else r['score_real']
+        other_lbl = f"{other_sc:.1f} (نسرا)" if scale_mode == '0-100' else f"{other_sc:.1f} (واقعی)"
+        print(f"{idx:^6} | {r['district']:<20} | {r['score']:^18.1f} | {other_lbl:^14} | {r['tier']:^10} | {str(r['rank']):^6} | {r['total_realization_pct']:^8.1f}% | {r['status_desc']:<26}")
+    print("=" * 105)
 
     print(f"\n🎉 فایل اکسل متمرکز با موفقیت تولید شد:")
     print(f"   📄 «{os.path.abspath(excel_filename)}»")
     print(f"   (یک کپی با نام «{backup_period_file}» نیز ذخیره شد)")
-    print(f"\n💡 در شیت ۱ («فقط نام و نمره»)، ستون‌ها آماده انتخاب و کپی (Ctrl+C) هستند.")
-    print("=" * 95)
+    print(f"\n💡 در شیت ۱ («فقط نام و نمره»)، ستون‌های نام و نمره انتخابی ({score_header_fa}) آماده کپی با Ctrl+C هستند.")
+    print("💡 در شیت ۲، مقایسه همزمان هر دو مقیاس (واقعی ۰-۱۰۰ و نسرا ۷۰-۱۰۰) در کنار هم قرار دارد.")
+    print("=" * 105)
 
     if sys.platform == 'win32':
         try:
@@ -731,8 +851,21 @@ def run_period_evaluation(selected_months=None):
 
 if __name__ == '__main__':
     arg_m = None
+    arg_scale = None
     if len(sys.argv) > 1:
         raw_m = sys.argv[1].strip()
         if raw_m in ['2', '3', '6']:
             arg_m = int(raw_m)
-    run_period_evaluation(selected_months=arg_m)
+        elif raw_m in ['0', 'real', '0-100']:
+            arg_scale = '0-100'
+        elif raw_m in ['70', 'nasra', '70-100']:
+            arg_scale = '70-100'
+
+    if len(sys.argv) > 2:
+        raw_s = sys.argv[2].strip().lower()
+        if raw_s in ['0', 'real', '0-100', '1']:
+            arg_scale = '0-100'
+        elif raw_s in ['70', 'nasra', '70-100', '2']:
+            arg_scale = '70-100'
+
+    run_period_evaluation(selected_months=arg_m, selected_scale=arg_scale)
