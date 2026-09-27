@@ -534,7 +534,6 @@ def run_period_evaluation(selected_months=None, selected_scale=None):
         item['rank'] = rank_map[item['district']]
 
     excel_filename = "نمرات_نهایی_نواحی.xlsx"
-    backup_period_file = f"نمرات_عملکرد_{n_months}ماهه.xlsx"
 
     wb = openpyxl.Workbook()
 
@@ -816,10 +815,6 @@ def run_period_evaluation(selected_months=None, selected_scale=None):
         ws_full.cell(row=row_num, column=4).font = font_score_alt
 
     wb.save(excel_filename)
-    try:
-        shutil.copyfile(excel_filename, backup_period_file)
-    except Exception:
-        pass
 
     # Print Clean Console Output
     print("\n" + "=" * 105)
@@ -835,7 +830,6 @@ def run_period_evaluation(selected_months=None, selected_scale=None):
 
     print(f"\n🎉 فایل اکسل متمرکز با موفقیت تولید شد:")
     print(f"   📄 «{os.path.abspath(excel_filename)}»")
-    print(f"   (یک کپی با نام «{backup_period_file}» نیز ذخیره شد)")
     print(f"\n💡 در شیت ۱ («فقط نام و نمره»)، ستون‌های نام و نمره انتخابی ({score_header_fa}) آماده کپی با Ctrl+C هستند.")
     print("💡 در شیت ۲، مقایسه همزمان هر دو مقیاس (واقعی ۰-۱۰۰ و نسرا ۷۰-۱۰۰) در کنار هم قرار دارد.")
     print("=" * 105)
