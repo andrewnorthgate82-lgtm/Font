@@ -1,69 +1,69 @@
 @echo off
 rem ============================================================
-rem   Instructor Report Runner  -  ابزار گزارش‌گیری مدرسان
-rem   Double-click to run  /  or drag an Excel file onto me
+rem  Instructor Report Runner  (Gozaresh Modaresan)
+rem  Double-click to run  /  or drag an Excel file onto me
+rem  All Persian messages appear after the script starts.
 rem ============================================================
 chcp 65001 >nul
 setlocal EnableDelayedExpansion
 cd /d "%~dp0"
-title گزارش مدرسان
+title Gozaresh Modaresan
 
 echo.
 echo  ================================================
-echo        ابزار گزارش‌گیری مدرسان / سخنرانان
+echo    Instructor Report  -  Gozaresh Modaresan
 echo  ================================================
 echo.
 
-rem ---------- 1) پیدا کردن پایتون ----------
+rem ---------- 1) find Python ----------
 call :FINDPY
 if defined PY goto HAVEPY
 
-rem ---------- پایتون نصب نیست: دانلود و نصب کاملاً خودکار (بدون مرورگر) ----------
-echo  پایتون روی این سیستم نصب نیست.
-echo  نگران نباشید — الان به صورت خودکار دانلود و نصب می‌شود.
+rem ---------- Python missing: download + silent install (no browser) ----------
+echo  Python is not installed. It will be downloaded and
+echo  installed automatically. Please wait...
 echo.
-echo  مرحله 1 از 2: دانلود پایتون - حدود 25 مگابایت - صبر کنید...
-echo.
+echo  [Step 1/2] Downloading Python (~25 MB)...
 set "PYINST=%TEMP%\python-setup.exe"
 curl -# -L -o "%PYINST%" "https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe"
 if not exist "%PYINST%" (
     echo.
-    echo  خطا در دانلود پایتون. اتصال اینترنت را بررسی کنید و دوباره اجرا کنید.
+    echo  ERROR: download failed. Check your internet connection and run me again.
     goto END
 )
 echo.
-echo  مرحله 2 از 2: نصب پایتون - چند دقیقه طول می‌کشد - این پنجره را نبندید...
+echo  [Step 2/2] Installing Python silently (a few minutes). Do NOT close this window...
 start /wait "" "%PYINST%" /quiet InstallAllUsers=0 PrependPath=1 Include_test=0
 call :FINDPY
 if defined PY (
     del "%PYINST%" >nul 2>&1
-    echo  پایتون با موفقیت نصب شد.
+    echo  Python installed successfully.
     echo.
     goto HAVEPY
 )
 echo.
-echo  نصب بی‌صدا کامل نشد. الان پنجره نصب پایتون باز می‌شود:
-echo     1- پایین پنجره، تیک "Add python.exe to PATH" را بزنید
-echo     2- روی "Install Now" کلیک کنید
-echo     3- بعد از پایان نصب، دوباره روی همین فایل دابل‌کلیک کنید
+echo  Silent install did not complete. The Python installer window will open now:
+echo    1) Check the box "Add python.exe to PATH"
+echo    2) Click "Install Now"
+echo    3) After it finishes, double-click me again.
 start "" "%PYINST%"
 goto END
 
 :HAVEPY
-rem ---------- 2) اگر اسکریپت کنار فایل نبود، از گیت‌هاب دانلود کن ----------
+rem ---------- 2) get the script from GitHub if it is not next to me ----------
 if not exist "instructor_report.py" (
-    echo  در حال دانلود اسکریپت از گیت‌هاب...
+    echo  Downloading script from GitHub...
     curl -s -L -o "instructor_report.py" "https://raw.githubusercontent.com/andrewnorthgate82-lgtm/Font/arena/01a0f15b-font/instructor_report.py"
 )
 if not exist "instructor_report.py" (
-    echo  خطا: دانلود انجام نشد. فایل instructor_report.py را کنار این فایل قرار دهید.
+    echo  ERROR: could not download. Put instructor_report.py next to this file.
     goto END
 )
 
-rem ---------- 3) نصب پیش‌نیاز - فقط بار اول ----------
+rem ---------- 3) install requirement (first run only) ----------
 %PY% -c "import openpyxl" >nul 2>&1
 if errorlevel 1 (
-    echo  در حال نصب پیش‌نیاز - فقط بار اول، کمی صبر کنید...
+    echo  Installing requirement - first run only, please wait...
     %PY% -m pip install --quiet openpyxl
     %PY% -c "import openpyxl" >nul 2>&1
     if errorlevel 1 (
@@ -71,17 +71,17 @@ if errorlevel 1 (
     )
     %PY% -c "import openpyxl" >nul 2>&1
     if errorlevel 1 (
-        echo  خطا در نصب پیش‌نیاز. اتصال اینترنت را بررسی و دوباره اجرا کنید.
+        echo  ERROR: could not install openpyxl. Check your internet and run me again.
         goto END
     )
 )
 
-rem ---------- 4) اجرا ----------
+rem ---------- 4) run ----------
 echo.
 %PY% instructor_report.py %*
 echo.
 echo  ------------------------------------------------
-echo  کار تمام شد. فایل خروجی کنار فایل اکسل ساخته شد.
+echo  Done. The output Excel file was created next to your input file.
 goto END
 
 :END
@@ -89,7 +89,7 @@ echo.
 pause
 goto :eof
 
-rem ---------- زیربرنامه: پیدا کردن پایتون در همه حالت‌ها ----------
+rem ---------- subroutine: find Python everywhere ----------
 :FINDPY
 set "PY="
 py -3 --version >nul 2>&1 && set "PY=py -3"
