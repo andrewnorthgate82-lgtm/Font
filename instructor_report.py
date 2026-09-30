@@ -26,6 +26,9 @@ import sys
 import unicodedata
 from collections import OrderedDict
 
+import warnings
+warnings.filterwarnings("ignore", module="openpyxl")  # هشدارهای بی‌اهمیت openpyxl
+
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
@@ -351,18 +354,61 @@ def build_output(ordered_stats, records, out_path, src_name):
     wb.save(out_path)
 
 
+# ------------------------------------------------- انتخاب فایل به‌صورت تعاملی ---
+
+_FA_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789")
+
+
+def interactive_pick():
+    """وقتی فایل ورودی داده نشده (مثلاً با دابل‌کلیک اجرا شده)، از کاربر می‌پرسد."""
+    files = sorted(
+        f for f in os.listdir(".")
+        if f.lower().endswith((".xlsx", ".xlsm"))
+        and not f.startswith("~$")            # فایل‌های موقت اکسل
+        and not f.startswith("گزارش مدرسان")  # خروجی‌های قبلی خود اسکریپت
+    )
+    if not files:
+        print("هیچ فایل اکسلی در این پوشه پیدا نشد.")
+        path = input("مسیر فایل اکسل را بنویسید (یا فایل را داخل همین پنجره بکشید) و Enter بزنید:\n> ")
+        return path.strip().strip('"').strip()
+    if len(files) == 1:
+        print(f"✅ یک فایل اکسل پیدا شد و همان انتخاب شد: {files[0]}")
+        return files[0]
+    print("چند فایل اکسل در این پوشه هست:")
+    for i, f in enumerate(files, start=1):
+        print(f"   {i}) {f}")
+    while True:
+        choice = input("\nشماره فایل موردنظر را وارد کنید و Enter بزنید: ")
+        choice = choice.strip().translate(_FA_DIGITS)
+        if choice.isdigit() and 1 <= int(choice) <= len(files):
+            return files[int(choice) - 1]
+        print("⚠ شماره نامعتبر است؛ دوباره تلاش کنید.")
+
+
 # -------------------------------------------------------------------- main ---
 
 def main():
+    # جلوگیری از خطای حروف فارسی در کنسول ویندوز
+    for stream in (sys.stdout, sys.stderr):
+        if stream and hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
     parser = argparse.ArgumentParser(
         description="تحلیل ستون «نام سخنران / مدرس» در همه شیت‌های یک فایل اکسل "
                     "و تولید گزارش رتبه‌بندی مدرسان بر اساس تعداد کلاس.")
-    parser.add_argument("input", help="مسیر فایل اکسل ورودی (.xlsx)")
+    parser.add_argument("input", nargs="?", default=None,
+                        help="مسیر فایل اکسل ورودی (.xlsx) — اگر ندهید، خود اسکریپت می‌پرسد")
     parser.add_argument("-o", "--output", default=None,
                         help="مسیر فایل خروجی (پیش‌فرض: «گزارش مدرسان - <نام ورودی>.xlsx»)")
     args = parser.parse_args()
 
-    if not os.path.isfile(args.input):
+    if not args.input:
+        args.input = interactive_pick()
+
+    if not args.input or not os.path.isfile(args.input):
         sys.exit(f"❌ فایل پیدا نشد: {args.input}")
 
     base = os.path.splitext(os.path.basename(args.input))[0]
