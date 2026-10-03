@@ -54,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -363,7 +364,10 @@ fun ChatScreen(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .background(if (canSend) BrandGradient else MaterialTheme.colorScheme.surfaceVariant)
+                                    .background(
+                                    if (canSend) BrandGradient
+                                    else SolidColor(MaterialTheme.colorScheme.surfaceVariant),
+                                )
                                     .size(52.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
