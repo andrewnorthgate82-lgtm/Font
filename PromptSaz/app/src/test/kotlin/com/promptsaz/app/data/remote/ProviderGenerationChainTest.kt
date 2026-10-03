@@ -91,6 +91,12 @@ class ProviderGenerationChainTest {
         }
 
         server!!.createContext("/v1/models") { exchange ->
+            captured = CapturedRequest(
+                method = exchange.requestMethod,
+                path = exchange.requestURI.path,
+                authorization = exchange.requestHeaders.getFirst("Authorization"),
+                body = exchange.requestBody.readBytes().decodeToString(),
+            )
             val reply = """{"object":"list","data":[{"id":"model-a"},{"id":"model-b"}]}"""
             val bytes = reply.toByteArray(Charsets.UTF_8)
             exchange.sendResponseHeaders(200, bytes.size.toLong())
