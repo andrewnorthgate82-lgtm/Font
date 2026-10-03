@@ -1,0 +1,62 @@
+name: Build APK
+
+# PromptSaz lives in the PromptSaz/ subfolder of this repository.
+# (A standalone copy of this workflow for a future promptsaz-android repo,
+# with root-relative paths, ships at PromptSaz/.github/workflows/build-apk.yml.)
+on:
+  push:
+    branches: [main, "arena/01a0fc10-font"]
+    paths: ["PromptSaz/**", ".github/workflows/build-apk.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: PromptSaz
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Run unit tests
+        run: ./gradlew :app:testDebugUnitTest --stacktrace
+
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug --stacktrace
+
+      - name: Rename APK to PromptSaz.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk PromptSaz.apk
+
+      - name: Upload APK as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PromptSaz-apk
+          path: PromptSaz/PromptSaz.apk
+
+      - name: Publish GitHub Release
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="build-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" PromptSaz/PromptSaz.apk \
+            --title "PromptSaz APK (build ${GITHUB_RUN_NUMBER})" \
+            --notes "خودکار از آخرین کد ساخته شد.
+          دانلود: PromptSaz.apk — روی گوشی باز کنید و اجازه نصب بدهید." \
+            --latest
