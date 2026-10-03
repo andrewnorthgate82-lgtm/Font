@@ -22,7 +22,14 @@ object AiServicePresets {
             nameFa = "Google Gemini (AI Studio)",
             baseUrl = "https://generativelanguage.googleapis.com/v1beta",
             type = AiService.TYPE_GEMINI,
-            keyHintFa = "کلید را از aistudio.google.com ← Get API key بگیر (با AIza… شروع می‌شود)",
+            keyHintFa = "کلید را از aistudio.google.com ← Get API key بگیر (کلیدهای AIza… و AQ.… هر دو معتبرند)",
+        ),
+        AiServicePreset(
+            id = "gemini_vertex",
+            nameFa = "Google Gemini (Vertex Express)",
+            baseUrl = "https://aiplatform.googleapis.com/v1beta1/publishers/google",
+            type = AiService.TYPE_GEMINI,
+            keyHintFa = "برای کلیدهای AQ.… که روی پیش‌تنظیم قبلی خطای ۴۰۳ گرفتند؛ نام مدل را اگر فهرست نیامد دستی بنویس",
         ),
         AiServicePreset(
             id = "codecraft",
@@ -75,9 +82,10 @@ object AiServicePresets {
         ),
     )
 
-    /** The preset matching a service (by protocol first, then base URL); custom as fallback. */
+    /** The preset matching a service: exact base URL first, then protocol; null = custom. */
     fun matchOf(service: AiService): AiServicePreset? {
+        ALL.firstOrNull { it.baseUrl == service.baseUrl }?.let { return it }
         if (service.isGemini) return ALL.firstOrNull { it.id == "gemini" }
-        return ALL.firstOrNull { it.type == AiService.TYPE_OPENAI_COMPATIBLE && it.baseUrl == service.baseUrl }
+        return null
     }
 }

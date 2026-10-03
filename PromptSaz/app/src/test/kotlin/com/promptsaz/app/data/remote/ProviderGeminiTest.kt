@@ -172,6 +172,37 @@ class ProviderGeminiTest {
     }
 
     @Test
+    fun `a 403 html page from google surfaces clean persian guidance instead of the raw html`() = runBlocking {
+        server!!.removeContext("/v1beta/models/gemini-flash-latest:generateContent")
+        server!!.createContext("/v1beta/models/gemini-flash-latest:generateContent") { exchange ->
+            exchange.requestBody.readBytes()
+            val err = """
+                <!DOCTYPE html>
+                <html lang=en>
+                <meta charset=utf-8>
+                <title>Error 403 (Forbidden)!!1</title>
+                <style>*{margin:0;padding:0}</style>
+            """.trimIndent().toByteArray(Charsets.UTF_8)
+            exchange.sendResponseHeaders(403, err.size.toLong())
+            exchange.responseBody.use { it.write(err) }
+        }
+
+        val result = provider!!.chat(
+            model = "gemini-flash-latest",
+            turns = listOf(ChatTurn(role = "user", text = "سلام")),
+        )
+
+        assertTrue(result.isFailure)
+        val message = result.exceptionOrNull()?.message.orEmpty()
+        assertTrue("should mention blocking: $message", message.contains("مسدود"))
+        assertTrue("should guide about VPN: $message", message.contains("VPN"))
+        assertTrue("should guide about Vertex preset: $message", message.contains("Vertex"))
+        // only the title line survives — no raw html soup
+        assertTrue("must not dump raw html: $message", !message.contains("<html"))
+        assertTrue("title line kept: $message", message.contains("Error 403 (Forbidden)!!1"))
+    }
+
+    @Test
     fun `image generation is politely unsupported on gemini so the prompt fallback kicks in`() = runBlocking {
         val result = provider!!.generateImage("gemini-flash-latest", "a red fox", "1024x1024")
 

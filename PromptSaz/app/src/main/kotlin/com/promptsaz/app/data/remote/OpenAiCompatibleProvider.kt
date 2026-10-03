@@ -531,9 +531,19 @@ class OpenAiCompatibleProvider @Inject constructor(
 
     /** Persian error with the exact HTTP status and error body, per user requirement. */
     private fun persianHttpError(code: Int, body: String): String {
-        val bodySnippet = body.trim().take(300)
+        val trimmed = body.trim()
+        // Google & CDNs answer some blocks with an HTML page instead of JSON —
+        // showing the raw soup helps nobody; keep only the <title> line.
+        val isHtml = trimmed.startsWith("<!DOCTYPE", ignoreCase = true) ||
+            trimmed.startsWith("<html", ignoreCase = true)
+        val bodySnippet = (if (isHtml) htmlTitleOf(trimmed) else trimmed.take(300)).orEmpty()
         val reason = when (code) {
-            401, 403 -> "کلید API نامعتبر است یا اجازه دسترسی ندارد."
+            401, 403 ->
+                if (isHtml) {
+                    "سرور دسترسی را در همان ورودی مسدود کرد (به‌جای پاسخ API، صفحهٔ خطا برگرداند)."
+                } else {
+                    "کلید API نامعتبر است یا اجازه دسترسی ندارد."
+                }
             402 -> "اعتبار (کردیت) حساب این سرویس برای این درخواست کافی نیست. حساب را در پنل سرویس شارژ کن، مدل رایگان‌تری انتخاب کن، یا در تنظیمات به سرویس دیگری برگرد."
             404 -> "نشانی سرور یا نام مدل پیدا نشد. نشانی پایه و نام مدل را بررسی کن."
             429 -> "سهمیه یا نرخ درخواست‌ها تمام شده است؛ کمی بعد دوباره امتحان کن."
@@ -545,12 +555,25 @@ class OpenAiCompatibleProvider @Inject constructor(
             append(" (کد HTTP: ")
             append(code.toPersianDigits())
             append(")")
+            if (code == 403 && isHtml) {
+                append(
+                    "\nراه‌حل‌های احتمالی:" +
+                        "\n۱) اگر اینترنت فعلی گوشی از منطقهٔ پشتیبانی‌نشدهٔ گوگل می‌رود، با یک VPN کامل (نه فقط پراکسی مرورگر) امتحان کن." +
+                        "\n۲) اگر کلیدت را از Google Cloud (Vertex) ساخته‌ای، در تنظیمات پیش‌تنظیم «Gemini (Vertex Express)» را امتحان کن." +
+                        "\n۳) محدودیت‌ها و فعال‌بودن «Gemini API» را برای کلید در پنل گوگل چک کن.",
+                )
+            }
             if (bodySnippet.isNotEmpty()) {
                 append("\nپاسخ سرور: ")
                 append(bodySnippet)
             }
         }
     }
+
+    /** "…<title>Error 403 (Forbidden)!!1</title>…" → "Error 403 (Forbidden)!!1". */
+    private fun htmlTitleOf(html: String): String? =
+        Regex("<title>(.*?)</title>", RegexOption.IGNORE_CASE).find(html)
+            ?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
 
     companion object {
         const val ID = "openai_compatible"
