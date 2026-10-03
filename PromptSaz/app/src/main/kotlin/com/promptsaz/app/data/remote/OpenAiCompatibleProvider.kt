@@ -10,6 +10,7 @@ import com.promptsaz.app.domain.model.ChatTurn
 import com.promptsaz.app.domain.model.GeneratedImage
 import com.promptsaz.app.domain.provider.AiModePrompts
 import com.promptsaz.app.domain.provider.ChatAiProvider
+import com.promptsaz.app.domain.provider.ImageGenerationUnsupportedException
 import com.promptsaz.app.domain.provider.PromptProvider
 import com.promptsaz.app.domain.provider.ProviderGeneration
 import com.promptsaz.app.domain.provider.ProviderHealth
@@ -171,6 +172,13 @@ class OpenAiCompatibleProvider @Inject constructor(
             val body = json.encodeToString(ImageGenerationRequestDto.serializer(), request)
             when (val response = httpCall("POST", config.imagesUrl, config.key, body)) {
                 is HttpOutcome.Success -> {
+                    if (response.code == 404) {
+                        // The service has no images endpoint at all (text-only
+                        // proxies like Codecraft) — a distinct, actionable case.
+                        return@withContext Result.failure(
+                            ImageGenerationUnsupportedException(IMAGES_UNSUPPORTED_FA),
+                        )
+                    }
                     if (response.code !in 200..299) {
                         return@withContext Result.failure(
                             IllegalStateException(persianHttpError(response.code, response.body)),
@@ -441,6 +449,10 @@ class OpenAiCompatibleProvider @Inject constructor(
         const val BAD_REPLY_FA = "پاسخ سرور قابل خواندن نبود. مدل دیگری را امتحان کن یا دوباره تلاش کن."
         const val BAD_IMAGE_REPLY_FA =
             "سرور تصویری برنگرداند. یک مدل ساخت تصویر (مثل dall-e یا flux) را انتخاب کن و دوباره امتحان کن."
+        const val IMAGES_UNSUPPORTED_FA =
+            "ساخت تصویر با این سرویس یا این مدل ممکن نیست (کد HTTP: ۴۰۴). " +
+                "به احتمال زیاد سرویس شما صفحهٔ ساخت عکس ندارد یا مدل انتخاب‌شده فقط متن تولید می‌کند."
+
         const val FALLBACK_TITLE_FA = "پرامپت ساخته‌شده با هوش مصنوعی"
     }
 }

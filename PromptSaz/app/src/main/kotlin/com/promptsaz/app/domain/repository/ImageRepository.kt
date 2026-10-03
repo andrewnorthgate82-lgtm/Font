@@ -19,4 +19,11 @@ interface ImageRepository {
     fun readImage(fileName: String): ByteArray?
 
     suspend fun delete(generationId: Long)
+
+    /**
+     * Fallback for services without an images endpoint (HTTP 404): asks the
+     * chat model to write a professional image-generation prompt (English,
+     * for tools like Midjourney / DALL·E) from the user's description.
+     */
+    suspend fun generateImagePrompt(prompt: String, model: String): Result<String>
 }

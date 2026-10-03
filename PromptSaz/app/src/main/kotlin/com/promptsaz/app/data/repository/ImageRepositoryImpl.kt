@@ -4,8 +4,10 @@ import com.promptsaz.app.data.db.ImageGenerationDao
 import com.promptsaz.app.data.db.ImageGenerationEntity
 import com.promptsaz.app.data.db.toDomain
 import com.promptsaz.app.data.files.ImageFileStore
+import com.promptsaz.app.domain.model.ChatTurn
 import com.promptsaz.app.domain.model.GeneratedImage
 import com.promptsaz.app.domain.model.ImageGeneration
+import com.promptsaz.app.domain.provider.AiModePrompts
 import com.promptsaz.app.domain.provider.ChatAiProvider
 import com.promptsaz.app.domain.repository.ImageRepository
 import javax.inject.Inject
@@ -59,6 +61,20 @@ class ImageRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun generateImagePrompt(prompt: String, model: String): Result<String> {
+        val trimmedPrompt = prompt.trim()
+        if (trimmedPrompt.isBlank()) {
+            return Result.failure(IllegalStateException(EMPTY_PROMPT_FA))
+        }
+        val turns = listOf(
+            ChatTurn(role = "system", text = AiModePrompts.IMAGE_PROMPT_SYSTEM_FA),
+            ChatTurn(role = "user", text = trimmedPrompt),
+        )
+        return provider.chat(model, turns).mapCatching { reply ->
+            reply.trim().ifBlank { throw IllegalStateException(BAD_PROMPT_REPLY_FA) }
+        }
+    }
+
     override fun readImage(fileName: String): ByteArray? = imageStore.readGeneratedImage(fileName)
 
     override suspend fun delete(generationId: Long) {
@@ -67,6 +83,7 @@ class ImageRepositoryImpl @Inject constructor(
 
     companion object {
         const val EMPTY_PROMPT_FA = "برای ساخت تصویر، اول توصیف تصویر دلخواهت را بنویس."
+        const val BAD_PROMPT_REPLY_FA = "مدل پاسخ مناسبی برای پرامپت تصویر نداد؛ دوباره تلاش کن یا مدل دیگری را امتحان کن."
         const val DOWNLOAD_FAILED_FA = "تصویر ساخته شد اما دریافت آن از سرور ناموفق بود؛ دوباره تلاش کن."
     }
 }

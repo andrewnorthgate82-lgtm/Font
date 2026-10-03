@@ -29,6 +29,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.SaveAlt
@@ -50,6 +51,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import com.promptsaz.app.util.PlatformUtils
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
@@ -241,6 +243,92 @@ fun ImageStudioScreen(
             }
         }
         Spacer(Modifier.height(14.dp))
+
+        // --- image-prompt fallback (services without image generation) -----
+        if (state.imageUnsupported) {
+            Surface(
+                color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                    Text(
+                        text = "این سرویس یا مدل، عکس نمی‌سازد",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "به‌جای عکس، می‌توانی از همین توصیف یک «پرامپت تصویر» حرفه‌ای (انگلیسی) بسازی " +
+                            "و آن را در Midjourney، DALL·E یا هر ابزار ساخت عکس دیگری پیست کنی.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    if (state.imagePromptLoading) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            CircularProgressIndicator(strokeWidth = 3.dp, modifier = Modifier.size(18.dp))
+                            Text(
+                                text = "در حال نوشتن پرامپت تصویر…",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    } else {
+                        GradientButton(
+                            text = "ساخت پرامپت تصویر",
+                            onClick = viewModel::generateImagePrompt,
+                            enabled = state.canMakeImagePrompt,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+        }
+
+        state.imagePrompt?.let { suggestion ->
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "پرامپت تصویر (برای Midjourney و DALL·E)",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Icon(
+                            Icons.Rounded.Close,
+                            contentDescription = "بستن پرامپت",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .size(18.dp)
+                                .clickable { viewModel.dismissImagePrompt() },
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = suggestion,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    ActionChip(
+                        icon = Icons.Rounded.ContentCopy,
+                        label = "کپی پرامپت",
+                        onClick = { PlatformUtils.copyWithFeedback(context, suggestion) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+        }
 
         // --- result --------------------------------------------------------
         state.current?.let { current ->

@@ -9,6 +9,7 @@ import com.promptsaz.app.domain.model.AppSettings
 import com.promptsaz.app.domain.model.ThemeMode
 import com.promptsaz.app.domain.repository.SettingsRepository
 import com.promptsaz.app.domain.model.TargetAi
+import com.promptsaz.app.domain.provider.ImageGenerationUnsupportedException
 import com.sun.net.httpserver.HttpServer
 import java.net.InetSocketAddress
 import kotlinx.coroutines.Dispatchers
@@ -196,5 +197,25 @@ class ProviderChatImageTest {
         val generated = result.getOrNull()
         assertTrue("expected b64 result: $generated", generated is GeneratedImage.FromBase64)
         assertEquals("QUJD", (generated as GeneratedImage.FromBase64).base64)
+    }
+
+    @Test
+    fun `404 from the images endpoint reports the persian unsupported-service error`() = runBlocking {
+        // text-only proxies (like Codecraft) have no images endpoint at all
+        server!!.removeContext("/v1/images/generations")
+        server!!.createContext("/v1/images/generations") { exchange ->
+            exchange.requestBody.readBytes()
+            val err = """{"error":{"message":"no images endpoint"}}""".toByteArray(Charsets.UTF_8)
+            exchange.sendResponseHeaders(404, err.size.toLong())
+            exchange.responseBody.use { it.write(err) }
+        }
+
+        val result = provider!!.generateImage("image-model-y", "a red fox", "1024x1024")
+
+        assertTrue(result.isFailure)
+        val error = result.exceptionOrNull()
+        assertTrue("expected unsupported exception: $error", error is ImageGenerationUnsupportedException)
+        val message = error?.message.orEmpty()
+        assertTrue("message should explain in Persian: $message", message.contains("ساخت تصویر"))
     }
 }

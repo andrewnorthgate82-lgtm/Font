@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.promptsaz.app.data.settings.ApiKeyStore
 import com.promptsaz.app.domain.model.ImageGeneration
+import com.promptsaz.app.domain.provider.ImageGenerationUnsupportedException
 import com.promptsaz.app.domain.provider.ProviderRegistry
 import com.promptsaz.app.domain.repository.ImageRepository
 import com.promptsaz.app.domain.repository.SettingsRepository
@@ -40,9 +41,13 @@ class ImageStudioViewModel @Inject constructor(
         val modelsErrorFa: String? = null,
         val history: List<ImageGeneration> = emptyList(),
         val current: ImageGeneration? = null,
+        val imageUnsupported: Boolean = false,
+        val imagePrompt: String? = null,
+        val imagePromptLoading: Boolean = false,
     ) {
         val needsSetup: Boolean get() = !hasKey || selectedModel.isBlank()
         val canGenerate: Boolean get() = prompt.isNotBlank() && !generating && !needsSetup
+        val canMakeImagePrompt: Boolean get() = prompt.isNotBlank() && !imagePromptLoading && !needsSetup
 
         companion object {
             const val SIZE_SQUARE = "1024x1024"
@@ -78,7 +83,7 @@ class ImageStudioViewModel @Inject constructor(
     }
 
     fun updatePrompt(text: String) {
-        _uiState.update { it.copy(prompt = text) }
+        _uiState.update { it.copy(prompt = text, imagePrompt = null) }
     }
 
     fun selectSize(size: String) {
@@ -149,13 +154,45 @@ class ImageStudioViewModel @Inject constructor(
             _uiState.update { it.copy(generating = true, errorFa = null) }
             imageRepository.generate(state.prompt, state.selectedModel, state.size)
                 .onSuccess { generation ->
-                    _uiState.update { it.copy(generating = false, current = generation) }
+                    _uiState.update { it.copy(generating = false, current = generation, imageUnsupported = false) }
                 }
                 .onFailure { error ->
                     _uiState.update {
-                        it.copy(generating = false, errorFa = error.message ?: "ساخت تصویر ناموفق بود.")
+                        it.copy(
+                            generating = false,
+                            errorFa = error.message ?: "ساخت تصویر ناموفق بود.",
+                            imageUnsupported = error is ImageGenerationUnsupportedException,
+                        )
                     }
                 }
         }
+    }
+
+    /**
+     * Fallback for services without an images endpoint (404): turns the same
+     * description into a professional image prompt via the chat model.
+     */
+    fun generateImagePrompt() {
+        val state = _uiState.value
+        if (!state.canMakeImagePrompt) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(imagePromptLoading = true, errorFa = null) }
+            imageRepository.generateImagePrompt(state.prompt, state.selectedModel)
+                .onSuccess { suggestion ->
+                    _uiState.update { it.copy(imagePromptLoading = false, imagePrompt = suggestion) }
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(
+                            imagePromptLoading = false,
+                            errorFa = error.message ?: "ساخت پرامپت تصویر ناموفق بود.",
+                        )
+                    }
+                }
+        }
+    }
+
+    fun dismissImagePrompt() {
+        _uiState.update { it.copy(imagePrompt = null) }
     }
 }
