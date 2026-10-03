@@ -2,28 +2,29 @@
  * PromptSaz — app module.
  *
  * AGP 9 notes:
- *  - No `org.jetbrains.kotlin.android` plugin: AGP 9 provides built-in Kotlin.
- *  - The Compose and serialization plugins bring Kotlin 2.4.20 onto the classpath,
- *    which raises the built-in Kotlin version above AGP's default.
- *  - Kotlin compiler options go in the top-level `kotlin { compilerOptions { } }` DSL.
+ *  - No `org.jetbrains.kotlin.android` plugin: AGP 9 provides built-in Kotlin
+ *    (Kotlin 2.2.10). Do not add a `kotlin { compilerOptions { } }` block —
+ *    jvmTarget follows android.compileOptions (verified working matrix).
+ *  - Room is wired through plain KSP arguments instead of the Room Gradle
+ *    plugin (the plugin predates AGP 9 built-in Kotlin and interferes with
+ *    KSP task registration).
  */
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
-    alias(libs.plugins.room)
 }
 
 android {
     namespace = "com.promptsaz.app"
 
     // Compose 1.12 / Navigation 2.10 / androidx.hilt 1.4 artifacts require
-    // compiling against API 37 (AGP 9.4 supports up to 37).
-    compileSdk = 37
+    // compiling against API 37.
+    compileSdk {
+        version = release(37)
+    }
 
     defaultConfig {
         applicationId = "com.promptsaz.app"
@@ -63,18 +64,10 @@ android {
     }
 }
 
-kotlin {
-    compilerOptions {
-        jvmTarget = JvmTarget.JVM_17
-    }
-}
-
-room {
-    // Exported schemas enable auto-migrations and are committed to version control.
-    schemaDirectory("$projectDir/schemas")
-}
-
 ksp {
+    // Room without the Room Gradle plugin: schema export for future
+    // auto-migrations + idiomatic Kotlin codegen.
+    arg("room.schemaLocation", "$projectDir/schemas")
     arg("room.generateKotlin", "true")
 }
 
