@@ -8,6 +8,7 @@ import com.promptsaz.app.domain.model.OutputLanguage
 import com.promptsaz.app.domain.model.PromptMode
 import com.promptsaz.app.domain.model.PromptSpec
 import com.promptsaz.app.domain.model.TargetAi
+import com.promptsaz.app.domain.provider.ProviderRegistry
 import com.promptsaz.app.domain.repository.KbRepository
 import com.promptsaz.app.domain.repository.SettingsRepository
 import com.promptsaz.app.ui.session.GenerationSession
@@ -24,6 +25,7 @@ import kotlinx.coroutines.launch
 class HomeViewModel @Inject constructor(
     private val kbRepository: KbRepository,
     private val settingsRepository: SettingsRepository,
+    private val providerRegistry: ProviderRegistry,
     private val session: GenerationSession,
 ) : ViewModel() {
 
@@ -37,6 +39,11 @@ class HomeViewModel @Inject constructor(
         val domains: List<KbDomainEntry> = emptyList(),
         val aiEnabled: Boolean = false,
         val errorFa: String? = null,
+        val selectedModel: String = "",
+        val modelPickerVisible: Boolean = false,
+        val models: List<String> = emptyList(),
+        val modelsLoading: Boolean = false,
+        val modelsErrorFa: String? = null,
     ) {
         val ideaLength: Int get() = idea.length
     }
@@ -45,6 +52,12 @@ class HomeViewModel @Inject constructor(
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
     init {
+        // live AI settings: badge + the model pill in the top bar
+        viewModelScope.launch {
+            settingsRepository.settings.collect { settings ->
+                _uiState.update { it.copy(aiEnabled = settings.aiEnabled, selectedModel = settings.aiModel) }
+            }
+        }
         viewModelScope.launch {
             val settings = settingsRepository.settings.first()
             val ready = runCatching { kbRepository.getReadyDomains() }.getOrDefault(emptyList())
@@ -76,6 +89,45 @@ class HomeViewModel @Inject constructor(
     fun setLanguage(language: OutputLanguage) = _uiState.update { it.copy(outputLanguage = language) }
 
     fun setDetail(level: DetailLevel) = _uiState.update { it.copy(detailLevel = level) }
+
+    // --- in-app model picker (mirrors the گفتگو tab) --------------------------
+
+    fun openModelPicker() {
+        _uiState.update { it.copy(modelPickerVisible = true) }
+        if (_uiState.value.models.isEmpty() && !_uiState.value.modelsLoading) {
+            loadModels()
+        }
+    }
+
+    fun dismissModelPicker() {
+        _uiState.update { it.copy(modelPickerVisible = false) }
+    }
+
+    fun loadModels() {
+        val provider = providerRegistry.active() ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(modelsLoading = true, modelsErrorFa = null) }
+            provider.listModels()
+                .onSuccess { models ->
+                    _uiState.update { it.copy(modelsLoading = false, models = models) }
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(
+                            modelsLoading = false,
+                            modelsErrorFa = error.message ?: "خطای ناشناخته",
+                        )
+                    }
+                }
+        }
+    }
+
+    fun selectModel(model: String) {
+        viewModelScope.launch {
+            settingsRepository.setAiModel(model)
+            _uiState.update { it.copy(selectedModel = model) }
+        }
+    }
 
     /** Validates and hands the spec to the session; null when invalid. */
     fun startGeneration(): Boolean {

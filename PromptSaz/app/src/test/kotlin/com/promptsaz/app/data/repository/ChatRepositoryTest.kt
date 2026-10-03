@@ -6,6 +6,7 @@ import com.promptsaz.app.data.db.ChatMessageEntity
 import com.promptsaz.app.data.db.ImageGenerationDao
 import com.promptsaz.app.data.db.ImageGenerationEntity
 import com.promptsaz.app.data.files.ImageFileStore
+import com.promptsaz.app.domain.model.ChatMessage
 import com.promptsaz.app.domain.model.ChatTurn
 import com.promptsaz.app.domain.provider.ChatAiProvider
 import com.promptsaz.app.domain.model.AppSettings
@@ -72,6 +73,13 @@ class ChatRepositoryTest {
             val index = conversations.indexOfFirst { it.id == conversationId }
             if (index >= 0) {
                 conversations[index] = conversations[index].copy(updatedAt = updatedAt)
+            }
+        }
+
+        override suspend fun setMessageFeedback(messageId: Long, feedback: Int) {
+            val index = messages.indexOfFirst { it.id == messageId }
+            if (index >= 0) {
+                messages[index] = messages[index].copy(feedback = feedback)
             }
         }
 
@@ -206,6 +214,50 @@ class ChatRepositoryTest {
         assertTrue(userTurns[1].imageDataUrl!!.contains("SECOND"))
         // history keeps growing in Room
         assertEquals(4, dao.messages.size)
+    }
+
+    @Test
+    fun `setFeedback persists the rating on the message`() = runBlocking {
+        val (dao, _, repo) = repository()
+        repo.sendMessage(0L, "سلام", image = null, imageExtension = null)
+        val assistant = dao.messages(1L).first { it.role == "assistant" }
+
+        repo.setFeedback(assistant.id, ChatMessage.FEEDBACK_DISLIKE)
+        assertEquals(ChatMessage.FEEDBACK_DISLIKE, dao.messages(1L).first { it.id == assistant.id }.feedback)
+
+        // clearing works too (tapping the active rating again)
+        repo.setFeedback(assistant.id, ChatMessage.FEEDBACK_NONE)
+        assertEquals(ChatMessage.FEEDBACK_NONE, dao.messages(1L).first { it.id == assistant.id }.feedback)
+    }
+
+    @Test
+    fun `rated replies are annotated in the next request so the model adapts`() = runBlocking {
+        val (dao, provider, repo) = repository()
+
+        repo.sendMessage(0L, "سؤال اول", image = null, imageExtension = null)
+        val firstReply = dao.messages(1L).first { it.role == "assistant" }
+        repo.setFeedback(firstReply.id, ChatMessage.FEEDBACK_DISLIKE)
+
+        repo.sendMessage(1L, "سؤال دوم", image = null, imageExtension = null)
+
+        // the disliked reply is followed by its feedback note
+        val turns = provider.lastTurns
+        val replyIndex = turns.indexOfFirst { it.text == "پاسخ دستیار برای تست." }
+        assertTrue("reply turn missing", replyIndex >= 0)
+        assertEquals(
+            ChatTurn(role = "system", text = ChatRepositoryImpl.FEEDBACK_DISLIKE_NOTE_FA),
+            turns[replyIndex + 1],
+        )
+
+        // a like gets its own note too
+        val secondReply = dao.messages(1L).filter { it.role == "assistant" }[1]
+        repo.setFeedback(secondReply.id, ChatMessage.FEEDBACK_LIKE)
+        repo.sendMessage(1L, "سؤال سوم", image = null, imageExtension = null)
+
+        assertTrue(
+            "like note missing",
+            provider.lastTurns.contains(ChatTurn(role = "system", text = ChatRepositoryImpl.FEEDBACK_LIKE_NOTE_FA)),
+        )
     }
 
     @Test

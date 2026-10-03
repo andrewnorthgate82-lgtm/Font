@@ -136,6 +136,15 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Rates a message (like/dislike); tapping the active rating clears it.
+     * The rating is fed back into the next request of the conversation.
+     */
+    fun toggleFeedback(message: ChatMessage, feedback: Int) {
+        val next = if (message.feedback == feedback) ChatMessage.FEEDBACK_NONE else feedback
+        viewModelScope.launch { chatRepository.setFeedback(message.id, next) }
+    }
+
     /** Reads a stored attachment for the message list. */
     fun readImageFile(fileName: String): ByteArray? = chatRepository.readImage(fileName)
 

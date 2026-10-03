@@ -22,16 +22,20 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.AddCircle
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.ThumbDown
+import androidx.compose.material.icons.rounded.ThumbUp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -56,6 +60,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -66,6 +71,7 @@ import com.promptsaz.app.domain.model.ChatMessage
 import com.promptsaz.app.ui.components.ModelPickerSheet
 import com.promptsaz.app.ui.components.SoftIconButton
 import com.promptsaz.app.ui.theme.BrandGradient
+import com.promptsaz.app.util.PlatformUtils
 import kotlinx.coroutines.launch
 
 /**
@@ -252,6 +258,7 @@ fun ChatScreen(
                         MessageBubble(
                             message = message,
                             readImage = viewModel::readImageFile,
+                            onFeedback = { feedback -> viewModel.toggleFeedback(message, feedback) },
                         )
                     }
                     if (state.sending) {
@@ -446,8 +453,13 @@ private fun EmptyChat(onSuggestion: (String) -> Unit, modifier: Modifier = Modif
 }
 
 @Composable
-private fun MessageBubble(message: ChatMessage, readImage: (String) -> ByteArray?) {
+private fun MessageBubble(
+    message: ChatMessage,
+    readImage: (String) -> ByteArray?,
+    onFeedback: (Int) -> Unit,
+) {
     val fromUser = message.isFromUser
+    val context = LocalContext.current
     Row(
         horizontalArrangement = if (fromUser) Arrangement.Start else Arrangement.End,
         modifier = Modifier.fillMaxWidth(),
@@ -489,8 +501,61 @@ private fun MessageBubble(message: ChatMessage, readImage: (String) -> ByteArray
                     }
                 }
             }
+            // --- message actions: copy (+ like/dislike on replies) --------
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier.padding(top = 2.dp),
+            ) {
+                MessageActionIcon(
+                    icon = Icons.Rounded.ContentCopy,
+                    description = "کپی پیام",
+                    onClick = {
+                        if (message.text.isNotBlank()) {
+                            PlatformUtils.copyWithFeedback(context, message.text)
+                        }
+                    },
+                )
+                if (!fromUser) {
+                    MessageActionIcon(
+                        icon = Icons.Rounded.ThumbUp,
+                        description = "پاسخ خوب بود",
+                        active = message.feedback == ChatMessage.FEEDBACK_LIKE,
+                        onClick = { onFeedback(ChatMessage.FEEDBACK_LIKE) },
+                    )
+                    MessageActionIcon(
+                        icon = Icons.Rounded.ThumbDown,
+                        description = "پاسخ خوب نبود",
+                        active = message.feedback == ChatMessage.FEEDBACK_DISLIKE,
+                        onClick = { onFeedback(ChatMessage.FEEDBACK_DISLIKE) },
+                    )
+                }
+            }
         }
     }
+}
+
+/** Small circular icon button under a message bubble (copy / like / dislike). */
+@Composable
+private fun MessageActionIcon(
+    icon: ImageVector,
+    description: String,
+    onClick: () -> Unit,
+    active: Boolean = false,
+) {
+    Icon(
+        imageVector = icon,
+        contentDescription = description,
+        tint = if (active) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+        },
+        modifier = Modifier
+            .size(20.dp)
+            .clip(CircleShape)
+            .clickable(onClick = onClick),
+    )
 }
 
 @Composable

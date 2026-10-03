@@ -29,6 +29,9 @@ interface ChatDao {
     @Query("UPDATE chat_conversations SET updatedAt = :updatedAt WHERE id = :conversationId")
     suspend fun touchConversation(conversationId: Long, updatedAt: Long)
 
+    @Query("UPDATE chat_messages SET feedback = :feedback WHERE id = :messageId")
+    suspend fun setMessageFeedback(messageId: Long, feedback: Int)
+
     @Query("DELETE FROM chat_messages WHERE conversationId = :conversationId")
     suspend fun deleteMessagesOf(conversationId: Long)
 

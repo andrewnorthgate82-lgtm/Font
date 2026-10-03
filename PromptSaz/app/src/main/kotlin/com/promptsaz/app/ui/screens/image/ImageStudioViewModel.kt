@@ -127,6 +127,19 @@ class ImageStudioViewModel @Inject constructor(
         }
     }
 
+    /** Clears the studio for a fresh generation (the drawer's main action). */
+    fun newGeneration() {
+        _uiState.update {
+            it.copy(
+                prompt = "",
+                current = null,
+                imagePrompt = null,
+                imageUnsupported = false,
+                errorFa = null,
+            )
+        }
+    }
+
     fun openFromHistory(generation: ImageGeneration) {
         _uiState.update { it.copy(current = generation, prompt = generation.prompt, size = generation.size) }
     }

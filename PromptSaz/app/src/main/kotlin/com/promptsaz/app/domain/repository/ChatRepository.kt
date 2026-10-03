@@ -24,6 +24,9 @@ interface ChatRepository {
 
     suspend fun deleteConversation(conversationId: Long)
 
+    /** Stores the user's like/dislike rating of one message (0 clears it). */
+    suspend fun setFeedback(messageId: Long, feedback: Int)
+
     /**
      * Sends [text] (optionally with an attached image stream) in the given
      * conversation and returns the assistant's reply. Persists both messages.

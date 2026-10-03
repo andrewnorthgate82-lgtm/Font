@@ -59,6 +59,10 @@ class ChatRepositoryImpl @Inject constructor(
         chatDao.deleteConversation(conversationId)
     }
 
+    override suspend fun setFeedback(messageId: Long, feedback: Int) {
+        chatDao.setMessageFeedback(messageId, feedback)
+    }
+
     override suspend fun sendMessage(
         conversationId: Long,
         text: String,
@@ -119,6 +123,20 @@ class ChatRepositoryImpl @Inject constructor(
                         imageDataUrl = if (isLatestUserImage) uploadDataUrl else null,
                     ),
                 )
+                // The user rated this reply — feed the rating back into the
+                // request so the model adapts its style within the conversation.
+                if (message.role == ChatMessage.ROLE_ASSISTANT && message.feedback != ChatMessage.FEEDBACK_NONE) {
+                    add(
+                        ChatTurn(
+                            role = "system",
+                            text = if (message.feedback == ChatMessage.FEEDBACK_LIKE) {
+                                FEEDBACK_LIKE_NOTE_FA
+                            } else {
+                                FEEDBACK_DISLIKE_NOTE_FA
+                            },
+                        ),
+                    )
+                }
             }
         }
 
@@ -145,5 +163,9 @@ class ChatRepositoryImpl @Inject constructor(
         const val TITLE_MAX_CHARS = 48
         const val UNTITLED_FA = "گفتگوی جدید"
         const val IMAGE_PLACEHOLDER_FA = "[تصویر پیوست‌شده]"
+        const val FEEDBACK_LIKE_NOTE_FA =
+            "(بازخورد کاربر به پاسخ بالا: این پاسخ را پسندید؛ پاسخ‌های بعدی به همین سبک و کیفیت باشند.)"
+        const val FEEDBACK_DISLIKE_NOTE_FA =
+            "(بازخورد کاربر به پاسخ بالا: این پاسخ را نپسندید؛ از ایرادهای همین پاسخ پرهیز کن و دقیق‌تر، مرتب‌تر و مفیدتر پاسخ بده.)"
     }
 }

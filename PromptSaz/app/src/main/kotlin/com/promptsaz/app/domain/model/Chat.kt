@@ -20,12 +20,17 @@ data class ChatMessage(
     val text: String,
     val imageFileName: String? = null,
     val createdAt: Long,
+    /** User rating of this message: [FEEDBACK_NONE], [FEEDBACK_LIKE] or [FEEDBACK_DISLIKE]. */
+    val feedback: Int = FEEDBACK_NONE,
 ) {
     val isFromUser: Boolean get() = role == ROLE_USER
 
     companion object {
         const val ROLE_USER = "user"
         const val ROLE_ASSISTANT = "assistant"
+        const val FEEDBACK_NONE = 0
+        const val FEEDBACK_LIKE = 1
+        const val FEEDBACK_DISLIKE = -1
     }
 }
 

@@ -22,51 +22,68 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AddCircle
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.IosShare
+import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.SaveAlt
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import com.promptsaz.app.util.PlatformUtils
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.promptsaz.app.domain.model.ImageGeneration
-import com.promptsaz.app.ui.components.GradientButton
 import com.promptsaz.app.ui.components.ModelPickerSheet
 import com.promptsaz.app.ui.components.SoftIconButton
+import com.promptsaz.app.ui.theme.BrandGradient
+import com.promptsaz.app.util.PlatformUtils
 import java.io.File
+import kotlinx.coroutines.launch
 
 /**
- * تصویر tab — the image studio: describe → generate → view/save/share,
- * with a model picker and a thumbnail history. Minimal and Persian-first.
+ * تصویر tab — same skeleton as the گفتگو tab: a history drawer, a top bar
+ * with the model pill, a scrollable result area (generated image or the
+ * image-prompt fallback) and a bottom input bar with the gradient generate
+ * button. Minimal and Persian-first.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ImageStudioScreen(
     onNavigateToSettings: () -> Unit,
@@ -74,332 +91,393 @@ fun ImageStudioScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
     var saveMessage by remember { mutableStateOf<String?>(null) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-                        .imePadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp),
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = { HistoryDrawer(state, viewModel, drawerState, onNavigateToSettings) },
     ) {
-        // --- header --------------------------------------------------------
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 10.dp),
+                .fillMaxSize()
+                .imePadding(),
         ) {
-            Text(
-                text = "تولید تصویر",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f),
-            )
-            Surface(
-                shape = RoundedCornerShape(50),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                onClick = viewModel::openModelPicker,
-            ) {
-                Text(
-                    text = state.selectedModel.ifBlank { "انتخاب مدل" },
-                    style = MaterialTheme.typography.labelMedium,
-                    maxLines = 1,
-                    modifier = Modifier
-                        .widthIn(max = 150.dp)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                )
-            }
-        }
-
-        // --- setup banner --------------------------------------------------
-        if (state.needsSetup) {
-            Surface(
-                color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
+            // --- top bar (like the گفتگو tab) --------------------------------
+            Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
                 ) {
+                    SoftIconButton(
+                        icon = Icons.Rounded.Menu,
+                        contentDescription = "تاریخچهٔ ساخت‌ها",
+                        onClick = { scope.launch { drawerState.open() } },
+                    )
                     Text(
-                        text = if (!state.hasKey) {
-                            "برای ساخت تصویر، کلید API را در تنظیمات وارد کن."
-                        } else {
-                            "یک مدل ساخت تصویر انتخاب کن."
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = "تولید تصویر",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
                         modifier = Modifier.weight(1f),
                     )
+                    // model chip → picker sheet
                     Surface(
                         shape = RoundedCornerShape(50),
-                        color = MaterialTheme.colorScheme.tertiary,
-                        onClick = { if (!state.hasKey) onNavigateToSettings() else viewModel.openModelPicker() },
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        onClick = viewModel::openModelPicker,
                     ) {
                         Text(
-                            text = if (!state.hasKey) "تنظیمات" else "انتخاب مدل",
-                            color = Color.White,
+                            text = state.selectedModel.ifBlank { "انتخاب مدل" },
                             style = MaterialTheme.typography.labelMedium,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            maxLines = 1,
+                            modifier = Modifier
+                                .widthIn(max = 140.dp)
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
                         )
                     }
+                    SoftIconButton(
+                        icon = Icons.Rounded.AddCircle,
+                        contentDescription = "ساخت جدید",
+                        onClick = viewModel::newGeneration,
+                    )
                 }
             }
-            Spacer(Modifier.height(10.dp))
-        }
 
-        // --- prompt --------------------------------------------------------
-        OutlinedTextField(
-            value = state.prompt,
-            onValueChange = viewModel::updatePrompt,
-            placeholder = { Text("توصیف تصویر دلخواهت… مثلاً: گربهٔ نارنجی روی کاناپهٔ مخملی، نور غروب") },
-            shape = RoundedCornerShape(16.dp),
-            minLines = 3,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(10.dp))
-
-        // --- size selector -------------------------------------------------
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            listOf(
-                ImageStudioViewModel.UiState.SIZE_SQUARE to "مربع ۱:۱",
-                ImageStudioViewModel.UiState.SIZE_PORTRAIT to "عمودی",
-                ImageStudioViewModel.UiState.SIZE_LANDSCAPE to "افقی",
-            ).forEach { (size, label) ->
-                val selected = state.size == size
+            // --- setup banner (like the گفتگو tab) ---------------------------
+            if (state.needsSetup) {
                 Surface(
-                    shape = RoundedCornerShape(50),
-                    color = if (selected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    },
-                    onClick = { viewModel.selectSize(size) },
-                ) {
-                    Text(
-                        text = label,
-                        color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                    )
-                }
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-
-        // --- error ---------------------------------------------------------
-        state.errorFa?.let { error ->
-            Surface(
-                color = MaterialTheme.colorScheme.errorContainer,
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                ) {
-                    Text(
-                        text = error,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Icon(
-                        Icons.Rounded.Close,
-                        contentDescription = "بستن خطا",
-                        tint = MaterialTheme.colorScheme.onErrorContainer,
-                        modifier = Modifier
-                            .size(18.dp)
-                            .clickable { viewModel.dismissError() },
-                    )
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-        }
-
-        // --- generate ------------------------------------------------------
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            if (state.generating) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    CircularProgressIndicator(strokeWidth = 3.dp, modifier = Modifier.size(20.dp))
-                    Text(
-                        "در حال ساخت تصویر…",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            } else {
-                GradientButton(
-                    text = "ساخت تصویر",
-                    onClick = viewModel::generate,
-                    enabled = state.canGenerate,
+                    color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f),
                     modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-
-        // --- image-prompt fallback (services without image generation) -----
-        if (state.imageUnsupported) {
-            Surface(
-                color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                    Text(
-                        text = "این سرویس یا مدل، عکس نمی‌سازد",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = "به‌جای عکس، می‌توانی از همین توصیف یک «پرامپت تصویر» حرفه‌ای (انگلیسی) بسازی " +
-                            "و آن را در Midjourney، DALL·E یا هر ابزار ساخت عکس دیگری پیست کنی.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    if (state.imagePromptLoading) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    ) {
+                        Text(
+                            text = if (!state.hasKey) {
+                                "برای ساخت تصویر، کلید API را در تنظیمات وارد کن."
+                            } else {
+                                "یک مدل برای ساخت تصویر انتخاب کن."
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = MaterialTheme.colorScheme.tertiary,
+                            onClick = {
+                                if (!state.hasKey) onNavigateToSettings() else viewModel.openModelPicker()
+                            },
                         ) {
-                            CircularProgressIndicator(strokeWidth = 3.dp, modifier = Modifier.size(18.dp))
                             Text(
-                                text = "در حال نوشتن پرامپت تصویر…",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                text = if (!state.hasKey) "تنظیمات" else "انتخاب مدل",
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                             )
                         }
-                    } else {
-                        GradientButton(
-                            text = "ساخت پرامپت تصویر",
-                            onClick = viewModel::generateImagePrompt,
-                            enabled = state.canMakeImagePrompt,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
                     }
                 }
             }
-            Spacer(Modifier.height(10.dp))
-        }
 
-        state.imagePrompt?.let { suggestion ->
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+            // --- error banner (like the گفتگو tab) ---------------------------
+            state.errorFa?.let { error ->
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    ) {
                         Text(
-                            text = "پرامپت تصویر (برای Midjourney و DALL·E)",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
+                            text = error,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.weight(1f),
                         )
                         Icon(
                             Icons.Rounded.Close,
-                            contentDescription = "بستن پرامپت",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            contentDescription = "بستن خطا",
+                            tint = MaterialTheme.colorScheme.onErrorContainer,
                             modifier = Modifier
                                 .size(18.dp)
-                                .clickable { viewModel.dismissImagePrompt() },
+                                .clickable { viewModel.dismissError() },
                         )
                     }
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = suggestion,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    ActionChip(
-                        icon = Icons.Rounded.ContentCopy,
-                        label = "کپی پرامپت",
-                        onClick = { PlatformUtils.copyWithFeedback(context, suggestion) },
-                    )
                 }
             }
-            Spacer(Modifier.height(10.dp))
-        }
 
-        // --- result --------------------------------------------------------
-        state.current?.let { current ->
-            val bitmap = remember(current.fileName) {
-                viewModel.readImage(current.fileName)?.let {
-                    runCatching { BitmapFactory.decodeByteArray(it, 0, it.size) }.getOrNull()
-                }
-            }
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = "تصویر ساخته‌شده",
-                    contentScale = ContentScale.FillWidth,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(20.dp)),
-                )
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ActionChip(
-                        icon = Icons.Rounded.SaveAlt,
-                        label = "ذخیره در گالری",
-                        onClick = {
-                            val bytes = viewModel.readImage(current.fileName)
-                            if (bytes != null) {
-                                saveMessage = saveToGallery(context, bytes, current.fileName)
+            // --- result area --------------------------------------------------
+            val hasContent = state.current != null || state.imagePrompt != null || state.imageUnsupported
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+            ) {
+                if (!hasContent) {
+                    EmptyStudio(
+                        onSuggestion = { suggestion -> viewModel.updatePrompt(suggestion) },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                    ) {
+                        // image-prompt fallback (services without image generation)
+                        if (state.imageUnsupported) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f),
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                                    Text(
+                                        text = "این سرویس یا مدل، عکس نمی‌سازد",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = "به‌جای عکس، می‌توانی از همین توصیف یک «پرامپت تصویر» حرفه‌ای (انگلیسی) بسازی " +
+                                            "و آن را در Midjourney، DALL·E یا هر ابزار ساخت عکس دیگری پیست کنی.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Spacer(Modifier.height(10.dp))
+                                    if (state.imagePromptLoading) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        ) {
+                                            CircularProgressIndicator(strokeWidth = 3.dp, modifier = Modifier.size(18.dp))
+                                            Text(
+                                                text = "در حال نوشتن پرامپت تصویر…",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    } else {
+                                        Surface(
+                                            shape = RoundedCornerShape(50),
+                                            color = MaterialTheme.colorScheme.tertiary,
+                                            enabled = state.canMakeImagePrompt,
+                                            onClick = viewModel::generateImagePrompt,
+                                        ) {
+                                            Text(
+                                                text = "ساخت پرامپت تصویر",
+                                                color = Color.White,
+                                                style = MaterialTheme.typography.labelLarge,
+                                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                                            )
+                                        }
+                                    }
+                                }
                             }
-                        },
-                    )
-                    ActionChip(
-                        icon = Icons.Rounded.IosShare,
-                        label = "اشتراک‌گذاری",
-                        onClick = { shareImage(context, current, viewModel) },
-                    )
-                }
-                saveMessage?.let { message ->
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = message,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "«${current.prompt}» — ${current.model}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(14.dp))
-            }
-        }
+                            Spacer(Modifier.height(10.dp))
+                        }
 
-        // --- history -------------------------------------------------------
-        if (state.history.isNotEmpty()) {
-            Text(
-                text = "ساخت‌های اخیر",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(Modifier.height(8.dp))
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(state.history, key = { it.id }) { generation ->
-                    HistoryThumb(
-                        generation = generation,
-                        viewModel = viewModel,
-                        selected = state.current?.id == generation.id,
-                    )
+                        state.imagePrompt?.let { suggestion ->
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = "پرامپت تصویر (برای Midjourney و DALL·E)",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        Icon(
+                                            Icons.Rounded.Close,
+                                            contentDescription = "بستن پرامپت",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier
+                                                .size(18.dp)
+                                                .clickable { viewModel.dismissImagePrompt() },
+                                        )
+                                    }
+                                    Spacer(Modifier.height(6.dp))
+                                    Text(
+                                        text = suggestion,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    ActionChip(
+                                        icon = Icons.Rounded.ContentCopy,
+                                        label = "کپی پرامپت",
+                                        onClick = { PlatformUtils.copyWithFeedback(context, suggestion) },
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(10.dp))
+                        }
+
+                        state.current?.let { current ->
+                            val bitmap = remember(current.fileName) {
+                                viewModel.readImage(current.fileName)?.let {
+                                    runCatching { BitmapFactory.decodeByteArray(it, 0, it.size) }.getOrNull()
+                                }
+                            }
+                            if (bitmap != null) {
+                                Image(
+                                    bitmap = bitmap.asImageBitmap(),
+                                    contentDescription = "تصویر ساخته‌شده",
+                                    contentScale = ContentScale.FillWidth,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(20.dp)),
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    ActionChip(
+                                        icon = Icons.Rounded.SaveAlt,
+                                        label = "ذخیره در گالری",
+                                        onClick = {
+                                            val bytes = viewModel.readImage(current.fileName)
+                                            if (bytes != null) {
+                                                saveMessage = saveToGallery(context, bytes, current.fileName)
+                                            }
+                                        },
+                                    )
+                                    ActionChip(
+                                        icon = Icons.Rounded.IosShare,
+                                        label = "اشتراک‌گذاری",
+                                        onClick = { shareImage(context, current, viewModel) },
+                                    )
+                                }
+                                saveMessage?.let { message ->
+                                    Spacer(Modifier.height(6.dp))
+                                    Text(
+                                        text = message,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    text = "«${current.prompt}» — ${current.model}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Spacer(Modifier.height(14.dp))
+                            }
+                        }
+                    }
                 }
             }
-            Spacer(Modifier.height(14.dp))
+
+            // --- bottom input bar (like the گفتگو tab) ------------------------
+            Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 8.dp) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    // size selector — compact pills above the input
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 6.dp),
+                    ) {
+                        Text(
+                            text = "اندازه:",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        listOf(
+                            ImageStudioViewModel.UiState.SIZE_SQUARE to "مربع ۱:۱",
+                            ImageStudioViewModel.UiState.SIZE_PORTRAIT to "عمودی",
+                            ImageStudioViewModel.UiState.SIZE_LANDSCAPE to "افقی",
+                        ).forEach { (size, label) ->
+                            val selected = state.size == size
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = if (selected) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                },
+                                onClick = { viewModel.selectSize(size) },
+                            ) {
+                                Text(
+                                    text = label,
+                                    color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                )
+                            }
+                        }
+                    }
+                    Row(
+                        verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = state.prompt,
+                            onValueChange = viewModel::updatePrompt,
+                            placeholder = { Text("توصیف تصویر دلخواهت… مثلاً: گربهٔ نارنجی روی کاناپهٔ مخملی، نور غروب") },
+                            shape = RoundedCornerShape(24.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                            ),
+                            maxLines = 3,
+                            enabled = !state.generating,
+                            modifier = Modifier.weight(1f),
+                        )
+                        val canGenerate = state.canGenerate
+                        Surface(
+                            shape = RoundedCornerShape(24.dp),
+                            color = Color.Transparent,
+                            onClick = viewModel::generate,
+                            enabled = canGenerate,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .background(
+                                        if (canGenerate || state.generating) {
+                                            BrandGradient
+                                        } else {
+                                            SolidColor(MaterialTheme.colorScheme.surfaceVariant)
+                                        },
+                                    )
+                                    .size(52.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (state.generating) {
+                                    CircularProgressIndicator(
+                                        strokeWidth = 2.dp,
+                                        modifier = Modifier.size(20.dp),
+                                        color = Color.White,
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Rounded.AutoAwesome,
+                                        contentDescription = "ساخت تصویر",
+                                        tint = Color.White,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -416,6 +494,159 @@ fun ImageStudioScreen(
 }
 
 @Composable
+private fun EmptyStudio(onSuggestion: (String) -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = modifier.padding(24.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.Image,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(56.dp),
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = "تولید تصویر",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            text = "توصیف تصویر دلخواهت را بنویس؛ اگر سرویس‌ات عکس نسازد، پرامپت حرفه‌ای‌اش را می‌گیریم.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(18.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(
+                "گربهٔ نارنجی روی کاناپهٔ مخملی، نور گرم غروب",
+                "پوستر تبلیغاتی برای کافه، سبک مینیمال",
+                "منظرهٔ کوهستان برفی زیر آسمان پرستاره",
+            ).forEach { suggestion ->
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    onClick = { onSuggestion(suggestion) },
+                ) {
+                    Text(
+                        text = suggestion,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HistoryDrawer(
+    state: ImageStudioViewModel.UiState,
+    viewModel: ImageStudioViewModel,
+    drawerState: androidx.compose.material3.DrawerState,
+    onNavigateToSettings: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(16.dp),
+    ) {
+        Text(
+            text = "ساخت‌های اخیر",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(Modifier.height(12.dp))
+        Surface(
+            shape = RoundedCornerShape(50),
+            color = MaterialTheme.colorScheme.primary,
+            onClick = {
+                viewModel.newGeneration()
+                scope.launch { drawerState.close() }
+            },
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            ) {
+                Icon(Icons.Rounded.AddCircle, contentDescription = null, tint = Color.White)
+                Text("ساخت جدید", color = Color.White, style = MaterialTheme.typography.titleSmall)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        if (state.history.isEmpty()) {
+            Text(
+                "هنوز تصویری نساخته‌ای.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(state.history, key = { it.id }) { generation ->
+                    val active = state.current?.id == generation.id
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (active) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        },
+                        onClick = {
+                            viewModel.openFromHistory(generation)
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        ) {
+                            Text(
+                                text = generation.prompt,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Icon(
+                                Icons.Rounded.Delete,
+                                contentDescription = "حذف ساخت",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .clickable { viewModel.deleteFromHistory(generation) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            onClick = onNavigateToSettings,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+            ) {
+                Icon(Icons.Rounded.Settings, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("تنظیمات", style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
+@Composable
 private fun ActionChip(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
     Surface(
         shape = RoundedCornerShape(50),
@@ -429,54 +660,6 @@ private fun ActionChip(icon: androidx.compose.ui.graphics.vector.ImageVector, la
         ) {
             Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(label, style = MaterialTheme.typography.labelMedium)
-        }
-    }
-}
-
-@Composable
-private fun HistoryThumb(
-    generation: ImageGeneration,
-    viewModel: ImageStudioViewModel,
-    selected: Boolean,
-) {
-    val bitmap = remember(generation.fileName) {
-        viewModel.readImage(generation.fileName)?.let {
-            runCatching { BitmapFactory.decodeByteArray(it, 0, it.size) }.getOrNull()
-        }
-    }
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box {
-            bitmap?.let {
-                Image(
-                    bitmap = it.asImageBitmap(),
-                    contentDescription = generation.prompt,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(84.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable { viewModel.openFromHistory(generation) },
-                )
-            }
-            if (selected) {
-                Box(
-                    modifier = Modifier
-                        .size(84.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
-                )
-            }
-            Icon(
-                Icons.Rounded.Delete,
-                contentDescription = "حذف از تاریخچه",
-                tint = Color.White,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(4.dp)
-                    .size(16.dp)
-                    .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
-                    .padding(2.dp)
-                    .clickable { viewModel.deleteFromHistory(generation) },
-            )
         }
     }
 }

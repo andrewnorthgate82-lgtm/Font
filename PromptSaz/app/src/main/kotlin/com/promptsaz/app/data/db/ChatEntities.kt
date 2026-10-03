@@ -1,5 +1,6 @@
 package com.promptsaz.app.data.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -33,6 +34,8 @@ data class ChatMessageEntity(
     val text: String,
     val imageFileName: String? = null,
     val createdAt: Long,
+    @ColumnInfo(defaultValue = "0")
+    val feedback: Int = 0,
 )
 
 /** One generated image (the تصویر tab history); [fileName] points into filesDir/generated_images/. */
@@ -61,6 +64,7 @@ fun ChatMessageEntity.toDomain(): ChatMessage =
         text = text,
         imageFileName = imageFileName,
         createdAt = createdAt,
+        feedback = feedback,
     )
 
 fun ImageGenerationEntity.toDomain(): ImageGeneration =
