@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -245,8 +246,14 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.labelMedium,
                             modifier = Modifier.padding(top = 8.dp),
                         )
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            uiState.models.take(12).forEach { model ->
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 240.dp)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            uiState.models.take(40).forEach { model ->
                                 FilterChip(
                                     selected = settings.aiModel == model,
                                     onClick = { viewModel.setAiModel(model) },

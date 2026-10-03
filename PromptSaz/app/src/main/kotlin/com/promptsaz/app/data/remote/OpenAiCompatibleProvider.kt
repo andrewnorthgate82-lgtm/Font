@@ -49,27 +49,26 @@ class OpenAiCompatibleProvider @Inject constructor(
     }
 
     override suspend fun testConnection(): ProviderHealth = withContext(ioDispatcher) {
-        val config = readConfig()
-        when (config) {
-            null -> ProviderHealth.Failed(
-                "کلید API وارد نشده است. اول کلید را در تنظیمات ذخیره کن.",
-            )
-            else -> when (val response = httpCall("GET", config.modelsUrl, config.key, body = null)) {
-                is HttpOutcome.Success -> {
-                    val models = parseModels(response.body)
-                    if (response.code in 200..299) {
-                        ProviderHealth.Ok(models)
-                    } else {
-                        ProviderHealth.Failed(persianHttpError(response.code, response.body))
-                    }
+        // /models needs only key + base URL — NOT a model name. A user who has
+        // just saved the key and wants to pick a model must be able to test.
+        val config = readConnectionConfig()
+            ?: return@withContext ProviderHealth.Failed(configGapFa(requireModel = false))
+        when (val response = httpCall("GET", config.modelsUrl, config.key, body = null)) {
+            is HttpOutcome.Success -> {
+                val models = parseModels(response.body)
+                if (response.code in 200..299) {
+                    ProviderHealth.Ok(models)
+                } else {
+                    ProviderHealth.Failed(persianHttpError(response.code, response.body))
                 }
-                is HttpOutcome.Failure -> ProviderHealth.Failed(response.messageFa)
             }
+            is HttpOutcome.Failure -> ProviderHealth.Failed(response.messageFa)
         }
     }
 
     override suspend fun listModels(): Result<List<String>> = withContext(ioDispatcher) {
-        val config = readConfig() ?: return@withContext Result.failure(IllegalStateException(NO_KEY_FA))
+        val config = readConnectionConfig()
+            ?: return@withContext Result.failure(IllegalStateException(configGapFa(requireModel = false)))
         when (val response = httpCall("GET", config.modelsUrl, config.key, body = null)) {
             is HttpOutcome.Success -> {
                 if (response.code in 200..299) {
@@ -86,7 +85,8 @@ class OpenAiCompatibleProvider @Inject constructor(
         spec: PromptSpec,
         kb: DomainKnowledge?,
     ): Result<ProviderGeneration> = withContext(ioDispatcher) {
-        val config = readConfig() ?: return@withContext Result.failure(IllegalStateException(NO_KEY_FA))
+        val config = readGenerationConfig()
+            ?: return@withContext Result.failure(IllegalStateException(configGapFa(requireModel = true)))
         val request = ChatCompletionRequestDto(
             model = config.model,
             messages = listOf(
@@ -158,20 +158,40 @@ class OpenAiCompatibleProvider @Inject constructor(
         data class Failure(val messageFa: String) : HttpOutcome
     }
 
-    private data class ProviderConfig(val key: String, val model: String, val chatUrl: String, val modelsUrl: String)
+    private data class ProviderConfig(val key: String, val model: String, val baseUrl: String) {
+        val chatUrl: String get() = baseUrl + CHAT_COMPLETIONS_PATH
+        val modelsUrl: String get() = baseUrl + MODELS_PATH
+    }
 
-    private suspend fun readConfig(): ProviderConfig? {
+    /** Key + base URL — enough for /models and the connection test. */
+    private suspend fun readConnectionConfig(): ProviderConfig? {
         val settings = settingsRepository.settings.first()
         val key = secureKeyStore.getApiKey()
         val base = settings.aiBaseUrl.trim().trimEnd('/')
-        val model = settings.aiModel.trim()
-        if (key.isNullOrBlank() || base.isBlank() || model.isBlank()) return null
-        return ProviderConfig(
-            key = key,
-            model = model,
-            chatUrl = base + CHAT_COMPLETIONS_PATH,
-            modelsUrl = base + MODELS_PATH,
-        )
+        if (key.isNullOrBlank() || base.isBlank()) return null
+        return ProviderConfig(key = key, model = "", baseUrl = base)
+    }
+
+    /** Key + base URL + model — required only for generation. */
+    private suspend fun readGenerationConfig(): ProviderConfig? {
+        val connection = readConnectionConfig() ?: return null
+        val model = settingsRepository.settings.first().aiModel.trim()
+        if (model.isBlank()) return null
+        return connection.copy(model = model)
+    }
+
+    /**
+     * Names the FIRST missing piece in Persian so the user is never told the
+     * key is missing when it is actually the model (or the base URL).
+     */
+    private suspend fun configGapFa(requireModel: Boolean): String {
+        val settings = settingsRepository.settings.first()
+        return missingConfigMessageFa(
+            hasKey = secureKeyStore.hasApiKey(),
+            hasBaseUrl = settings.aiBaseUrl.isNotBlank(),
+            hasModel = settings.aiModel.isNotBlank(),
+            requireModel = requireModel,
+        ) ?: NO_KEY_FA
     }
 
     private fun httpCall(method: String, url: String, key: String, body: String?): HttpOutcome {
@@ -280,7 +300,25 @@ class OpenAiCompatibleProvider @Inject constructor(
         const val CONNECT_TIMEOUT_MS = 15_000
         const val READ_TIMEOUT_MS = 90_000
 
-        const val NO_KEY_FA = "کلید API ذخیره نشده است. در تنظیمات، کلید را وارد و ذخیره کن."
+        /**
+         * Pure picker for the first missing config piece (unit-tested).
+         * Returns null when everything required is present.
+         */
+        fun missingConfigMessageFa(
+            hasKey: Boolean,
+            hasBaseUrl: Boolean,
+            hasModel: Boolean,
+            requireModel: Boolean,
+        ): String? = when {
+            !hasKey -> NO_KEY_FA
+            !hasBaseUrl -> NO_BASE_URL_FA
+            requireModel && !hasModel -> NO_MODEL_FA
+            else -> null
+        }
+
+        const val NO_KEY_FA = "کلید API ذخیره نشده است. کلید را در تنظیمات وارد و دکمهٔ «ذخیره کلید» را بزن."
+        const val NO_BASE_URL_FA = "نشانی سرور (Base URL) خالی است؛ مثل https://codecraftapi.com/v1 واردش کن."
+        const val NO_MODEL_FA = "نام مدل انتخاب نشده است. با دکمهٔ «دریافت فهرست مدل‌ها» یکی را انتخاب کن یا در کادر «نام مدل» بنویس."
         const val BAD_REPLY_FA = "پاسخ سرور قابل خواندن نبود. مدل دیگری را امتحان کن یا دوباره تلاش کن."
         const val FALLBACK_TITLE_FA = "پرامپت ساخته‌شده با هوش مصنوعی"
     }

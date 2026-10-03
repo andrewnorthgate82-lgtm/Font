@@ -41,6 +41,32 @@ class ProviderModelsTest {
     }
 
     @Test
+    fun `missing config message names the actual missing piece`() {
+        // Key saved + base set, no model yet: connection calls must NOT ask for anything.
+        assertEquals(
+            null,
+            OpenAiCompatibleProvider.missingConfigMessageFa(
+                hasKey = true, hasBaseUrl = true, hasModel = false, requireModel = false,
+            ),
+        )
+        // Generation without a model names the model — never blames the key.
+        val generation = OpenAiCompatibleProvider.missingConfigMessageFa(
+            hasKey = true, hasBaseUrl = true, hasModel = false, requireModel = true,
+        )
+        assertTrue(generation != null && generation.contains("مدل"))
+        // Missing key is named first.
+        val noKey = OpenAiCompatibleProvider.missingConfigMessageFa(
+            hasKey = false, hasBaseUrl = false, hasModel = false, requireModel = true,
+        )
+        assertTrue(noKey != null && noKey.contains("کلید"))
+        // Missing base URL is named (key present).
+        val noBase = OpenAiCompatibleProvider.missingConfigMessageFa(
+            hasKey = true, hasBaseUrl = false, hasModel = true, requireModel = false,
+        )
+        assertTrue(noBase != null && noBase.contains("نشانی"))
+    }
+
+    @Test
     fun `request serializes to the openai wire format`() {
         val request = ChatCompletionRequestDto(
             model = "gpt-4o-mini",
