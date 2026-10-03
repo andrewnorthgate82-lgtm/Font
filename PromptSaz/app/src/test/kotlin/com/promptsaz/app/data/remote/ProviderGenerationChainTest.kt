@@ -178,6 +178,17 @@ class ProviderGenerationChainTest {
     }
 
     @Test
+    fun `generation requests carry a max_tokens cap`() {
+        val result = runBlocking { provider!!.generatePrompt(spec(), kb = null) }
+
+        assertTrue(result.isSuccess)
+        assertTrue(
+            "max_tokens missing: ${captured!!.body.take(200)}",
+            captured!!.body.contains("\"max_tokens\":4096"),
+        )
+    }
+
+    @Test
     fun `changing the selected model changes the request`() {
         runBlocking { settings!!.setAiModel("claude-other-model") }
         val result = runBlocking { provider!!.generatePrompt(spec(), kb = null) }

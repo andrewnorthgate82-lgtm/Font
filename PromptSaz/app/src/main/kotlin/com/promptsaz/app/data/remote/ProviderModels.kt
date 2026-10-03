@@ -1,5 +1,6 @@
 package com.promptsaz.app.data.remote
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
@@ -14,6 +15,8 @@ data class ChatCompletionRequestDto(
     val model: String,
     val messages: List<ChatMessageDto>,
     val temperature: Double = 0.7,
+    /** Reply cap; keeps credit-limited services (OpenRouter) affordable. */
+    @SerialName("max_tokens") val maxTokens: Int? = null,
 )
 
 @Serializable
@@ -46,6 +49,8 @@ data class ChatCompletionChatRequestDto(
     val model: String,
     val messages: List<ChatContentMessageDto>,
     val temperature: Double = 0.7,
+    /** Reply cap; keeps credit-limited services (OpenRouter) affordable. */
+    @SerialName("max_tokens") val maxTokens: Int? = null,
 )
 
 @Serializable

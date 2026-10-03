@@ -221,6 +221,85 @@ class ProviderChatImageTest {
     }
 
     @Test
+    fun `chat requests carry a max_tokens cap`() = runBlocking {
+        val result = provider!!.chat(model = "vision-model-x", turns = listOf(ChatTurn(role = "user", text = "سلام")))
+
+        assertTrue(result.isSuccess)
+        assertTrue("max_tokens missing: $chatBody", chatBody.orEmpty().contains("\"max_tokens\":4096"))
+    }
+
+    @Test
+    fun `402 with an affordable token count is retried once with a smaller cap`() = runBlocking {
+        var calls = 0
+        val bodies = mutableListOf<String>()
+        server!!.removeContext("/v1/chat/completions")
+        server!!.createContext("/v1/chat/completions") { exchange ->
+            bodies += exchange.requestBody.readBytes().decodeToString()
+            calls++
+            val reply = if (calls == 1) {
+                """{"error":{"message":"This request requires more credits, or fewer max_tokens. " +
+                    "You requested up to 65536 tokens, but can only afford 800."}}"""
+            } else {
+                """{"choices":[{"message":{"role":"assistant","content":"پاسخ کوتاه"}}]}"""
+            }
+            val bytes = reply.toByteArray(Charsets.UTF_8)
+            exchange.sendResponseHeaders(if (calls == 1) 402 else 200, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+        }
+
+        val result = provider!!.chat(model = "m", turns = listOf(ChatTurn(role = "user", text = "سلام")))
+
+        assertTrue("should succeed after retry: ${result.exceptionOrNull()?.message}", result.isSuccess)
+        assertEquals(2, calls)
+        val retryCap = Regex("\"max_tokens\":(\\d+)").find(bodies[1])?.groupValues?.get(1)?.toInt()
+        assertTrue("retry cap should be within the affordable range: $retryCap", retryCap != null && retryCap in 200..800)
+    }
+
+    @Test
+    fun `a 400 that rejects max_tokens is retried without the parameter`() = runBlocking {
+        var calls = 0
+        val bodies = mutableListOf<String>()
+        server!!.removeContext("/v1/chat/completions")
+        server!!.createContext("/v1/chat/completions") { exchange ->
+            bodies += exchange.requestBody.readBytes().decodeToString()
+            calls++
+            val reply = if (calls == 1) {
+                """{"error":{"message":"Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead."}}"""
+            } else {
+                """{"choices":[{"message":{"role":"assistant","content":"پاسخ"}}]}"""
+            }
+            val bytes = reply.toByteArray(Charsets.UTF_8)
+            exchange.sendResponseHeaders(if (calls == 1) 400 else 200, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+        }
+
+        val result = provider!!.chat(model = "m", turns = listOf(ChatTurn(role = "user", text = "سلام")))
+
+        assertTrue(result.isSuccess)
+        assertEquals(2, calls)
+        assertTrue("retry must drop max_tokens: ${bodies[1]}", !bodies[1].contains("max_tokens"))
+    }
+
+    @Test
+    fun `402 with a tiny affordable count surfaces the persian credit error`() = runBlocking {
+        server!!.removeContext("/v1/chat/completions")
+        server!!.createContext("/v1/chat/completions") { exchange ->
+            exchange.requestBody.readBytes()
+            val err =
+                """{"error":{"message":"You requested up to 65536 tokens, but can only afford 12."}}"""
+                    .toByteArray(Charsets.UTF_8)
+            exchange.sendResponseHeaders(402, err.size.toLong())
+            exchange.responseBody.use { it.write(err) }
+        }
+
+        val result = provider!!.chat(model = "m", turns = listOf(ChatTurn(role = "user", text = "سلام")))
+
+        assertTrue(result.isFailure)
+        val message = result.exceptionOrNull()?.message.orEmpty()
+        assertTrue("persian credit message expected: $message", message.contains("اعتبار"))
+    }
+
+    @Test
     fun `404 from the images endpoint reports the persian unsupported-service error`() = runBlocking {
         // text-only proxies (like Codecraft) have no images endpoint at all
         server!!.removeContext("/v1/images/generations")

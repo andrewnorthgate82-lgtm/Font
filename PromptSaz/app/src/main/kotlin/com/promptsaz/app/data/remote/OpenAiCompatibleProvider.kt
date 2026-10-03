@@ -24,8 +24,12 @@ import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.encodeToJsonElement
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -107,9 +111,15 @@ class OpenAiCompatibleProvider @Inject constructor(
                 ChatMessageDto(role = "system", content = AiModePrompts.SYSTEM_PROMPT),
                 ChatMessageDto(role = "user", content = buildUserPrompt(spec, kb)),
             ),
+            maxTokens = DEFAULT_MAX_TOKENS,
         )
-        val body = json.encodeToString(ChatCompletionRequestDto.serializer(), request)
-        when (val response = httpCall("POST", config.chatUrl, config.key, body)) {
+        when (
+            val response = postChatWithTokenRetry(
+                config,
+                request,
+                ChatCompletionRequestDto.serializer(),
+            ) { req, cap -> req.copy(maxTokens = cap) }
+        ) {
             is HttpOutcome.Success -> {
                 if (response.code !in 200..299) {
                     return@withContext Result.failure(
@@ -144,9 +154,15 @@ class OpenAiCompatibleProvider @Inject constructor(
         val request = ChatCompletionChatRequestDto(
             model = selectedModel,
             messages = turns.map { turn -> turn.toContentMessage() },
+            maxTokens = DEFAULT_MAX_TOKENS,
         )
-        val body = json.encodeToString(ChatCompletionChatRequestDto.serializer(), request)
-        when (val response = httpCall("POST", config.chatUrl, config.key, body)) {
+        when (
+            val response = postChatWithTokenRetry(
+                config,
+                request,
+                ChatCompletionChatRequestDto.serializer(),
+            ) { req, cap -> req.copy(maxTokens = cap) }
+        ) {
             is HttpOutcome.Success -> {
                 if (response.code !in 200..299) {
                     return@withContext Result.failure(
@@ -326,6 +342,51 @@ class OpenAiCompatibleProvider @Inject constructor(
         ) ?: NO_KEY_FA
     }
 
+    // --- chat POST with token-cap fallbacks ----------------------------------------
+
+    /**
+     * POSTs a chat request with a sensible max_tokens cap and adapts to the
+     * service's answer:
+     *  - HTTP 402 "can only afford N" (credit-limited proxies like OpenRouter)
+     *    → retries once with ~90% of the affordable cap.
+     *  - HTTP 400 rejecting the max_tokens parameter (some newer models) →
+     *    retries once without the parameter.
+     */
+    private suspend fun <T> postChatWithTokenRetry(
+        config: ProviderConfig,
+        request: T,
+        serializer: KSerializer<T>,
+        withMaxTokens: (T, Int?) -> T,
+    ): HttpOutcome {
+        var response = httpCall("POST", config.chatUrl, config.key, encodeChatBody(request, serializer))
+        if (response is HttpOutcome.Success && response.code == 402) {
+            val affordable = AFFORD_REGEX.find(response.body)?.groupValues?.get(1)?.toIntOrNull()
+            if (affordable != null && affordable >= MIN_AFFORDABLE_TOKENS) {
+                val retry = withMaxTokens(
+                    request,
+                    (affordable * 9 / 10).coerceIn(MIN_AFFORDABLE_TOKENS, DEFAULT_MAX_TOKENS),
+                )
+                response = httpCall("POST", config.chatUrl, config.key, encodeChatBody(retry, serializer))
+            }
+        }
+        if (response is HttpOutcome.Success && response.code == 400 && response.body.contains("max_tokens")) {
+            val retry = withMaxTokens(request, null)
+            response = httpCall("POST", config.chatUrl, config.key, encodeChatBody(retry, serializer))
+        }
+        return response
+    }
+
+    /** Encodes the request as JSON, dropping a null max_tokens (encodeDefaults would emit it). */
+    private fun <T> encodeChatBody(request: T, serializer: KSerializer<T>): String {
+        val element = json.encodeToJsonElement(serializer, request)
+        val obj = element as? JsonObject ?: return json.encodeToString(serializer, request)
+        return if (obj["max_tokens"] is JsonNull) {
+            JsonObject(obj.filterKeys { it.key != "max_tokens" }).toString()
+        } else {
+            obj.toString()
+        }
+    }
+
     private fun httpCall(method: String, url: String, key: String, body: String?): HttpOutcome {
         var connection: HttpURLConnection? = null
         return try {
@@ -402,6 +463,7 @@ class OpenAiCompatibleProvider @Inject constructor(
         val bodySnippet = body.trim().take(300)
         val reason = when (code) {
             401, 403 -> "کلید API نامعتبر است یا اجازه دسترسی ندارد."
+            402 -> "اعتبار (کردیت) حساب این سرویس برای این درخواست کافی نیست. حساب را در پنل سرویس شارژ کن، مدل رایگان‌تری انتخاب کن، یا در تنظیمات به سرویس دیگری برگرد."
             404 -> "نشانی سرور یا نام مدل پیدا نشد. نشانی پایه و نام مدل را بررسی کن."
             429 -> "سهمیه یا نرخ درخواست‌ها تمام شده است؛ کمی بعد دوباره امتحان کن."
             in 500..599 -> "سرور شخص ثالث خطا داده است؛ بعداً دوباره امتحان کن."
@@ -432,6 +494,15 @@ class OpenAiCompatibleProvider @Inject constructor(
 
         const val CONNECT_TIMEOUT_MS = 15_000
         const val READ_TIMEOUT_MS = 90_000
+
+        /** Reply cap sent as max_tokens on every chat request. */
+        const val DEFAULT_MAX_TOKENS = 4096
+
+        /** Below this affordable cap a retry is pointless — surface the error. */
+        const val MIN_AFFORDABLE_TOKENS = 200
+
+        /** "…can only afford 800…" from OpenRouter's 402 body. */
+        val AFFORD_REGEX = Regex("""can only afford (\d+)""")
 
         /**
          * Pure picker for the first missing config piece (unit-tested).
