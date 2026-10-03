@@ -21,13 +21,9 @@ plugins {
 android {
     namespace = "com.promptsaz.app"
 
-    // Compose 1.12 / Navigation 2.10 artifacts require compiling against
-    // Android 16 QPR2 (API 36.1) — official minor-SDK DSL.
-    compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
-    }
+    // Compose 1.12 / Navigation 2.10 / androidx.hilt 1.4 artifacts require
+    // compiling against API 37 (AGP 9.4 supports up to 37).
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.promptsaz.app"
