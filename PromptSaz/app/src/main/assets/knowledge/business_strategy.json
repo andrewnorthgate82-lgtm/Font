@@ -236,6 +236,18 @@
       "titleFa": "پرامپت پس‌زمینهٔ اسلاید ارائهٔ سرمایه‌گذاری برای میدجرنی",
       "targetAi": "midjourney",
       "promptFa": "Wide presentation slide background for a startup investor pitch deck in fintech, sophisticated dark navy backdrop with a subtle ascending abstract line chart motif rendered in thin glowing teal strokes across the lower right, faint geometric grid fading toward the edges, generous clean dark space in the left two thirds reserved for headline text, restrained premium tech aesthetic, deep navy, teal and soft white palette, minimal and confident mood, subtle depth and grain, no people --ar 16:9 --v 6 --no text, watermark, logo\n\nلایهٔ متن (فارسی — جدا از پرامپت، بعداً روی تصویر اضافه کن):\n- تیتر اسلاید (نیمهٔ چپ، سفید و بزرگ): «پرداخت‌های خرد، بدون واسطه»\n- زیرتیتر: زیرساخت پرداخت برای نسل بعدی اپلیکیشن‌ها\n- شمارهٔ اسلاید (گوشهٔ پایین چپ): ۳ از ۱۲"
+    },
+    {
+      "id": "competitor-analysis",
+      "titleFa": "تحلیل رقبا برای فروشگاه آنلاین پوشاک",
+      "targetAi": "chatgpt",
+      "promptFa": "تحلیل رقبا برای فروشگاه آنلاین پوشاک [نام فروشگاه].\nرقبای اصلی: [نام رقبا].\nمعیارهای مقایسه: قیمت، تنوع، سرعت ارسال، خدمات بازگشت و حضور در شبکه‌های اجتماعی.\nساختار خروجی:\n۱) جدول مقایسه: هر رقیب در برابر معیارها با برچسب منبع، مشاهدهٔ مستقیم یا برآورد.\n۲) سه نقطهٔ قوت رقبا که به‌سرعت قابل کپی نیست و سه نقطهٔ ضعف.\n۳) جای خالی بازار: دو فرصت که هیچ رقیبی خوب پاسخ نمی‌دهد.\n۴) سه اقدام پیشنهادی برای سه ماه آینده با شاخص سنجش.\nقواعد: قضاوت فقط با شاهد یا برچسب برآورد؛ بدون تخریب رقیب؛ اقدام‌ها واقع‌بینانه با منابع محدود."
+    },
+    {
+      "id": "funding-pitch",
+      "titleFa": "طرح توجیهی فشرده برای جذب سرمایهٔ کوچک",
+      "targetAi": "claude",
+      "promptFa": "طرح توجیهی فشرده برای جذب سرمایهٔ کوچک کسب‌وکار [نام کسب‌وکار].\nمبلغ موردنیاز: [مبلغ] برای [کاربرد].\nساختار خروجی:\n۱) معرفی کسب‌وکار و مشکل بازار در سه جمله.\n۲) مدل درآمدی فعلی و اعداد واقعی موجود: فروش، مشتری و حاشیه.\n۳) برنامهٔ مصرف سرمایه: سه سرفصل با درصد تخصیص.\n۴) پیش‌بینی دو سناریو، محتاطانه و خوش‌بینانه، برای دوازده ماه با فرض‌های صریح.\n۵) برنامهٔ بازگشت سرمایه و سهم پیشنهادی.\n۶) ریسک‌های اصلی و پاسخ هرکدام.\nقواعد: هر عدد یا واقعی است یا برچسب برآورد با فرض؛ بدون وعدهٔ سود تضمینی؛ صادقانه دربارهٔ ریسک."
     }
   ],
   "clarifyingQuestions": [

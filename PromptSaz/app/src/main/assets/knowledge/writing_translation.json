@@ -230,6 +230,18 @@
       "titleFa": "پرامپت جلد کتاب «قصه‌های شبانهٔ شهر» برای میدجرنی",
       "targetAi": "midjourney",
       "promptFa": "Vertical book cover background for a Persian short-story collection titled Tales of the City Night, atmospheric illustration of a quiet city street at 2 AM seen from above the rooftops, warm amber light glowing from a few scattered windows against deep midnight blue, a single lit lamppost casting a soft pool of light on empty cobblestones, gentle fog, whimsical yet melancholic storybook illustration style, muted palette of midnight blue, amber and dusty rose, large calm empty area in the upper third reserved for the book title, painterly texture, no people --ar 2:3 --v 6 --no text, watermark, logo\n\nلایهٔ متن (فارسی — جدا از پرامپت، بعداً روی تصویر اضافه کن):\n- عنوان کتاب (یک‌سوم بالایی، فونت سفید): «قصه‌های شبانهٔ شهر»\n- زیر آن کوچک‌تر: مجموعه‌داستان کوتاه\n- پایین جلد: نام نویسنده"
+    },
+    {
+      "id": "professional-resume",
+      "titleFa": "رزومهٔ حرفه‌ای برای موقعیت شغلی هدف",
+      "targetAi": "chatgpt",
+      "promptFa": "رزومهٔ حرفه‌ای برای [شغل هدف] در [نوع شرکت].\nپیشینهٔ من: [تحصیلات]، [سوابق کاری با مدت] و [مهارت‌ها].\nساختار خروجی:\n۱) عنوان رزومه: عنوان شغلی هدف، نه شغل قبلی.\n۲) خلاصهٔ حرفه‌ای: سه جمله؛ چه می‌کنم، قوی‌ترین دستاورد قابل اندازه‌گیری و چه می‌خواهم.\n۳) سوابق کاری: برای هر تجربه، مسئولیت و دو دستاورد با عدد؛ اگر عددی نیست، توصیف دقیق.\n۴) مهارت‌ها: دسته‌بندی‌شده و هم‌خوان با آگهی شغل.\n۵) بخش آموزش.\n۶) سه توصیه برای متن معرفی که همراه رزومه فرستاده می‌شود.\nقواعد: فعل‌های قوی و مشخص؛ بدون عبارت مبهم مثل مسئول انجام امور؛ طول حداکثر یک صفحه."
+    },
+    {
+      "id": "one-page-summary",
+      "titleFa": "خلاصهٔ یک‌صفحه‌ای از گزارش بلند برای مدیر",
+      "targetAi": "claude",
+      "promptFa": "خلاصهٔ یک‌صفحه‌ای از گزارش بلند [موضوع گزارش] برای مدیر.\nمتن اصلی: [متن یا ساختار گزارش].\nساختار خروجی:\n۱) موضوع و پرسش اصلی گزارش در یک جمله.\n۲) پنج یافتهٔ کلیدی: هر یافته یک جمله با عدد یا شاهد اصلی.\n۳) سه توصیهٔ اجرایی اولویت‌بندی‌شده با اثر تقریبی.\n۴) بزرگ‌ترین ریسک هر توصیه در یک عبارت.\n۵) آنچه گزارش هنوز پاسخ نداده و نیاز به تصمیم دارد.\nقواعد: هیچ یافته‌ای که در متن اصلی نیامده اضافه نشود؛ اعداد عیناً از متن اصلی؛ زبان مدیرانه و کوتاه؛ مجموع خروجی در یک صفحه جا شود."
     }
   ],
   "clarifyingQuestions": [

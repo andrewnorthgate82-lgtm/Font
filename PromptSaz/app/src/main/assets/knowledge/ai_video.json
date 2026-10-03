@@ -228,6 +228,18 @@
       "titleFa": "پرامپت کاور ویدیوی یوتیوب برای میدجرنی",
       "targetAi": "midjourney",
       "promptFa": "Wide YouTube thumbnail background for a tutorial video about mobile photography tips, dynamic diagonal composition with a smartphone held in the lower right third, dramatic splash of teal and warm orange studio lighting creating strong contrast, energetic modern educational mood, bold clean empty space across the top half reserved for a large bold Persian title, subtle motion blur on background light streaks, crisp focus on the phone, professional thumbnail aesthetic, no people faces --ar 16:9 --v 6 --no text, watermark, logo\n\nلایهٔ متن (فارسی — جدا از پرامپت، بعداً روی تصویر اضافه کن):\n- تیتر (نیمهٔ بالایی، بزرگ و پرکنتراست): «با گوشی، عکس حرفه‌ای بگیر»\n- برچسب گوشهٔ پایین چپ: قسمت ۳ از ۸\n- نشان کانال (گوشهٔ پایین راست): آرم کانال"
+    },
+    {
+      "id": "food-single-shot",
+      "titleFa": "پرامپت تک‌شات هشت‌ثانیه‌ای معرفی غذا برای مدل ویدیوساز",
+      "targetAi": "video",
+      "promptFa": "پرامپت تک‌شات هشت‌ثانیه‌ای برای مدل ویدیوساز: نمای کلوزآپ از برگر گوشی تازه [توصیف ظاهر] روی تختهٔ چوبی، بخار ملایم بالا می‌رود، دست آشپز از سمت راست قاب سس را به‌آرامی روی برگر می‌ریزد، نور طبیعی پنجره از چپ با بازتاب نرم روی سطح، دوربین دالی بسیار آرام به جلو، حال‌وهوای گرم و اشتهابرانگیز، پالت قهوه‌ای و کرم.\nمحدودیت‌ها: فقط یک حرکت دوربین؛ بدون متن داخل کادر؛ بدون تغییر ظاهر غذا؛ بخار واقعی و نرم.\nلایهٔ متن (تدوین): تیتر «تازه‌ترین ترکیب فصل» در دو ثانیهٔ اول.\nطرح صدا: صدای ریختن سس و موسیقی آرام."
+    },
+    {
+      "id": "event-teaser",
+      "titleFa": "تیزر پانزده‌ثانیه‌ای رویداد برای استوری",
+      "targetAi": "video",
+      "promptFa": "تیزر پانزده‌ثانیه‌ای رویداد [نام رویداد] برای انتشار در استوری.\nحال‌وهوا: [حال‌وهوا و پالت رنگی].\nصحنه ۱ (۰ تا ۴ ثانیه): نمای باز از مکان رویداد با نور صبح، دوربین پن آرام از راست به چپ.\nصحنه ۲ (۴ تا ۹ ثانیه): کلوزآپ جزئیات آماده‌سازی مثل چیدمان صندلی‌ها، برش تند.\nصحنه ۳ (۹ تا ۱۳ ثانیه): نمای میانی از جمعیت در حال ورود با حس انتظار، دوربین ثابت.\nصحنه ۴ (۱۳ تا ۱۵ ثانیه): قاب پایانی با پس‌زمینهٔ ساده و فضای خالی مرکز برای متن.\nمحدودیت‌ها: پیوستگی نور بین صحنه‌ها؛ بدون چهرهٔ قابل‌شناسایی؛ حرکت دوربین هر صحنه فقط یکی.\nلایهٔ متن (تدوین): نام رویداد، تاریخ و «ثبت‌نام در [نشانی]».\nطرح صدا: موسیقی با ریتم رو به رشد."
     }
   ],
   "clarifyingQuestions": [

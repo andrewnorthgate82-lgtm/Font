@@ -78,12 +78,12 @@ they show as «به‌زودی» in the UI.
 | Section | Full domain | `general.json` |
 |---------|------------:|---------------:|
 | personas | ≥ 4 | ≥ 3 |
-| terminology | ≥ 10 | ≥ 5 |
+| terminology | ≥ 11 | ≥ 5 |
 | outputStructures | ≥ 4 | ≥ 3 |
 | guardrails | ≥ 8 | ≥ 5 |
 | failureModes | ≥ 5 | ≥ 3 |
-| examples | ≥ 3 (each ≥ 300 chars) | ≥ 2 |
-| clarifyingQuestions | ≥ 6 | ≥ 4 |
+| examples | ≥ 5 (each ≥ 300 chars) | ≥ 2 |
+| clarifyingQuestions | ≥ 10 | ≥ 4 |
 
 ## Writing rules (why the validator checks what it checks)
 

@@ -123,12 +123,12 @@ class KbAssetFilesTest {
     private fun assertFullDomain(kb: DomainKnowledge, expectedId: String) {
         assertEquals(expectedId, kb.id)
         assertTrue("personas: ${kb.personas.size}", kb.personas.size >= 4)
-        assertTrue("terminology: ${kb.terminology.size}", kb.terminology.size >= 10)
+        assertTrue("terminology: ${kb.terminology.size}", kb.terminology.size >= 11)
         assertTrue("outputStructures: ${kb.outputStructures.size}", kb.outputStructures.size >= 4)
         assertTrue("guardrails: ${kb.guardrails.size}", kb.guardrails.size >= 8)
         assertTrue("failureModes: ${kb.failureModes.size}", kb.failureModes.size >= 5)
-        assertTrue("examples: ${kb.examples.size}", kb.examples.size >= 3)
-        assertTrue("questions: ${kb.clarifyingQuestions.size}", kb.clarifyingQuestions.size >= 6)
+        assertTrue("examples: ${kb.examples.size}", kb.examples.size >= 5)
+        assertTrue("questions: ${kb.clarifyingQuestions.size}", kb.clarifyingQuestions.size >= 10)
         kb.examples.forEach { example ->
             assertTrue(
                 "example ${example.id} too short (${example.promptFa.length})",

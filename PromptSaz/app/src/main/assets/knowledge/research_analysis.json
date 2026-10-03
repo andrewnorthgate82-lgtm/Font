@@ -231,6 +231,18 @@
       "titleFa": "پرامپت پس‌زمینهٔ پوستر همایش علمی برای میدجرنی",
       "targetAi": "midjourney",
       "promptFa": "Vertical academic conference poster background for a water-resources engineering study, clean scientific infographic aesthetic, abstract topographic contour lines in deep teal flowing across the lower third, subtle isometric rain droplets and a minimal reservoir diagram motif in the upper right corner, generous plain white space in the center and left side reserved for research text and charts, restrained palette of deep teal, slate grey and white, flat vector style with fine line work, organized and professional academic mood, no people --ar 2:3 --v 6 --no text, watermark, logo\n\nلایهٔ متن (فارسی — جدا از پرامپت، بعداً روی تصویر اضافه کن):\n- عنوان پوستر (نوار بالایی): «مدیریت مصرف آب در مخازن فصلی؛ مطالعهٔ موردی حوضهٔ زاگرس»\n- ناحیهٔ وسط: جای نمودارها و جدول‌ها\n- ستون راست: روش، یافته‌ها، نتیجه‌گیری\n- نوار پایینی: نام دانشجو، استاد راهنما، سال ۱۴۰۵"
+    },
+    {
+      "id": "review-mining",
+      "titleFa": "تحلیل محتوای نظرات مشتریان فروشگاه آنلاین",
+      "targetAi": "chatgpt",
+      "promptFa": "تحلیل محتوای نظرات مشتریان برای فروشگاه آنلاین [نام فروشگاه].\nداده: [تعداد] نظر مشتری در بازهٔ [بازه].\nپرسش تحلیل: مشتریان بیشتر از چه چیزی رضایت دارند و شکایت‌ها حول چه موضوعاتی است؟\nساختار خروجی:\n۱) روش: چگونه نظرات دسته‌بندی شد؛ دسته‌ها را از خود داده استخراج کن نه از پیش.\n۲) یافته‌ها: پنج دستهٔ اصلی با سهم تقریبی هر دسته.\n۳) سه نقل‌قول نماینده برای دسته‌های مهم، عین متن نظر.\n۴) تفسیر: دو جمله دربارهٔ معنای این الگو برای کسب‌وکار.\n۵) سه اقدام پیشنهادی اولویت‌دار.\nقواعد: سهم‌ها برآوردی و مشخص؛ نقل‌قول فقط از متن داده؛ تفکیک یافته از تفسیر."
+    },
+    {
+      "id": "thesis-exec-summary",
+      "titleFa": "خلاصهٔ اجرایی پایان‌نامه برای مدیر سازمان",
+      "targetAi": "any",
+      "promptFa": "خلاصهٔ اجرایی پایان‌نامهٔ [عنوان] برای ارائه به مدیر سازمان همکار.\nساختار خروجی:\n۱) پرسش پژوهش و روش در سه جمله.\n۲) مهم‌ترین یافته‌ها: سه مورد با شاهد.\n۳) معنای عملی یافته‌ها برای سازمان: سه توصیهٔ مشخص.\n۴) محدودیت‌های اعتبار نتایج در دو جمله.\n۵) پیشنهاد گام بعدی با مسئول و زمان تقریبی.\nقواعد: بدون اصطلاح آماری بی‌تعریف؛ اعداد کلیدی با بازه؛ صداقت کامل دربارهٔ محدودیت‌ها؛ مخاطب وقت زیادی ندارد."
     }
   ],
   "clarifyingQuestions": [

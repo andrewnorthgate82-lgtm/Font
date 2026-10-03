@@ -241,6 +241,18 @@
       "titleFa": "پرامپت پوستر آموزشی «فتوسنتز» برای میدجرنی",
       "targetAi": "midjourney",
       "promptFa": "Vertical educational poster background for a school science classroom about photosynthesis, clean modern infographic style, a large stylized tree in the center-left with visible sun rays arriving from the top right corner, soft green and sky-blue palette, thin white connector lines radiating from the tree toward three reserved empty boxes on the right side for text labels, plenty of clean white space, flat vector illustration with subtle depth, cheerful and organized mood suitable for grade school, no lettering anywhere --ar 4:5 --v 6 --no text, watermark, logo\n\nلایهٔ متن (فارسی — جدا از پرامپت، بعداً روی تصویر اضافه کن):\n- تیتر (بالای پوستر): «فتوسنتز؛ آشپزخانهٔ سبز طبیعت»\n- کادر ۱: نور خورشید انرژی می‌آورد\n- کادر ۲: ریشه آب و مواد را می‌گیرد\n- کادر ۳: برگ غذا و اکسیژن می‌سازد\n- نوار پایینی: علوم تجربی — پایهٔ هفتم"
+    },
+    {
+      "id": "excel-course-outline",
+      "titleFa": "سرفصل دورهٔ آنلاین اکسل برای کارمندان حسابداری",
+      "targetAi": "chatgpt",
+      "promptFa": "سرفصل کامل دورهٔ آنلاین اکسل برای کارمندان حسابداری.\nمخاطب: کارمند حسابداری که کار با اکسل را از پایه می‌خواهد.\nوعدهٔ دوره: در پایان، شرکت‌کننده بتواند گزارش‌های ماهانهٔ خود را با فرمول و جدول محوری بسازد.\nساختار خروجی:\n۱) فهرست جلسات: عنوان، هدف یادگیری و مدت هر جلسه بین سی تا شصت دقیقه.\n۲) برای هر جلسه: تمرین عملی مرتبط با کار حسابداری.\n۳) دو نقطهٔ بازبینی: جلسه‌ای که یادگیری قبلی سنجیده می‌شود.\n۴) پروژهٔ پایانی: ساخت گزارش ماهانهٔ واقعی با معیار قبولی.\n۵) پیش‌نیازها و ابزار موردنیاز.\nقواعد: توالی جلسه‌ها بدون پرش مهارتی؛ هر هدف قابل سنجش؛ بدون مفهوم اضافی که در وعده نیامده."
+    },
+    {
+      "id": "exam-review-week",
+      "titleFa": "برنامه مرور هفتهٔ آخر قبل از امتحان",
+      "targetAi": "any",
+      "promptFa": "برنامه مرور هفتهٔ آخر قبل از امتحان برای دانش‌آموز پایهٔ [پایه] در درس [درس].\nموارد امتحان: [فصل‌ها یا مطالب].\nنقطهٔ ضعف: [مبحث مشکل].\nساختار خروجی:\n۱) جدول روزشمار هفت‌روزه: هر روز چه مبحثی، با چه روشی (مرور فعال، حل تمرین، آزمون کوتاه) و چند دقیقه.\n۲) روش مرور هر نوع محتوا: تعریف، فرمول و مسئله.\n۳) دو آزمون آزمایشی کوچک در میانه و پایان هفته با معیار.\n۴) قاعدهٔ شب امتحان: مرور سبک و خواب کامل.\n۵) برنامهٔ ترمیم اگر یک روز عقب افتاد.\nقواعد: واقع‌بینانه با زمان واقعی دانش‌آموز؛ استراحت و خواب حذف نشود؛ بدون نصیحت اخلاقی، فقط برنامه."
     }
   ],
   "clarifyingQuestions": [

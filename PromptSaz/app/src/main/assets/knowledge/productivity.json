@@ -228,6 +228,18 @@
       "titleFa": "پرامپت پوستر هدف سال برای میدجرنی",
       "targetAi": "midjourney",
       "promptFa": "Vertical motivational goal-tracker poster background for a home office wall, modern minimalist aesthetic, a single elegant abstract mountain silhouette at the bottom tenth rendered in warm terracotta lines, twelve empty small circular checkboxes arranged in a clean two-column grid across the middle for monthly milestones, soft cream paper texture background, thin hand-drawn dashed path rising from the mountain toward a small sun symbol in the upper right, restrained palette of cream, terracotta and deep forest green, generous empty space at the top for a title, calm and encouraging mood, no people --ar 4:5 --v 6 --no text, watermark, logo\n\nلایهٔ متن (فارسی — جدا از پرامپت، بعداً روی تصویر اضافه کن):\n- تیتر (بالای پوستر): «سال ۱۴۰۵ — سال ساختن»\n- زیر تیتر: هر دایره، یک ماه؛ پرش کن و جلو برو\n- جملهٔ پایین: کوچک شروع کن، رها نکن"
+    },
+    {
+      "id": "inbox-system",
+      "titleFa": "سیستم مدیریت ایمیل برای مدیر پرجلسه",
+      "targetAi": "chatgpt",
+      "promptFa": "سیستم مدیریت ایمیل برای مدیری که روز پرجلسه دارد.\nمشکل: صندوق ورودی همیشه بالای [تعداد] ایمیل خوانده‌نشده است.\nساختار خروجی:\n۱) قاعدهٔ تصمیم سریع برای هر ایمیل: پاسخ، واگذاری، زمان‌بندی یا حذف، در کمتر از یک دقیقه.\n۲) دو بلوک روزانهٔ ثابت برای ایمیل و خاموشی اعلان در بقیهٔ روز.\n۳) قالب‌های پاسخ آماده برای سه ایمیل پرتکرار: جلسه، پیگیری و درخواست.\n۴) قاعدهٔ موضوع مؤثر: درخواست با ضرب‌الاجل در خط اول.\n۵) پاک‌سازی هفتگی پانزده‌دقیقه‌ای.\n۶) معیار موفقیت: صندوق زیر [تعداد] ایمیل در پایان هر روز.\nقواعد: واقع‌بینانه برای روز پرجلسه؛ سیستم ساده که در ابزار فعلی جاری شود؛ بدون معرفی ابزار جدید."
+    },
+    {
+      "id": "morning-workout-challenge",
+      "titleFa": "برنامهٔ سی‌روزه ساخت عادت ورزش صبحگاهی",
+      "targetAi": "any",
+      "promptFa": "برنامهٔ سی‌روزه ساخت عادت ورزش صبحگاهی برای کسی که سه بار رها کرده است.\nشرایط: خواب دیر؛ صبح‌ها خسته؛ تجهیزات ورزشی در خانه موجود است.\nساختار خروجی:\n۱) قاعدهٔ شروع کوچک: پنج دقیقه در هفتهٔ اول با حرکات مشخص.\n۲) لنگر: بلافاصله بعد از بستن کتری چای صبح.\n۳) تغییر محیط: آماده‌کردن لباس شب قبل؛ گوشی خارج از اتاق خواب.\n۴) تقویم سی‌روزه در سه فاز ده‌روزه با افزایش تدریجی و مشخص.\n۵) پاداش هفتگی غیرخوراکی.\n۶) پلان ترمیم روز جاافتاده با نسخهٔ دو دقیقه‌ای.\n۷) معیار موفقیت: نه بی‌نقصی، بلکه حداقل بیست‌وپنج روز ثبت‌شده.\nقواعد: همدستانه و بدون سرزنش؛ برنامه با انرژی صبح واقعی این شخص؛ افزایش‌ها تدریجی."
     }
   ],
   "clarifyingQuestions": [

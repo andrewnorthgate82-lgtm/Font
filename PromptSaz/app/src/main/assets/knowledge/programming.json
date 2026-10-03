@@ -229,6 +229,18 @@
       "titleFa": "پرامپت تصویر هدر صفحهٔ فرود ابزار برنامه‌نویس برای میدجرنی",
       "targetAi": "midjourney",
       "promptFa": "Wide landing-page hero background for a developer productivity tool, dark modern tech aesthetic, abstract isometric floating code-editor windows and terminal panes layered with soft depth in deep indigo and charcoal, thin glowing cyan syntax-highlight accent lines flowing between the panes, subtle dot-grid texture, generous clean dark space across the left half reserved for a bold headline and a call-to-action button, professional and focused engineering mood, no readable characters, no people --ar 16:9 --v 6 --no text, watermark, logo\n\nلایهٔ متن (فارسی — جدا از پرامپت، بعداً روی تصویر اضافه کن):\n- تیتر (نیمهٔ چپ، سفید و بزرگ): «کد را سریع‌تر بنویس، کمتر باگ بگیر»\n- زیرتیتر: بازبینی خودکار کد و پیشنهاد بهبود در لحظه\n- دکمهٔ دعوت به اقدام: شروع رایگان"
+    },
+    {
+      "id": "architecture-news-reader",
+      "titleFa": "معماری اپ اندروید خبرخوان با کاتلین",
+      "targetAi": "claude",
+      "promptFa": "طراحی معماری برای اپ اندروید خبرخوان با کاتلین و کامپوز.\nنیازها: فهرست خبر دسته‌بندی‌شده، خبر ذخیره‌شده برای مطالعهٔ آفلاین، اعلان خبر مهم.\nساختار خروجی:\n۱) نمودار لایه‌ها: رابط کاربری، دامنه و داده با مسئولیت هر لایه.\n۲) ماژول‌های اصلی و کلاس‌های کلیدی هر ماژول با یک جملهٔ توضیح.\n۳) جریان داده: از دریافت خبر از سرور تا نمایش در فهرست، با نام توابع کلیدی.\n۴) تصمیم‌های مهم: کتابخانهٔ شبکه، دیتابیس محلی و راهبرد کش؛ هر تصمیم با دلیل دو جمله‌ای.\n۵) نقشهٔ گام‌های پیاده‌سازی به ترتیب وابستگی.\nقواعد: ساده‌ترین معماری که نیازها را پاسخ دهد؛ بدون الگوی اضافی؛ کد نمونه فقط برای بخش‌های کلیدی."
+    },
+    {
+      "id": "python-file-organizer",
+      "titleFa": "اسکریپت پایتون مرتب‌سازی خودکار پوشهٔ دانلودها",
+      "targetAi": "chatgpt",
+      "promptFa": "اسکریپت پایتون برای مرتب‌سازی خودکار پوشهٔ دانلودها.\nرفتار موردنظر: تفکیک فایل‌ها بر اساس نوع (تصویر، سند، ویدیو، فشرده) به زیرپوشه‌های هم‌نام؛ تغییر نام فایل تکراری به‌جای رونویسی؛ گزارش کار انجام‌شده در پایان.\nساختار خروجی:\n۱) کد کامل و قابل اجرا با تابع‌های کوچک و نام‌گذاری روشن.\n۲) مدیریت خطا: فایل قفل‌شده، نبود دسترسی و نام غیرمعتبر.\n۳) راهنمای اجرا: پیش‌نیاز و دستور اجرا.\n۴) سه پیشنهاد گسترش برای آینده، مثل اجرای زمان‌بندی‌شده.\nقواعد: بدون وابستگی به کتابخانهٔ خارجی در حد امکان؛ کامنت‌ها کوتاه و در جای درست؛ سبک کد پایتون رعایت شود."
     }
   ],
   "clarifyingQuestions": [

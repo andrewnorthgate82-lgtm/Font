@@ -228,6 +228,18 @@
       "titleFa": "پرامپت اینفوگرافیک داده برای میدجرنی",
       "targetAi": "midjourney",
       "promptFa": "Vertical infographic poster background for an annual city air-quality report, clean modern data-visualization aesthetic, soft off-white background with a large elegant abstract area-chart silhouette in muted blue-green flowing across the lower third, delicate dotted map grid in the upper right corner, thin connector lines pointing toward three empty rounded rectangles in the middle reserved for key statistics, restrained palette of deep teal, slate and warm white, generous breathing space, flat vector style with fine details, trustworthy and calm scientific mood, no people --ar 4:5 --v 6 --no text, watermark, logo\n\nلایهٔ متن (فارسی — جدا از پرامپت، بعداً روی تصویر اضافه کن):\n- تیتر (بالای پوستر): «گزارش سالانهٔ کیفیت هوای شهر»\n- کادرهای آمار: روزهای سالم ۲۴۸ روز، میانگین ذرات معلق ۳۲ میکروگرم، روند پنج‌ساله: رو به بهبود\n- نوار پایینی: منبع: ایستگاه‌های پایش شهری — سال ۱۴۰۴"
+    },
+    {
+      "id": "sales-dashboard",
+      "titleFa": "داشبورد فروش ماهانه در اکسل برای مدیر فروشگاه",
+      "targetAi": "chatgpt",
+      "promptFa": "طراحی داشبورد فروش ماهانه در اکسل برای مدیر فروشگاه.\nدادهٔ موجود: فایل فروش روزانه با ستون‌های تاریخ، دسته و مبلغ.\nساختار خروجی:\n۱) نقشهٔ داشبورد: چهار کارت شاخص کلیدی، شامل فروش ماه، مقایسه با ماه قبل، پرفروش‌ترین دسته و میانگین فروش روزانه، به‌همراه دو نمودار.\n۲) ساختار دادهٔ پشتیبان: جدول محوری و ستون‌های کمکی لازم.\n۳) فرمول‌های کلیدی با توضیح کوتاه، بدون فرمول پیچیدهٔ غیرضروری.\n۴) قواعد بصری: رنگ هشدار برای افت و رنگ موفقیت برای رشد.\n۵) راهنمای به‌روزرسانی ماهانه در سه گام.\nقواعد: قابل ساخت در اکسل معمولی بدون افزونه؛ کاربر مبتدی بتواند به‌روزرسانی کند؛ هر شاخص به یک تصمیم گره بخورد."
+    },
+    {
+      "id": "ab-test-analysis",
+      "titleFa": "تحلیل آزمون مقایسهٔ دو نسخهٔ صفحهٔ محصول",
+      "targetAi": "claude",
+      "promptFa": "تحلیل آزمون مقایسهٔ دو نسخهٔ صفحهٔ محصول.\nطرح آزمون: نسخهٔ فعلی و نسخهٔ جدید به‌طور تصادفی به بازدیدکننده‌ها نشان داده شد.\nداده: نسخهٔ فعلی [تعداد] بازدید و [تعداد] خرید؛ نسخهٔ جدید [تعداد] بازدید و [تعداد] خرید.\nساختار خروجی:\n۱) نرخ تبدیل هر نسخه با عدد.\n۲) بررسی معناداری: آیا تفاوت از حد تصادفی بزرگ‌تر است؛ نتیجه به زبان ساده.\n۳) تفسیر: چه چیزی احتمالاً باعث تفاوت شده و چه چیزی هنوز نامعلوم است.\n۴) تصمیم پیشنهادی مشروط و معیار آن.\n۵) پیشنهاد آزمون بعدی برای اطمینان بیشتر.\nقواعد: تفکیک عدد و تفسیر؛ عدم قطعیت صریح؛ بدون اطمینان کاذب آماری؛ اعداد ورودی عیناً استفاده شوند."
     }
   ],
   "clarifyingQuestions": [

@@ -255,6 +255,12 @@
       "titleFa": "بازبینی و بهبود پرامپت تصویر موجود",
       "targetAi": "chatgpt",
       "promptFa": "نقش: مربی پرامپت‌نویسی تصویر.\nکار: پرامپت تصویری که در پایین آورده‌ام را بازبینی کن و سه نسخهٔ بهبودیافته بده.\nساختار پاسخ:\n۱) تشخیص: در یک جدول کوتاه بگو پرامپت فعلی چه چیزهای اصلی را دارد (سوژه، سبک، نور، پالت، ترکیب‌بندی، پارامتر) و چه چیزهایی گمشده است.\n۲) سه نسخهٔ بازنویسی‌شده: هر نسخه یک ضعف متفاوت را هدف بگیرد (نسخهٔ ۱ سبک و حال‌وهوا را دقیق کند؛ نسخهٔ ۲ نور و لنز را؛ نسخهٔ ۳ ترکیب‌بندی و فضای خالی برای متن).\n۳) توضیح یک‌خطی دلیل هر تغییر.\n۴) پارامترهای پایانی هر نسخه: نسبت تصویر مناسب استفاده، نسخهٔ مدل، و منفی‌های استاندارد.\nقواعد: بدنهٔ پرامپت انگلیسی؛ هیچ متنی داخل تصویر نخواه؛ اگر متن فارسی لازم است، جدا با عنوان «لایهٔ متن» بده.\nپرامپت فعلی من: a beautiful picture of a coffee cup on a table, nice colors, very artistic"
+    },
+    {
+      "id": "brand-logo-image-prompt",
+      "titleFa": "پرامپت لوگو و هویت بصری برای میدجرنی",
+      "targetAi": "midjourney",
+      "promptFa": "Minimalist logo concept for a Persian specialty coffee brand, a stylized coffee cup formed by one continuous line-art stroke with a subtle mountain silhouette rising from the steam, deep espresso brown and warm cream two-color palette, generous white background, balanced negative space, scalable flat vector aesthetic, clean geometry, memorable and timeless brand mark --ar 1:1 --v 6 --no text, watermark, logo\n\nلایهٔ متن (فارسی — جدا از پرامپت، بعداً روی تصویر اضافه کن):\n- نام برند (زیر نشانه): «کافهٔ دم»\n- شعار یک‌خطی: دم‌آوری تازهٔ هر روز\n- کاربرد نهایی: کارت ویزیت، تابلو و مهر"
     }
   ],
   "clarifyingQuestions": [

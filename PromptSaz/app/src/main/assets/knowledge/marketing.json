@@ -241,6 +241,12 @@
       "titleFa": "پرامپت تصویر پوستر دوره آموزشی برای میدجرنی",
       "targetAi": "midjourney",
       "promptFa": "Vertical poster background for an artificial intelligence training course, modern tech aesthetic, glowing abstract neural network pattern in deep blue and violet, soft gradient lighting, minimalist composition with a clear empty band in the top third reserved for a bold headline and a clean strip across the bottom third reserved for course details, subtle geometric depth, high contrast for light text, professional educational mood, no people, no letters --ar 4:5 --v 6 --no text, watermark, logo\n\nلایهٔ متن (فارسی — جدا از پرامپت، بعداً روی تصویر اضافه کن):\n- تیتر (یک‌سوم بالایی، بزرگ‌ترین اندازه): «هوش مصنوعی را از پایه یاد بگیر»\n- زیرتیتر: دورهٔ آموزشی کاربردی با پروژهٔ واقعی\n- مدرس: سارا رستمی\n- تاریخ و مدت: ۲۰ آبان به مدت ۵ روز\n- دعوت به اقدام (نوار پایینی): ثبت‌نام و جزئیات در site.com"
+    },
+    {
+      "id": "campaign-app-install",
+      "titleFa": "کمپین سه‌ماهه افزایش نصب اپلیکیشن",
+      "targetAi": "chatgpt",
+      "promptFa": "کمپین سه‌ماهه برای افزایش نصب اپلیکیشن [نام اپلیکیشن].\nهدف: رسیدن به [عدد هدف] نصب فعال تا پایان فصل.\nمخاطب: [مخاطب اصلی] که درد [درد اصلی] را دارد.\nپیام اصلی: یک جمله که مزیت کلیدی را با زبان خود مخاطب بگوید.\nساختار خروجی:\n۱) استراتژی پیام: سه زاویهٔ متفاوت برای پیام اصلی با توضیح یک‌خطی هرکدام.\n۲) نقشهٔ کانال‌ها: برای هر ماه، کانال اصلی (اینستاگرام، گوگل، ایمیل) با نقش مشخص و بودجهٔ نسبی.\n۳) تقسیم فازها: ماه اول آگاهی، ماه دوم تعامل، ماه سوم تبدیل؛ برای هر فاز پیام کلیدی و قالب محتوا.\n۴) شاخص‌های سنجش: نرخ کلیک، نرخ نصب و هزینهٔ هر نصب؛ عدد هدف هر شاخص در هر فاز.\n۵) برنامهٔ بهینه‌سازی: جلسهٔ دوهفتگی برای حذف پیام ضعیف و تقویت برنده.\nقواعد: هر عدد هدف به‌عنوان برآورد مشخص شود؛ بدون وعدهٔ نتیجهٔ تضمینی؛ کانال‌ها با جایی که مخاطب واقعاً هست هم‌خوان باشند."
     }
   ],
   "clarifyingQuestions": [

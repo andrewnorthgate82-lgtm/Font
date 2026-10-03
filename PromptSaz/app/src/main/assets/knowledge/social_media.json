@@ -247,6 +247,12 @@
       "titleFa": "پرامپت تصویر پست اینستاگرام کافه برای میدجرنی",
       "targetAi": "midjourney",
       "promptFa": "Vertical Instagram post background for a cozy specialty coffee shop, warm flat-lay style, top-down view of a ceramic cup with latte art on a rustic wooden table, scattered coffee beans and a small notebook, soft natural window light, warm brown and cream palette, generous negative space in the upper half for a headline and a clear thin strip at the bottom for a call to action, appetizing calm mood, no people, no letters --ar 4:5 --v 6 --no text, watermark, logo\n\nلایهٔ متن (فارسی — جدا از پرامپت، بعداً روی تصویر اضافه کن):\n- تیتر (نیمهٔ بالایی): «صبح‌هایت را با ما گرم کن»\n- زیرتیتر: کافهٔ اسپشیالیتی — دانهٔ تازه‌برشت\n- دعوت به اقدام (نوار پایینی): تا ۳۰ مهر، اردوی صبحگاهی رایگان"
+    },
+    {
+      "id": "content-calendar-cooking",
+      "titleFa": "تقویم محتوایی یک‌ماهه پیج آشپزی",
+      "targetAi": "chatgpt",
+      "promptFa": "تقویم محتوایی یک‌ماهه برای پیج آشپزی [نام پیج].\nمخاطب: [مخاطب] که دنبال غذای خانگی سریع است.\nهدف: افزایش ذخیرهٔ پست‌ها و رشد فالوور ارگانیک.\nساختار خروجی:\n۱) ستون‌های محتوا: سه ستون ثابت (دستور پخت سریع، نکتهٔ آشپزخانه، پشت‌صحنه).\n۲) جدول تقویم: برای هر روز، عنوان محتوا، ستون آن، قالب (ریلز، کاروسل، استوری) و دعوت به اقدام.\n۳) ریتم هفتگی: روزهای ثابت برای هر ستون تا مخاطب عادت کند.\n۴) سه ایدهٔ آمادهٔ اجرا برای هفتهٔ اول با قلاب مشخص.\n۵) معیار سنجش: ذخیره، اشتراک‌گذاری و رشد فالوور در پایان ماه.\nقواعد: هر عنوان با قلاب مشخص نه کلیشه؛ قالب هر محتوا با محدودیت واقعی پلتفرم بخواند؛ تقویم قابل اجرا با یک نفر تولیدکننده باشد."
     }
   ],
   "clarifyingQuestions": [

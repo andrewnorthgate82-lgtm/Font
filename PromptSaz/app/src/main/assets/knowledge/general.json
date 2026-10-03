@@ -164,6 +164,12 @@
       "titleFa": "پرامپت تصویر پوستر جشن فارغ‌التحصیلی برای میدجرنی",
       "targetAi": "midjourney",
       "promptFa": "Vertical poster background for a university graduation celebration, elegant festive academic mood, soft golden-hour light, abstract composition of falling confetti and a stylized graduation cap silhouette, deep navy background with gold accents, large clean empty area in the middle and top for text, minimal modern design, dignified celebratory atmosphere, no people, no letters --ar 4:5 --v 6 --no text, watermark, logo\n\nلایهٔ متن (فارسی — جدا از پرامپت، بعداً روی تصویر اضافه کن):\n- تیتر (بالا، بزرگ‌ترین): «جشن فارغ‌التحصیلی ۱۴۰۴»\n- زیرتیتر: دانشکدهٔ مهندسی کامپیوتر\n- زمان: ۲۵ شهریور، ساعت ۱۸\n- مکان: سالن مرکزی دانشگاه"
+    },
+    {
+      "id": "decision-compare",
+      "titleFa": "مقایسهٔ ساخت‌یافتهٔ چند گزینه برای تصمیم",
+      "targetAi": "any",
+      "promptFa": "کمک برای تصمیم بین چند گزینه: [گزینه‌ها] برای [هدف].\nساختار خروجی:\n۱) معیارهای واقعاً مهم برای این تصمیم، حداکثر سه مورد، با وزن نسبی.\n۲) جدول ارزیابی گزینه‌ها در برابر معیارها.\n۳) هزینهٔ برگشت‌ناپذیر هر گزینه در یک عبارت.\n۴) بدترین حالت قابل تحمل هر گزینه.\n۵) گزینهٔ پیشنهادی با دلیل و تاریخ بازبینی تصمیم.\n۶) معیاری که مشخص کند تصمیم درست بوده.\nقواعد: بدون ترجیح پنهان؛ اگر اطلاعات گزینه‌ها ناقص است، نقطهٔ نامعلوم را صریح بگو؛ خروجی کوتاه و تصمیم‌محور."
     }
   ],
   "clarifyingQuestions": [

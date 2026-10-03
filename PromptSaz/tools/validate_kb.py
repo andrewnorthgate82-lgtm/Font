@@ -27,8 +27,8 @@ VALID_TARGETS = {"chatgpt", "claude", "gemini", "deepseek", "midjourney", "video
 
 # Content minimums: full domains vs the lighter general KB.
 FULL_MINIMUMS = {
-    "personas": 4, "terminology": 10, "outputStructures": 4,
-    "guardrails": 8, "failureModes": 5, "examples": 3, "clarifyingQuestions": 6,
+    "personas": 4, "terminology": 11, "outputStructures": 4,
+    "guardrails": 8, "failureModes": 5, "examples": 5, "clarifyingQuestions": 10,
 }
 GENERAL_MINIMUMS = {
     "personas": 3, "terminology": 5, "outputStructures": 3,
