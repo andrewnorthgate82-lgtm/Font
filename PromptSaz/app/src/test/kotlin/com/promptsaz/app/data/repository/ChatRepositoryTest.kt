@@ -84,12 +84,12 @@ class ChatRepositoryTest {
         }
     }
 
-    private class FakeProvider : ChatAiProvider {
+    private open class FakeProvider : ChatAiProvider {
         var lastModel: String? = null
         var lastTurns: List<ChatTurn> = emptyList()
         var reply: String = "پاسخ دستیار برای تست."
 
-        open suspend fun chat(model: String, turns: List<ChatTurn>): Result<String> {
+        open override suspend fun chat(model: String, turns: List<ChatTurn>): Result<String> {
             lastModel = model
             lastTurns = turns
             return Result.success(reply)
