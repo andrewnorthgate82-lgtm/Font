@@ -1,0 +1,590 @@
+{
+  "id": "ai_image",
+  "nameFa": "تولید تصویر با هوش مصنوعی",
+  "status": "ready",
+  "personas": [
+    {
+      "id": "image-prompt-engineer",
+      "titleFa": "مهندس پرامپت تصویر",
+      "expertiseFa": "نوشتن پرامپت انگلیسی دقیق با سوژه، سبک، نور، ترکیب‌بندی و پارامترهای مدل؛ برای میدجرنی، دالی و فلوکس",
+      "whenToUseFa": "وقتی خروجی، خودِ پرامپت تصویر است"
+    },
+    {
+      "id": "product-photography-director",
+      "titleFa": "کارگردان عکاسی محصول",
+      "expertiseFa": "طراحی قاب محصول با نور استودیویی، پس‌زمینهٔ تمیز و جزئیاتی که حس کیفیت و اعتماد بسازد",
+      "whenToUseFa": "وقتی هدف، عکس تبلیغاتی یا کاتالوگ محصول است"
+    },
+    {
+      "id": "concept-artist",
+      "titleFa": "طراح مفهومی و کاراکتر",
+      "expertiseFa": "خلق کاراکتر، پرسوناژ و دنیای تخیلی با شیت شخصیت، زوایای مختلف و ثبات ظاهری",
+      "whenToUseFa": "وقتی سوژه، کاراکتر یا تصویرسازی داستانی است"
+    },
+    {
+      "id": "brand-visual-designer",
+      "titleFa": "طراح بصری برند",
+      "expertiseFa": "هماهنگی تصویر هوش مصنوعی با هویت بصری برند: پالت، لحن و قواعد ترکیب‌بندی",
+      "whenToUseFa": "وقتی تصویر باید با برند و کمپین هم‌خوان باشد"
+    },
+    {
+      "id": "creative-researcher",
+      "titleFa": "پژوهشگر سبک و رفرنس",
+      "expertiseFa": "پیشنهاد سبک‌ها، رفرنس‌های هنری و مسیرهای جایگزین تا تصویر مطلوب سریع‌تر پیدا شود",
+      "whenToUseFa": "وقتی کاربر هنوز سبک یا جهت بصری را انتخاب نکرده است"
+    }
+  ],
+  "terminology": [
+    {
+      "termFa": "پرامپت منفی",
+      "termEn": "Negative Prompt",
+      "definitionFa": "فهرست چیزهایی که نباید در تصویر بیایند؛ در میدجرنی با پارامتر no-- داده می‌شود"
+    },
+    {
+      "termFa": "نسبت تصویر",
+      "termEn": "Aspect Ratio",
+      "definitionFa": "تناسب عرض به ارتفاع تصویر که با پارامتر ar-- تنظیم می‌شود و باید با جای استفاده بخواند"
+    },
+    {
+      "termFa": "فضای خالی",
+      "termEn": "Negative Space",
+      "definitionFa": "ناحیهٔ ساده و خلوت تصویر که جای متن و لوگو را نگه می‌دارد تا لایهٔ متن خوانا بماند"
+    },
+    {
+      "termFa": "لایهٔ متن",
+      "termEn": "Text Layer",
+      "definitionFa": "متن فارسی که جدا از پرامپت تولید می‌شود و بعداً با ابزار گرافیکی روی تصویر می‌نشیند"
+    },
+    {
+      "termFa": "نورپردازی",
+      "termEn": "Lighting",
+      "definitionFa": "نوع و جهت نور (نرم، سینمایی، طلایی غروب، استودیویی) که حال‌وهوای اصلی تصویر را می‌سازد"
+    },
+    {
+      "termFa": "عمق میدان",
+      "termEn": "Depth of Field",
+      "definitionFa": "میزان وضوح پیش‌زمینه و پس‌زمینه؛ میدان کم یعنی پس‌زمینهٔ محو و تمرکز روی سوژه"
+    },
+    {
+      "termFa": "ترکیب‌بندی",
+      "termEn": "Composition",
+      "definitionFa": "چیدمان عناصر در کادر: قانون یک‌سوم، خطوط راهنما، تقارن و نقطهٔ تمرکز"
+    },
+    {
+      "termFa": "بذر تصویر",
+      "termEn": "Seed",
+      "definitionFa": "عدد آغازین تولید تصویر که با ثابت‌ماندنش، خروجی‌های مشابه قابل تکرار می‌شود"
+    },
+    {
+      "termFa": "وزن‌دهی کلمات",
+      "termEn": "Prompt Weighting",
+      "definitionFa": "تقویت یا تضعیف تأثیر یک کلمه در پرامپت با دو نقطه و عدد، مثل رنگ::۲"
+    },
+    {
+      "termFa": "رفرنس سبک",
+      "termEn": "Style Reference",
+      "definitionFa": "تصویر یا آدرس هنری نمونه که سبک آن به‌عنوان الگو به مدل داده می‌شود"
+    },
+    {
+      "termFa": "پارامتر نسخه",
+      "termEn": "Version Parameter",
+      "definitionFa": "شمارهٔ مدل میدجرنی در پرامپت مثل v-- ۶ که رفتار و کیفیت خروجی را تعیین می‌کند"
+    },
+    {
+      "termFa": "دوربین و لنز",
+      "termEn": "Camera & Lens",
+      "definitionFa": "مشخصات شبیه‌سازی‌شدهٔ دوربین مثل ۳۵ میلی‌متری یا پرترهٔ ۸۵ که حالت عکس واقعی می‌سازد"
+    }
+  ],
+  "outputStructures": [
+    {
+      "id": "poster-image-prompt",
+      "titleFa": "پرامپت پوستر با جای متن",
+      "descriptionFa": "ساختار پرامپت برای پوستر و بنری که بعداً متن فارسی رویش می‌نشیند.",
+      "templateFa": "۱) نوع تصویر و نسبت عمودی؛ ۲) سوژهٔ اصلی و سبک؛ ۳) پالت رنگی مشخص؛ ۴) نورپردازی و حال‌وهوا؛ ۵) ترکیب‌بندی با تصریح ناحیهٔ خالی برای تیتر و نوار پایینی؛ ۶) پارامترها: نسبت تصویر، نسخه، منفی‌ها (متن، واترمارک، لوگو)؛ ۷) لایهٔ متن فارسی جدا: تیتر، زیرتیتر، نشان تخفیف یا اطلاعات، دعوت به اقدام — با راهنمای جای‌گیری.",
+      "keywordsFa": [
+        "پوستر",
+        "بنر",
+        "پرامپت پوستر",
+        "poster"
+      ]
+    },
+    {
+      "id": "product-shot-prompt",
+      "titleFa": "پرامپت عکاسی محصول",
+      "descriptionFa": "ساختار پرامپت عکس تبلیغاتی محصول با کیفیت کاتالوگ.",
+      "templateFa": "۱) معرفی محصول و جنس و بافت آن؛ ۲) صحنه و سطح قرارگیری؛ ۳) نور استودیویی یا طبیعی مشخص؛ ۴) زاویهٔ دوربین و لنز؛ ۵) عمق میدان و پس‌زمینه؛ ۶) حال‌وهوای برند (لوکس، گرم، مینیمال)؛ ۷) پارامترها و منفی‌ها؛ ۸) پیشنهاد دو واریانت جایگزین (زاویه یا صحنهٔ دیگر).",
+      "keywordsFa": [
+        "عکس محصول",
+        "عکاسی محصول",
+        "کاتالوگ",
+        "تبلیغاتی"
+      ]
+    },
+    {
+      "id": "character-sheet-prompt",
+      "titleFa": "پرامپت کاراکتر و شیت شخصیت",
+      "descriptionFa": "ساختار ساخت کاراکتر ثابت با زوایا و حالات مختلف.",
+      "templateFa": "۱) شناسنامهٔ کاراکتر: سن تقریبی، ساختار بدن، لباس مشخص، ویژگی متمایز؛ ۲) سبک هنری؛ ۳) شیت شخصیت: نمای روبه‌رو، نیم‌رخ و پشت؛ ۴) سه حالت احساسی؛ ۵) نور و پالت ثابت برای همهٔ نماها؛ ۶) پارامترها و منفی‌ها؛ ۷) نکتهٔ ثبات: بذر ثابت یا توصیف یکسان برای همهٔ فریم‌ها.",
+      "keywordsFa": [
+        "کاراکتر",
+        "پرسوناژ",
+        "شیت کاراکتر",
+        "ماسکات",
+        "ایلاستریشن"
+      ]
+    },
+    {
+      "id": "scene-background-prompt",
+      "titleFa": "پرامپت صحنه و پس‌زمینه",
+      "descriptionFa": "ساختار پرامپت برای کاور، پس‌زمینه و والپیپر با فضای نفس‌کشیدن.",
+      "templateFa": "۱) کاربرد نهایی (کاور پیج، پس‌زمینهٔ سایت، والپیپر)؛ ۲) صحنه و عناصر؛ ۳) پالت و نور؛ ۴) ترکیب‌بندی با تأکید بر فضای خالی برای متن یا آیکن؛ ۵) سبک؛ ۶) پارامترها و منفی‌ها؛ ۷) دو نسخهٔ جایگزین با ریتم متفاوت.",
+      "keywordsFa": [
+        "پس‌زمینه",
+        "کاور",
+        "والپیپر",
+        "بک‌گراند",
+        "صحنه"
+      ]
+    }
+  ],
+  "guardrails": [
+    {
+      "id": "english-prompt-body",
+      "doFa": "بدنهٔ پرامپت تصویر را کامل به انگلیسی بنویس",
+      "dontFa": "توصیف تصویر را فارسی ننویس؛ مدل‌های تصویر انگلیسی را دقیق‌تر می‌فهمند",
+      "whyFa": "پرامپت فارسی، خروجی بی‌ثبات و نامربوط می‌سازد"
+    },
+    {
+      "id": "persian-text-layer",
+      "doFa": "هر متنی که باید روی تصویر بیاید را جدا در «لایهٔ متن» فارسی بنویس با راهنمای جای‌گیری",
+      "dontFa": "از مدل نخواه متن فارسی داخل خود تصویر بسازد",
+      "whyFa": "مدل‌های تصویر در نوشتن فارسی داخل قاب تقریباً همیشه خطا می‌کنند"
+    },
+    {
+      "id": "negative-params",
+      "doFa": "پارامترهای منفی استاندارد (no text, watermark, logo) و نسبت تصویر و نسخهٔ مدل را در پایان پرامپت بیاور",
+      "dontFa": "پرامپت را بدون پارامتر رها نکن",
+      "whyFa": "پارامترها همان تفاوت بین خروجی خام و قابل استفاده‌اند"
+    },
+    {
+      "id": "empty-space-for-text",
+      "doFa": "وقتی تصویر قرار است متن بگیرد، ناحیهٔ خالی و ساده را صریح در ترکیب‌بندی توصیف کن",
+      "dontFa": "تصویر شلوغ بدون جای متن تولید نکن",
+      "whyFa": "بدون فضای خالی، هیچ تیتری خوانا روی تصویر نمی‌نشیند"
+    },
+    {
+      "id": "palette-consistency",
+      "doFa": "پالت رنگی را دقیق و محدود (دو تا چهار رنگ) مشخص کن",
+      "dontFa": "از عبارت‌های کلی مثل «رنگی و زیبا» استفاده نکن",
+      "whyFa": "پالت مبهم، تصویر بی‌هویت می‌سازد"
+    },
+    {
+      "id": "lighting-specified",
+      "doFa": "نوع و جهت نور را مشخص کن (نرم، کنتراست بالا، ساعت طلایی)",
+      "dontFa": "نور را توصیف‌نشده رها نکن",
+      "whyFa": "نور، مهم‌تر از سوژه در کیفیت نهایی تصویر است"
+    },
+    {
+      "id": "aspect-matches-use",
+      "doFa": "نسبت تصویر را با جای استفادهٔ نهایی هماهنگ کن (پست مربع، استوری عمودی، بنر افقی)",
+      "dontFa": "نسبت تصادف نگذار",
+      "whyFa": "نسبت غلط یعنی برش دادن سوژه یا حاشیهٔ اضافه"
+    },
+    {
+      "id": "iteration-path",
+      "doFa": "برای هر پرامپت، یک مسیر واریانت (تغییر نور یا زاویه) هم پیشنهاد بده",
+      "dontFa": "پرامپت را تک‌نسخه‌ای و بدون راه بهتر شدن نده",
+      "whyFa": "اولین خروجی به‌ندرت بهترین نسخه است"
+    }
+  ],
+  "failureModes": [
+    {
+      "id": "garbled-text-in-image",
+      "symptomFa": "مدل داخل تصویر متن‌های به‌هم‌ریخته و حروف بی‌معنا تولید می‌کند",
+      "fixFa": "همهٔ متن‌ها را از پرامپت حذف کن و به‌جایش ناحیهٔ خالی بخواه؛ متن فارسی را جدا در لایهٔ متن بده و بعداً روی تصویر بگذار."
+    },
+    {
+      "id": "cluttered-composition",
+      "symptomFa": "تصویر شلوغ است و سوژهٔ اصلی گم شده",
+      "fixFa": "تعداد عناصر صحنه را کم کن، پس‌زمینه را ساده توصیف کن و با عمق میدان کم سوژه را از پس‌زمینه جدا کن."
+    },
+    {
+      "id": "style-drift",
+      "symptomFa": "خروجی‌های یک پروژه سبک‌های ناهماهنگ دارند",
+      "fixFa": "سبک، پالت و نور را در همهٔ پرامپت‌های پروژه یکسان و کلمه‌به‌کلمه تکرار کن و بذر ثابت پیشنهاد بده."
+    },
+    {
+      "id": "wrong-aspect",
+      "symptomFa": "تصویر برای جای استفاده بزرگ یا کوچک از آب درمی‌آید",
+      "fixFa": "نسبت تصویر را از ابتدا با ابعاد دقیق پلتفرم مقصد تنظیم کن."
+    },
+    {
+      "id": "vague-prompt",
+      "symptomFa": "پرامپت کلی است و خروجی‌ها هیچ ربطی به تصور کاربر ندارند",
+      "fixFa": "سوژه، سبک، نور، پالت و ترکیب‌بندی را جداگانه و مشخص توصیف کن و کلمات مبهم مثل «زیبا» را با توصیف دقیق جایگزین کن."
+    }
+  ],
+  "examples": [
+    {
+      "id": "coffee-shop-instagram-post",
+      "titleFa": "پرامپت پست اینستاگرام کافه برای میدجرنی",
+      "targetAi": "midjourney",
+      "promptFa": "Square Instagram photo for a cozy specialty coffee shop, top-down flat-lay of a hand-thrown ceramic cup of latte with delicate fern-pattern foam art on a warm walnut wooden table, scattered roasted coffee beans and a linen napkin in soft cream tones, gentle morning window light casting soft diagonal shadows, warm earthy palette of caramel, cream and deep brown, shallow depth of field on the beans at the frame edge, inviting artisanal mood, photorealistic, shot on 50mm lens --ar 1:1 --v 6 --no text, watermark, logo\n\nلایهٔ متن (فارسی — جدا از پرامپت، بعداً روی تصویر اضافه کن):\n- گوشهٔ پایین چپ، فونت کرم: «صبح‌های ما با دم‌آوری تازه شروع می‌شود»\n- زیر آن کوچک‌تر: کافهٔ دم — ساعت ۷ صبح"
+    },
+    {
+      "id": "sneaker-product-shot",
+      "titleFa": "پرامپت عکس محصول کتانی برای میدجرنی",
+      "targetAi": "midjourney",
+      "promptFa": "Professional e-commerce product photograph of a minimalist white leather sneaker with sage-green accents, floating at a dynamic three-quarter angle over a seamless light sage studio background, crisp softbox lighting from upper left with a subtle soft shadow beneath, visible premium leather texture and stitching detail, shallow depth of field, clean modern athletic aesthetic, high resolution catalog quality --ar 4:5 --v 6 --no text, watermark, logo, people\n\nلایهٔ متن (فارسی — جدا از پرامپت، بعداً روی تصویر اضافه کن):\n- تیتر (بالای قاب): «راحتی که دیده می‌شود»\n- زیرتیتر: چرم طبیعی، زیرهٔ ضدلغزش\n- نشان گوشهٔ پایین: جدید"
+    },
+    {
+      "id": "storybook-character-sheet",
+      "titleFa": "پرامپت کاراکتر قصهٔ کودک برای میدجرنی",
+      "targetAi": "midjourney",
+      "promptFa": "Character design sheet for a children's storybook, a small friendly hedgehog librarian wearing round spectacles and a tiny mustard-yellow vest, three views side by side on a clean paper-white background: front view, side view and back view, plus three small emotion thumbnails below showing happy, curious and sleepy expressions, soft watercolor and colored-pencil illustration style, warm muted palette of honey, dusty rose and sage, consistent proportions across all views, gentle storybook charm --ar 3:2 --v 6 --no text, watermark, logo\n\nلایهٔ متن (فارسی — جدا از پرامپت، بعداً روی تصویر اضافه کن):\n- عنوان شیت (بالای قاب): «خارپشت کتابدار»\n- برچسب نمای روبه‌رو: حضور در همهٔ صفحات قصه\n- برچسب حالت‌ها: شاد، کنجکاو، خواب‌آلود"
+    },
+    {
+      "id": "app-hero-background",
+      "titleFa": "پرامپت پس‌زمینهٔ هدر اپلیکیشن مدیتیشن برای میدجرنی",
+      "targetAi": "midjourney",
+      "promptFa": "Wide app hero-section background for a meditation and sleep application, serene abstract landscape of layered soft hills fading into mist, deep twilight palette of indigo, soft violet and muted teal with a single tiny warm star glow, extremely calm and minimal composition with the left two thirds intentionally empty and smooth for UI text and buttons, subtle grain texture, dreamy and quiet nighttime mood, no people, no buildings --ar 16:9 --v 6 --no text, watermark, logo\n\nلایهٔ متن (فارسی — جدا از پرامپت، بعداً روی تصویر اضافه کن):\n- تیتر (نیمهٔ چپ، سفید و بزرگ): «ذهنت را آرام کن»\n- زیرتیتر: صداهای طبیعی و مدیتیشن‌های کوتاه هر شب\n- دکمهٔ پیشنهادی: شروع رایگان ۷ روزه"
+    },
+    {
+      "id": "prompt-improvement-coach",
+      "titleFa": "بازبینی و بهبود پرامپت تصویر موجود",
+      "targetAi": "chatgpt",
+      "promptFa": "نقش: مربی پرامپت‌نویسی تصویر.\nکار: پرامپت تصویری که در پایین آورده‌ام را بازبینی کن و سه نسخهٔ بهبودیافته بده.\nساختار پاسخ:\n۱) تشخیص: در یک جدول کوتاه بگو پرامپت فعلی چه چیزهای اصلی را دارد (سوژه، سبک، نور، پالت، ترکیب‌بندی، پارامتر) و چه چیزهایی گمشده است.\n۲) سه نسخهٔ بازنویسی‌شده: هر نسخه یک ضعف متفاوت را هدف بگیرد (نسخهٔ ۱ سبک و حال‌وهوا را دقیق کند؛ نسخهٔ ۲ نور و لنز را؛ نسخهٔ ۳ ترکیب‌بندی و فضای خالی برای متن).\n۳) توضیح یک‌خطی دلیل هر تغییر.\n۴) پارامترهای پایانی هر نسخه: نسبت تصویر مناسب استفاده، نسخهٔ مدل، و منفی‌های استاندارد.\nقواعد: بدنهٔ پرامپت انگلیسی؛ هیچ متنی داخل تصویر نخواه؛ اگر متن فارسی لازم است، جدا با عنوان «لایهٔ متن» بده.\nپرامپت فعلی من: a beautiful picture of a coffee cup on a table, nice colors, very artistic"
+    }
+  ],
+  "clarifyingQuestions": [
+    {
+      "id": "deliverable-type",
+      "questionFa": "خروجی چه باشد؟",
+      "priority": 1,
+      "chips": [
+        {
+          "id": "text",
+          "labelFa": "متن و ساختار"
+        },
+        {
+          "id": "image-prompt",
+          "labelFa": "پرامپت برای ساخت تصویر"
+        },
+        {
+          "id": "design-brief",
+          "labelFa": "بریف برای طراح"
+        },
+        {
+          "id": "all",
+          "labelFa": "همه‌ی موارد"
+        }
+      ],
+      "allowFreeText": false,
+      "gapKeywordsFa": [
+        "dall",
+        "flux",
+        "midjourney",
+        "stable diffusion",
+        "استیبل",
+        "اسکریپت",
+        "اندروید",
+        "اپلیکیشن",
+        "ایلاستریشن",
+        "ایمیل",
+        "بازبینی کد",
+        "برنامه انتشار",
+        "بنر",
+        "بک‌گراند",
+        "تصویر",
+        "تصویرسازی",
+        "تقویم",
+        "تیتر",
+        "تیزر",
+        "جواب",
+        "دالی",
+        "رفع باگ",
+        "رندر",
+        "ریلز",
+        "سایت",
+        "سناریو",
+        "عکس",
+        "فلوکس",
+        "لوگو",
+        "متن",
+        "مقاله",
+        "میدجرنی",
+        "والپیپر",
+        "وبسایت",
+        "وبلاگ",
+        "ویدیو",
+        "پادکست",
+        "پاسخ",
+        "پرامپت تصویر",
+        "پرسوناژ",
+        "پس‌زمینه",
+        "پوستر",
+        "کاراکتر",
+        "کاور",
+        "کد",
+        "کپشن",
+        "کپی تبلیغ"
+      ]
+    },
+    {
+      "id": "event-mode",
+      "questionFa": "برنامه حضوری است یا آنلاین؟",
+      "priority": 2,
+      "chips": [
+        {
+          "id": "inperson",
+          "labelFa": "حضوری"
+        },
+        {
+          "id": "online",
+          "labelFa": "آنلاین"
+        },
+        {
+          "id": "hybrid",
+          "labelFa": "ترکیبی"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "حضوری",
+        "آنلاین",
+        "ترکیبی"
+      ],
+      "appliesTo": [
+        "event"
+      ]
+    },
+    {
+      "id": "registration",
+      "questionFa": "راه ثبت‌نام یا تماس چیست؟",
+      "priority": 3,
+      "chips": [],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "ثبت‌نام",
+        "ثبت نام",
+        "لینک ثبت",
+        "شماره تماس",
+        "راه ارتباطی"
+      ],
+      "appliesTo": [
+        "event",
+        "design"
+      ]
+    },
+    {
+      "id": "event-time",
+      "questionFa": "ساعت برگزاری چه زمانی است؟",
+      "priority": 4,
+      "chips": [],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "ساعت"
+      ],
+      "appliesTo": [
+        "event"
+      ]
+    },
+    {
+      "id": "style-colors",
+      "questionFa": "سبک و رنگ دلخواه چیست؟",
+      "priority": 5,
+      "chips": [
+        {
+          "id": "minimal",
+          "labelFa": "مینیمال"
+        },
+        {
+          "id": "energetic",
+          "labelFa": "شاد و پرانرژی"
+        },
+        {
+          "id": "luxury",
+          "labelFa": "لوکس"
+        },
+        {
+          "id": "dark",
+          "labelFa": "تیره و جدی"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "سبک",
+        "رنگ",
+        "پالت رنگی",
+        "مینیمال",
+        "لوکس"
+      ],
+      "appliesTo": [
+        "design"
+      ]
+    },
+    {
+      "id": "image-subject",
+      "questionFa": "سوژهٔ اصلی تصویر چیست؟",
+      "priority": 6,
+      "chips": [],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "سوژه",
+        "محصول",
+        "کاراکتر",
+        "پرسوناژ",
+        "طبیعت",
+        "شهر",
+        "غذا",
+        "انسان",
+        "حیوان",
+        "لوگو"
+      ]
+    },
+    {
+      "id": "image-use",
+      "questionFa": "تصویر را کجا استفاده می‌کنی؟",
+      "priority": 7,
+      "chips": [
+        {
+          "id": "instagram",
+          "labelFa": "پست اینستاگرام"
+        },
+        {
+          "id": "story",
+          "labelFa": "استوری"
+        },
+        {
+          "id": "poster",
+          "labelFa": "پوستر و بنر"
+        },
+        {
+          "id": "cover",
+          "labelFa": "کاور پیج یا سایت"
+        },
+        {
+          "id": "catalog",
+          "labelFa": "کاتالوگ محصول"
+        },
+        {
+          "id": "wallpaper",
+          "labelFa": "والپیپر و پس‌زمینه"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "پست",
+        "استوری",
+        "پوستر",
+        "بنر",
+        "کاور",
+        "کاتالوگ",
+        "والپیپر",
+        "سایت",
+        "اپلیکیشن"
+      ]
+    },
+    {
+      "id": "visual-style",
+      "questionFa": "سبک تصویر چطور باشد؟",
+      "priority": 8,
+      "chips": [
+        {
+          "id": "photo",
+          "labelFa": "عکس واقع‌گرایانه"
+        },
+        {
+          "id": "3d",
+          "labelFa": "رندر سه‌بعدی"
+        },
+        {
+          "id": "illustration",
+          "labelFa": "تصویرسازی دستی"
+        },
+        {
+          "id": "minimal",
+          "labelFa": "مینیمال و تخت"
+        },
+        {
+          "id": "cinematic",
+          "labelFa": "سینمایی"
+        },
+        {
+          "id": "vintage",
+          "labelFa": "قدیمی و رترو"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "سبک",
+        "رئال",
+        "واقعی",
+        "سه‌بعدی",
+        "کارتونی",
+        "مینیمال",
+        "سینمایی"
+      ]
+    },
+    {
+      "id": "mood-lighting",
+      "questionFa": "حال‌وهوا و نور چطور باشد؟",
+      "priority": 9,
+      "chips": [
+        {
+          "id": "bright",
+          "labelFa": "روشن و شاد"
+        },
+        {
+          "id": "warm",
+          "labelFa": "گرم و دنج"
+        },
+        {
+          "id": "dark",
+          "labelFa": "تیره و جدی"
+        },
+        {
+          "id": "soft",
+          "labelFa": "نرم و آرام"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "حال‌وهوا",
+        "نور",
+        "روشن",
+        "تیره",
+        "گرم",
+        "آرام"
+      ]
+    },
+    {
+      "id": "brand-alignment",
+      "questionFa": "تصویر باید با هویت برند خاصی بخواند؟",
+      "priority": 9,
+      "chips": [
+        {
+          "id": "yes-palette",
+          "labelFa": "بله — پالت برند را دارم"
+        },
+        {
+          "id": "yes-guide",
+          "labelFa": "بله — راهنمای برند دارم"
+        },
+        {
+          "id": "no",
+          "labelFa": "نه — آزاد باش"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "برند",
+        "هویت بصری",
+        "پالت برند",
+        "لوگو",
+        "رنگ سازمانی"
+      ]
+    }
+  ]
+}

@@ -33,55 +33,64 @@
       "id": "copywriting_sales",
       "nameFa": "کپی‌رایتینگ و فروش",
       "descriptionFa": "متن فروش، صفحه فرود، ایمیل مارکتینگ و متقاعدسازی مبتنی بر روان‌شناسی خرید",
-      "status": "coming_soon"
+      "status": "ready",
+      "kbFile": "copywriting_sales.json"
     },
     {
       "id": "education_teaching",
       "nameFa": "آموزش و تدریس",
       "descriptionFa": "طرح درس، محتوای آموزشی، آزمون و ساده‌سازی مفاهیم برای هر سن",
-      "status": "coming_soon"
+      "status": "ready",
+      "kbFile": "education_teaching.json"
     },
     {
       "id": "ai_image",
       "nameFa": "تولید تصویر با هوش مصنوعی",
       "descriptionFa": "پرامپت‌های تصویری برای Midjourney و مدل‌های مشابه با زبان بصری دقیق",
-      "status": "coming_soon"
+      "status": "ready",
+      "kbFile": "ai_image.json"
     },
     {
       "id": "ai_video",
       "nameFa": "تولید ویدیو با هوش مصنوعی",
       "descriptionFa": "توضیح صحنه‌به‌صحنه برای Sora، Runway و Kling با حرکت دوربین و ریتم",
-      "status": "coming_soon"
+      "status": "ready",
+      "kbFile": "ai_video.json"
     },
     {
       "id": "writing_translation",
       "nameFa": "نگارش، ویرایش و ترجمه",
       "descriptionFa": "مقاله، ویرایش متن، ترجمه طبیعی فارسی-انگلیسی و تطبیق لحن",
-      "status": "coming_soon"
+      "status": "ready",
+      "kbFile": "writing_translation.json"
     },
     {
       "id": "research_analysis",
       "nameFa": "پژوهش و تحلیل",
       "descriptionFa": "مرور منابع، تحلیل موضوع و گزارش ساخت‌یافته با تفکیک واقعیت از برداشت",
-      "status": "coming_soon"
+      "status": "ready",
+      "kbFile": "research_analysis.json"
     },
     {
       "id": "business_strategy",
       "nameFa": "کسب‌وکار و استراتژی",
       "descriptionFa": "مدل کسب‌وکار، تحلیل رقبا، قیمت‌گذاری و برنامه اجرایی",
-      "status": "coming_soon"
+      "status": "ready",
+      "kbFile": "business_strategy.json"
     },
     {
       "id": "data_analysis",
       "nameFa": "تحلیل داده",
       "descriptionFa": "پاک‌سازی داده، تحلیل آماری، نمودار و روایت یافته‌ها از داده خام",
-      "status": "coming_soon"
+      "status": "ready",
+      "kbFile": "data_analysis.json"
     },
     {
       "id": "productivity",
       "nameFa": "بهره‌وری و زندگی روزمره",
       "descriptionFa": "برنامه‌ریزی، تصمیم‌های روزمره، ایمیل‌های کاری و بهبود عادت‌ها",
-      "status": "coming_soon"
+      "status": "ready",
+      "kbFile": "productivity.json"
     }
   ]
 }

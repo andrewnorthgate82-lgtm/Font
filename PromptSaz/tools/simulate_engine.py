@@ -159,7 +159,7 @@ def extract_facts(idea):
 DESIGN_WORDS = ["پوستر","بنر","لوگو","آرم","کاور","طراحی","طرح بصری","تصویرسازی","اینفوگرافیک"]
 IMAGE_WORDS = ["میدجرنی","midjourney","دالی","dall-e","پرامپت تصویر","پرامپت ساخت تصویر","تصویر با هوش مصنوعی"]
 CALENDAR_WORDS = ["تقویم","برنامه انتشار","برنامه‌ی انتشار","برنامه‌ریزی محتوا","برنامه ریزی محتوا"]
-VIDEO_WORDS = ["ویدیو","ریلز","شورتز","تیزر","ویدیویی","سناریو","اسکریپت ویدیو"]
+VIDEO_WORDS = ["ویدیو","ریلز","شورتز","تیزر","ویدیویی","سناریو","اسکریپت ویدیو","سورا","sora","رانوی","runway","کلینگ","kling"]
 PLATFORM_TOKENS = {"اینستاگرام","تلگرام","واتساپ","لینکدین","یوتیوب","توییتر","ایکس","فیسبوک","آپارات","وبسایت","سایت","وبلاگ","گوگل","ایمیل","پیج","کانال"}
 ANSWER_TO_TYPE = {"متن و ساختار":"TEXT","پرامپت برای ساخت تصویر":"IMAGE_PROMPT","بریف برای طراح":"DESIGN_BRIEF","همه‌ی موارد":"ALL"}
 
@@ -177,6 +177,7 @@ def output_type(spec):
         if a["questionId"] == "deliverable-type" and a["value"]:
             for k, v in ANSWER_TO_TYPE.items():
                 if k in a["value"]: return v
+    if spec.get("domainId") == "ai_image": return "IMAGE_PROMPT"  # domain default
     return default_output_type(spec["idea"])
 
 def default_output_type(idea):
@@ -199,6 +200,7 @@ def task_category(spec):
                 if k in a["value"]: at = v
     if at == "TEXT" and ic == "DESIGN": return "TEXT"
     if at == "DESIGN_BRIEF" and ic == "TEXT": return "DESIGN"
+    if spec.get("domainId") == "ai_video" and ic == "TEXT": return "VIDEO"
     return ic
 
 # ---------------- ClarificationEngine ----------------
@@ -584,8 +586,11 @@ def generate(spec, kb):
     return {"sections": sections, "text": text, "score": score_sections(sections, spec)}
 
 def kbload(n): return json.loads((BASE / n).read_text(encoding="utf-8"))
-KBS = {"marketing": kbload("marketing.json"), "social_media": kbload("social_media.json"),
-       "programming": kbload("programming.json"), "general": kbload("general.json")}
+KBS = {d: kbload(d + ".json") for d in [
+    "marketing", "social_media", "programming", "general",
+    "copywriting_sales", "education_teaching", "ai_image", "ai_video",
+    "writing_translation", "research_analysis", "business_strategy",
+    "data_analysis", "productivity"]}
 
 def spec_of(idea, domain, target="CHATGPT", detail="STANDARD", answers=None, mode="NEW"):
     return {"idea": idea, "domainId": domain, "targetAi": target, "outputLanguage": "PERSIAN",
@@ -857,23 +862,88 @@ DETAIL_RICH = {
     "social_media": "پوستر معرفی محصول جدید کافه موضوع نوشیدنی زمستانی مخاطب جوانان تهران تاریخ ۱۰ دی",
     "programming": "پوستر معرفی اپ موبایل موضوع مدیریت هزینه مدرس تیم محصول",
     "general": "پوستر جشنواره موسیقی موضوع موسیقی سنتی تاریخ ۲۲ بهمن ساعت ۱۹ مکان تالار وحدت",
+    "copywriting_sales": "پوستر جشنواره فروش فروشگاه آنلاین موضوع تخفیف پاییزی مخاطب جوانان تهران تاریخ ۱۰ آبان",
+    "education_teaching": "پوستر کلاس ریاضی موضوع آمادگی کنکور مدرس مریم احمدی تاریخ ۵ آذر ساعت ۱۷ مکان اصفهان حضوری ثبت‌نام در register.example",
+    "ai_image": "پوستر معرفی کافه موضوع نوشیدنی زمستانی سبک مینیمال",
+    "ai_video": "پوستر معرفی اپلیکیشن زبان‌آموزی مخاطب نوجوانان",
+    "writing_translation": "پوستر معرفی کتاب جدید موضوع مجموعه‌داستان کوتاه مدرس سارا محمدی تاریخ ۲۰ مهر",
+    "research_analysis": "پوستر همایش علمی موضوع مدیریت آب تاریخ ۱۵ اسفند ساعت ۹ صبح مکان دانشگاه تهران ثبت‌نام در conf.example",
+    "business_strategy": "پوستر کارگاه آموزشی کسب‌وکار موضوع قیمت‌گذاری مدرس علی رضایی تاریخ ۳ آذر ساعت ۱۰ مکان تهران حضوری",
+    "data_analysis": "پوستر گزارش سالانه موضوع کیفیت هوا تاریخ ۲۵ دی",
+    "productivity": "پوستر چالش مطالعه صبحگاهی موضوع کتاب‌خوانی ۳۰ روزه تاریخ ۱ مهر",
 }
-for dom in ["marketing", "social_media", "programming", "general"]:
+TEXT_IDEA = {
+    "marketing": "تیتر تبلیغاتی برای فروشگاه آنلاین",
+    "social_media": "کپشن انگیزشی صبحگاهی",
+    "programming": "تابع جاوااسکریپت برای اعتبارسنجی فرم",
+    "general": "پاسخ ساخت‌یافته به سؤال درباره تاریخ ایران",
+    "copywriting_sales": "متن فروش صفحه فرود دوره آنلاین",
+    "education_teaching": "طرح درس برای جلسه فیزیک",
+    "ai_image": "راهنمای انتخاب سبک برای پرامپت",
+    "ai_video": "معرفی محصول جدید را چطور شروع کنم",
+    "writing_translation": "ترجمه یک پاراگراف انگلیسی به فارسی با حفظ لحن",
+    "research_analysis": "مرور منابع درباره اثر دورکاری بر بهره‌وری",
+    "business_strategy": "برنامه ۹۰ روزه راه‌اندازی کسب‌وکار",
+    "data_analysis": "تحلیل داده فروش شش‌ماهه فروشگاه",
+    "productivity": "برنامه هفتگی برای دانشجوی شاغل",
+}
+for dom in list(KBS):
     kb = KBS[dom]
     out = generate(skipped_spec(DETAIL_RICH[dom], dom), kb)
     assert_facts_separated(out)
     assert_no_latin_digits(out["text"])
-    check(f"{dom}: brief for poster", "بریف" in out["text"])
+    if dom == "ai_image":
+        # domain default: poster idea becomes an image prompt, not a designer brief
+        check("ai_image: image prompt default", "پرامپت آمادهٔ ساخت تصویر" in out["text"], out["text"][:120])
+        check("ai_image: text layer", "لایهٔ متن" in out["text"])
+        check("ai_image: embedded image example", "--ar" in out["text"])
+        check("ai_image: no brief for poster", "بریف کامل طراحی" not in out["text"])
+    else:
+        check(f"{dom}: brief for poster", "بریف" in out["text"])
     check(f"{dom}: no calendar", "تقویم محتوایی" not in out["text"])
     fblock = "\n".join(fact_block_lines(out))
     check(f"{dom}: no glued facts", "احمدی تاریخ" not in fblock and "مصنوعی مدرس" not in fblock, fblock[:200])
-    # text idea stays text
-    text_idea = {"marketing":"تیتر تبلیغاتی برای فروشگاه آنلاین","social_media":"کپشن انگیزشی صبحگاهی",
-                 "programming":"تابع جاوااسکریپت برای اعتبارسنجی فرم","general":"پاسخ ساخت‌یافته به سؤال درباره تاریخ ایران"}[dom]
-    tout = generate(skipped_spec(text_idea, dom), kb)
+    # text idea stays text (ai_image/ai_video have domain-specific routing)
+    tout = generate(skipped_spec(TEXT_IDEA[dom], dom), kb)
     assert_clean_structure(tout)
     assert_no_raw_metadata(tout, kb)
     check(f"{dom}: text stays text", "تقویم محتوایی" not in tout["text"])
+    if dom == "ai_image":
+        check("ai_image: text idea still image prompt (domain default)", "پرامپت آمادهٔ ساخت تصویر" in tout["text"])
+        sp = skipped_spec(TEXT_IDEA[dom], dom)
+        sp["answers"] = sp["answers"] + [{"questionId": "deliverable-type", "questionFa": "خروجی چه باشد؟", "value": "متن و ساختار"}]
+        ovr = generate(sp, kb)
+        check("ai_image: explicit text answer overrides", "متن ساخت‌یافتهٔ کامل" in ovr["text"] and "پرامپت آمادهٔ ساخت تصویر" not in ovr["text"])
+    if dom == "ai_video":
+        check("ai_video: plain idea upgraded to video", "دوربین" in tout["text"])
+        check("ai_video: video structure or constraint present", "صحنه" in tout["text"] or "شات" in tout["text"] or "دوربین" in tout["text"])
+
+print("=== 10b. new-domain spot checks ===")
+kb = KBS["education_teaching"]
+out = generate(skipped_spec("طرح درس برای جلسه فیزیک پایه نهم", "education_teaching"), kb)
+check("edu: lesson-plan structure", "هدف یادگیری" in out["text"])
+check("edu: lesson-plan persona", "طرح‌درسنویس" in out["text"] or "طرح درسنویس" in out["text"])
+kb = KBS["data_analysis"]
+out = generate(skipped_spec("پاک‌سازی داده نظرسنجی مشتریان", "data_analysis"), kb)
+check("data: cleaning structure", "گمشدگی" in out["text"])
+kb = KBS["ai_video"]
+out = generate(spec_of("ویدیوی معرفی محصول جدید با سورا", "ai_video"), kb)
+check("ai_video: sora idea is video", "دوربین" in out["text"] or "صحنه" in out["text"])
+kb = KBS["writing_translation"]
+out = generate(skipped_spec("ترجمه متن انگلیسی درباره گردشگری به فارسی", "writing_translation"), kb)
+check("write: translation structure", "مترجم" in out["text"] and "وفادار" in out["text"])
+kb = KBS["research_analysis"]
+out = generate(skipped_spec("مرور منابع درباره یادگیری آنلاین", "research_analysis"), kb)
+check("research: literature structure", "شکاف" in out["text"] or "مرور" in out["text"])
+kb = KBS["business_strategy"]
+out = generate(skipped_spec("قیمت‌گذاری خدمات مشاوره من", "business_strategy"), kb)
+check("biz: pricing structure", "سربه‌سر" in out["text"])
+kb = KBS["productivity"]
+out = generate(skipped_spec("برنامه هفتگی برای دانشجوی شاغل", "productivity"), kb)
+check("prod: weekly plan", "هفته" in out["text"])
+kb = KBS["copywriting_sales"]
+out = generate(skipped_spec("ایمیل خوش‌آمد برای مشتریان جدید", "copywriting_sales"), kb)
+check("copy: email structure", "ایمیل" in out["text"])
 
 print("=== 11. existing PromptEngineTest scenarios ===")
 kbm = KBS["marketing"]

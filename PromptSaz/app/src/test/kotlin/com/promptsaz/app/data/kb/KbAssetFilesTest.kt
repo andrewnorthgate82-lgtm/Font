@@ -28,22 +28,89 @@ class KbAssetFilesTest {
             .firstOrNull { it.exists() }
 
     @Test
-    fun `registry lists thirteen domains with four ready`() {
+    fun `registry lists thirteen domains and all of them are ready`() {
         val file = assetFile("_registry.json")
         assumeTrue("registry asset not reachable from working dir", file != null)
         val registry = json.decodeFromString<KbRegistry>(file!!.readText())
         assertEquals(1, registry.version)
         assertEquals(13, registry.domains.size)
-        assertEquals(4, registry.domains.count { it.isReady })
-        assertTrue(registry.domains.any { it.id == "general" })
-        assertTrue(registry.domains.any { it.id == "marketing" })
-        assertTrue(registry.domains.any { it.id == "social_media" })
-        assertTrue(registry.domains.any { it.id == "programming" })
+        assertEquals(
+            "every shipped domain must be ready — no coming_soon placeholders",
+            13,
+            registry.domains.count { it.isReady },
+        )
+        val expected = setOf(
+            "general", "marketing", "social_media", "programming",
+            "copywriting_sales", "education_teaching", "ai_image", "ai_video",
+            "writing_translation", "research_analysis", "business_strategy",
+            "data_analysis", "productivity",
+        )
+        assertEquals(expected, registry.domains.map { it.id }.toSet())
     }
 
     @Test
-    fun `general knowledge base meets minimums`() {
-        val kb = loadDomain("general.json") ?: return
+    fun `every ready domain ships a parseable kb file that meets minimums`() {
+        val registryFile = assetFile("_registry.json")
+        assumeTrue("registry asset not reachable from working dir", registryFile != null)
+        val registry = json.decodeFromString<KbRegistry>(registryFile!!.readText())
+        for (entry in registry.domains.filter { it.isReady }) {
+            val kbFile = entry.kbFile
+            assumeTrue("$kbFile not declared", kbFile != null)
+            val file = assetFile(kbFile!!)
+            assumeTrue("$kbFile not reachable from working dir", file != null)
+            val kb = json.decodeFromString<DomainKnowledge>(file!!.readText())
+            assertEquals(entry.id, kb.id)
+            if (kb.id == "general") {
+                assertGeneralDomain(kb)
+            } else {
+                assertFullDomain(kb, entry.id)
+            }
+        }
+    }
+
+    @Test
+    fun `clarifying question priorities stay within the declared range`() {
+        val registryFile = assetFile("_registry.json")
+        assumeTrue("registry asset not reachable from working dir", registryFile != null)
+        val registry = json.decodeFromString<KbRegistry>(registryFile!!.readText())
+        for (entry in registry.domains.filter { it.isReady }) {
+            val file = assetFile(entry.kbFile ?: continue) ?: return
+            val kb = json.decodeFromString<DomainKnowledge>(file.readText())
+            kb.clarifyingQuestions.forEach { question ->
+                assertTrue(
+                    "${entry.id}/${question.id}: priority ${question.priority} outside 1..9",
+                    question.priority in 1..9,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `every full domain keeps at least one design persona and one image example`() {
+        val registryFile = assetFile("_registry.json")
+        assumeTrue("registry asset not reachable from working dir", registryFile != null)
+        val registry = json.decodeFromString<KbRegistry>(registryFile!!.readText())
+        for (entry in registry.domains.filter { it.isReady && it.id != "general" }) {
+            val file = assetFile(entry.kbFile ?: continue) ?: return
+            val kb = json.decodeFromString<DomainKnowledge>(file.readText())
+            assertTrue(
+                "${entry.id}: expected at least one design/image persona",
+                kb.personas.any { persona ->
+                    listOf("طراح", "تصویر", "بصری", "گرافیک", "عکاس").any { persona.titleFa.contains(it) }
+                },
+            )
+            assertTrue(
+                "${entry.id}: expected at least one midjourney image-prompt example",
+                kb.examples.any { it.targetAi == "midjourney" },
+            )
+            assertTrue(
+                "${entry.id}: expected at least one non-image example",
+                kb.examples.any { it.targetAi != "midjourney" },
+            )
+        }
+    }
+
+    private fun assertGeneralDomain(kb: DomainKnowledge) {
         assertTrue(kb.personas.size >= 3)
         assertTrue(kb.terminology.size >= 5)
         assertTrue(kb.outputStructures.size >= 3)
@@ -51,43 +118,6 @@ class KbAssetFilesTest {
         assertTrue(kb.failureModes.size >= 3)
         assertTrue(kb.examples.size >= 2)
         assertTrue(kb.clarifyingQuestions.size >= 4)
-    }
-
-    @Test
-    fun `marketing knowledge base meets full minimums`() {
-        val kb = loadDomain("marketing.json") ?: return
-        assertFullDomain(kb, "marketing")
-    }
-
-    @Test
-    fun `social media knowledge base meets full minimums`() {
-        val kb = loadDomain("social_media.json") ?: return
-        assertFullDomain(kb, "social_media")
-    }
-
-    @Test
-    fun `programming knowledge base meets full minimums`() {
-        val kb = loadDomain("programming.json") ?: return
-        assertFullDomain(kb, "programming")
-    }
-
-    @Test
-    fun `clarifying question priorities stay within the declared range`() {
-        for (name in listOf("general.json", "marketing.json", "social_media.json", "programming.json")) {
-            val kb = loadDomain(name) ?: return
-            kb.clarifyingQuestions.forEach { question ->
-                assertTrue(
-                    "$name/${question.id}: priority ${question.priority} outside 1..9",
-                    question.priority in 1..9,
-                )
-            }
-        }
-    }
-
-    private fun loadDomain(fileName: String): DomainKnowledge? {
-        val file = assetFile(fileName)
-        assumeTrue("$fileName not reachable from working dir", file != null)
-        return json.decodeFromString(file!!.readText())
     }
 
     private fun assertFullDomain(kb: DomainKnowledge, expectedId: String) {
