@@ -34,19 +34,23 @@ jobs:
       - name: Run unit tests
         run: |
           set -o pipefail
-          ./gradlew :app:testDebugUnitTest --stacktrace > /tmp/gradle.log 2>&1 || {
-            grep -E "FAILED|tests completed|AssertionError" /tmp/gradle.log | head -40 | sed 's/^/::error::/' || true
+          ./gradlew :app:testDebugUnitTest --stacktrace --console=plain > /tmp/gradle.log 2>&1 || {
+            STRIP='s/\x1b\[[0-9;]*m//g'
+            # Kotlin diagnostics (e: file.kt:line:col message) — the real errors
+            sed "$STRIP" /tmp/gradle.log | grep -E "^e: |: error:|error: " | head -12 | cut -c1-400 | sed 's/^/::error::/' || true
+            # failure summary lines
+            sed "$STRIP" /tmp/gradle.log | grep -E "FAILED|What went wrong|Caused by|Unresolved|Execution failed" | head -8 | cut -c1-250 | sed 's/^/::error::/' || true
+            # JUnit failure messages
             find app/build/test-results -name "*.xml" 2>/dev/null | while read f; do
               grep -o 'message="[^"]*"' "$f" 2>/dev/null | head -3 | sed "s|^|::error::$(basename "$f"): |" || true
             done
-            grep -E "error:|e: file|Caused by|What went wrong|Could not" /tmp/gradle.log | head -25 | sed 's/^/::error::/' || true
             exit 1
           }
 
       - name: Build debug APK
         run: |
           set -o pipefail
-          ./gradlew :app:assembleDebug --stacktrace > /tmp/gradle-build.log 2>&1 || {
+          ./gradlew :app:assembleDebug --stacktrace --console=plain > /tmp/gradle-build.log 2>&1 || {
             grep -E "error:|e: file|Caused by|What went wrong|Could not" /tmp/gradle-build.log | head -25 | sed 's/^/::error::/' || true
             exit 1
           }
