@@ -62,15 +62,14 @@ class ImageStudioViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             settingsRepository.settings.collect { settings ->
+                val serviceId = settings.activeService?.id
                 _uiState.update {
                     it.copy(
                         selectedModel = settings.aiImageModel.ifBlank { settings.aiModel },
+                        hasKey = serviceId != null && keyStore.hasApiKey(serviceId),
                     )
                 }
             }
-        }
-        viewModelScope.launch {
-            _uiState.update { it.copy(hasKey = keyStore.hasApiKey()) }
         }
         viewModelScope.launch {
             imageRepository.history().collect { history ->

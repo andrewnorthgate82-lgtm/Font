@@ -1,6 +1,7 @@
 package com.promptsaz.app.data.repository
 
 import com.promptsaz.app.data.db.ChatConversationEntity
+import com.promptsaz.app.domain.model.AiService
 import com.promptsaz.app.data.db.ChatDao
 import com.promptsaz.app.data.db.ChatMessageEntity
 import com.promptsaz.app.data.db.ImageGenerationDao
@@ -125,7 +126,14 @@ class ChatRepositoryTest {
     }
 
     private class FakeSettingsRepository : SettingsRepository {
-        private val flow = MutableStateFlow(AppSettings(aiModel = "selected-model"))
+        private val flow = MutableStateFlow(
+            AppSettings(
+                aiServices = listOf(
+                    AiService(id = "s1", name = "تست", baseUrl = "https://example.com/v1", model = "selected-model"),
+                ),
+                activeServiceId = "s1",
+            ),
+        )
         override val settings: Flow<AppSettings> = flow
         override suspend fun setThemeMode(mode: ThemeMode) {}
         override suspend fun setDefaultDomain(domainId: String) {}
@@ -133,9 +141,20 @@ class ChatRepositoryTest {
         override suspend fun setDefaultLanguage(language: OutputLanguage) {}
         override suspend fun setDefaultDetail(level: DetailLevel) {}
         override suspend fun setAiEnabled(enabled: Boolean) {}
-        override suspend fun setAiBaseUrl(url: String) {}
-        override suspend fun setAiModel(model: String) { flow.value = flow.value.copy(aiModel = model) }
-        override suspend fun setAiImageModel(model: String) { flow.value = flow.value.copy(aiImageModel = model) }
+        override suspend fun setAiBaseUrl(url: String) { updateActiveService { it.copy(baseUrl = url) } }
+        override suspend fun setAiModel(model: String) { updateActiveService { it.copy(model = model) } }
+        override suspend fun setAiImageModel(model: String) { updateActiveService { it.copy(imageModel = model) } }
+        override suspend fun addService(name: String, baseUrl: String): String = "svc-new"
+        override suspend fun updateService(id: String, name: String, baseUrl: String) {}
+        override suspend fun removeService(id: String) {}
+        override suspend fun setActiveService(id: String) { flow.value = flow.value.copy(activeServiceId = id) }
+
+        private fun updateActiveService(block: (AiService) -> AiService) {
+            val current = flow.value
+            flow.value = current.copy(
+                aiServices = current.aiServices.map { if (it.id == current.activeServiceId) block(it) else it },
+            )
+        }
     }
 
     // NOTE: ImageGenerationDao is not part of this test; ChatDao fake above

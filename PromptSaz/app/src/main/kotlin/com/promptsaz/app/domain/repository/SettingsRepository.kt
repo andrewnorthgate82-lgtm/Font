@@ -16,7 +16,16 @@ interface SettingsRepository {
     suspend fun setDefaultLanguage(language: OutputLanguage)
     suspend fun setDefaultDetail(level: DetailLevel)
     suspend fun setAiEnabled(enabled: Boolean)
+
+    // v1 single-service setters — they operate on the ACTIVE service
     suspend fun setAiBaseUrl(url: String)
     suspend fun setAiModel(model: String)
     suspend fun setAiImageModel(model: String)
+
+    // multi-service management
+    /** Adds a service (becomes active) and returns its id. */
+    suspend fun addService(name: String, baseUrl: String): String
+    suspend fun updateService(id: String, name: String, baseUrl: String)
+    suspend fun removeService(id: String)
+    suspend fun setActiveService(id: String)
 }

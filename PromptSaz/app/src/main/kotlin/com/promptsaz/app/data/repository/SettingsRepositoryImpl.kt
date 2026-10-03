@@ -36,4 +36,14 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setAiModel(model: String) = store.setAiModel(model)
 
     override suspend fun setAiImageModel(model: String) = store.setAiImageModel(model)
+
+    override suspend fun addService(name: String, baseUrl: String): String =
+        store.addService(name, baseUrl)
+
+    override suspend fun updateService(id: String, name: String, baseUrl: String) =
+        store.updateService(id, name, baseUrl)
+
+    override suspend fun removeService(id: String) = store.removeService(id)
+
+    override suspend fun setActiveService(id: String) = store.setActiveService(id)
 }

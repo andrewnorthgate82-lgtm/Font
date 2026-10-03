@@ -1,6 +1,7 @@
 package com.promptsaz.app.data.remote
 
 import com.promptsaz.app.data.settings.ApiKeyStore
+import com.promptsaz.app.domain.model.AiService
 import com.promptsaz.app.domain.model.DetailLevel
 import com.promptsaz.app.domain.model.OutputLanguage
 import com.promptsaz.app.domain.model.AppSettings
@@ -33,8 +34,10 @@ class ProviderGenerationChainTest {
     // --- fakes -------------------------------------------------------------------
 
     private class FakeKeyStore(private val key: String?) : ApiKeyStore {
-        override fun hasApiKey(): Boolean = !key.isNullOrBlank()
-        override fun getApiKey(): String? = key
+        override fun hasApiKey(serviceId: String): Boolean = !key.isNullOrBlank()
+        override fun getApiKey(serviceId: String): String? = key
+        override fun saveApiKey(serviceId: String, value: String) {}
+        override fun clearApiKey(serviceId: String) {}
     }
 
     private class FakeSettingsRepository(initial: AppSettings) : SettingsRepository {
@@ -46,9 +49,20 @@ class ProviderGenerationChainTest {
         override suspend fun setDefaultLanguage(language: OutputLanguage) { flow.value = flow.value.copy(defaultOutputLanguage = language) }
         override suspend fun setDefaultDetail(level: DetailLevel) { flow.value = flow.value.copy(defaultDetailLevel = level) }
         override suspend fun setAiEnabled(enabled: Boolean) { flow.value = flow.value.copy(aiEnabled = enabled) }
-        override suspend fun setAiBaseUrl(url: String) { flow.value = flow.value.copy(aiBaseUrl = url) }
-        override suspend fun setAiModel(model: String) { flow.value = flow.value.copy(aiModel = model) }
-        override suspend fun setAiImageModel(model: String) { flow.value = flow.value.copy(aiImageModel = model) }
+        override suspend fun setAiBaseUrl(url: String) { updateActiveService { it.copy(baseUrl = url) } }
+        override suspend fun setAiModel(model: String) { updateActiveService { it.copy(model = model) } }
+        override suspend fun setAiImageModel(model: String) { updateActiveService { it.copy(imageModel = model) } }
+        override suspend fun addService(name: String, baseUrl: String): String = "svc-new"
+        override suspend fun updateService(id: String, name: String, baseUrl: String) {}
+        override suspend fun removeService(id: String) {}
+        override suspend fun setActiveService(id: String) { flow.value = flow.value.copy(activeServiceId = id) }
+
+        private fun updateActiveService(block: (AiService) -> AiService) {
+            val current = flow.value
+            flow.value = current.copy(
+                aiServices = current.aiServices.map { if (it.id == current.activeServiceId) block(it) else it },
+            )
+        }
     }
 
     // --- captured request ----------------------------------------------------------
@@ -108,8 +122,15 @@ class ProviderGenerationChainTest {
         settings = FakeSettingsRepository(
             AppSettings(
                 aiEnabled = true,
-                aiBaseUrl = "http://127.0.0.1:${server!!.address.port}/v1",
-                aiModel = "gpt-selected-by-user",
+                aiServices = listOf(
+                    AiService(
+                        id = "s1",
+                        name = "تست",
+                        baseUrl = "http://127.0.0.1:${server!!.address.port}/v1",
+                        model = "gpt-selected-by-user",
+                    ),
+                ),
+                activeServiceId = "s1",
             ),
         )
         provider = OpenAiCompatibleProvider(

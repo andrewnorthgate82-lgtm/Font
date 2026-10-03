@@ -56,11 +56,15 @@ class ChatViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             settingsRepository.settings.collect { settings ->
-                _uiState.update { it.copy(aiEnabled = settings.aiEnabled, selectedModel = settings.aiModel) }
+                val serviceId = settings.activeService?.id
+                _uiState.update {
+                    it.copy(
+                        aiEnabled = settings.aiEnabled,
+                        selectedModel = settings.aiModel,
+                        hasKey = serviceId != null && keyStore.hasApiKey(serviceId),
+                    )
+                }
             }
-        }
-        viewModelScope.launch {
-            _uiState.update { it.copy(hasKey = keyStore.hasApiKey()) }
         }
         viewModelScope.launch {
             chatRepository.conversations().collect { list ->

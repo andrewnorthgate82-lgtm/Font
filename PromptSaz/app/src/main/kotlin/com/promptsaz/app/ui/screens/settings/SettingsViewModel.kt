@@ -52,7 +52,18 @@ class SettingsViewModel @Inject constructor(
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
     init {
-        refreshKeyState()
+        // key status follows the ACTIVE service (switching services updates it)
+        viewModelScope.launch {
+            settingsRepository.settings.collect { current ->
+                val serviceId = current.activeService?.id
+                _uiState.update {
+                    it.copy(
+                        hasKey = serviceId != null && secureKeyStore.hasApiKey(serviceId),
+                        maskedKey = serviceId?.let { id -> secureKeyStore.maskApiKey(id) },
+                    )
+                }
+            }
+        }
         viewModelScope.launch {
             _uiState.update {
                 it.copy(domains = runCatching { kbRepository.getReadyDomains() }.getOrDefault(emptyList()))
@@ -77,17 +88,47 @@ class SettingsViewModel @Inject constructor(
 
     fun setAiModel(model: String) = launchSetting { settingsRepository.setAiModel(model) }
 
+    // --- multi-service management ----------------------------------------------
+
+    fun setActiveService(id: String) = launchSetting { settingsRepository.setActiveService(id) }
+
+    fun addService(name: String, baseUrl: String) = launchSetting {
+        settingsRepository.addService(name, normalizeUrl(baseUrl))
+    }
+
+    fun updateService(id: String, name: String, baseUrl: String) = launchSetting {
+        settingsRepository.updateService(id, name, normalizeUrl(baseUrl))
+    }
+
+    fun removeService(id: String) = launchSetting {
+        settingsRepository.removeService(id)
+        secureKeyStore.clearApiKey(id)
+    }
+
+    /** Makes a bare host usable: "api.openai.com/v1" → "https://api.openai.com/v1". */
+    private fun normalizeUrl(url: String): String {
+        val trimmed = url.trim()
+        if (trimmed.isEmpty()) return trimmed
+        return if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) trimmed else "https://$trimmed"
+    }
+
     fun saveApiKey(rawKey: String) {
         if (rawKey.isBlank()) return
-        secureKeyStore.saveApiKey(rawKey)
-        refreshKeyState()
-        _uiState.update { it.copy(keySavedNotice = true) }
+        val serviceId = settings.value.activeService?.id ?: return
+        secureKeyStore.saveApiKey(serviceId, rawKey)
+        _uiState.update {
+            it.copy(
+                keySavedNotice = true,
+                hasKey = true,
+                maskedKey = secureKeyStore.maskApiKey(serviceId),
+            )
+        }
     }
 
     fun clearApiKey() {
-        secureKeyStore.clearApiKey()
-        refreshKeyState()
-        _uiState.update { it.copy(keySavedNotice = false) }
+        val serviceId = settings.value.activeService?.id ?: return
+        secureKeyStore.clearApiKey(serviceId)
+        _uiState.update { it.copy(keySavedNotice = false, hasKey = false, maskedKey = null) }
     }
 
     fun consumeKeyNotice() = _uiState.update { it.copy(keySavedNotice = false) }
@@ -146,12 +187,6 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun consumeTestResult() = _uiState.update { it.copy(testResult = null) }
-
-    private fun refreshKeyState() {
-        _uiState.update {
-            it.copy(hasKey = secureKeyStore.hasApiKey(), maskedKey = secureKeyStore.maskApiKey())
-        }
-    }
 
     private fun launchSetting(block: suspend () -> Unit) {
         viewModelScope.launch { runCatching { block() } }

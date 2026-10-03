@@ -1,6 +1,7 @@
 package com.promptsaz.app.data.settings
 
 import android.content.Context
+import com.promptsaz.app.domain.model.AiService
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
@@ -26,29 +27,43 @@ class SecureKeyStore @Inject constructor(
 
     val isAvailable: Boolean get() = prefs != null
 
-    /** Returns true when a non-blank key is stored. */
-    override fun hasApiKey(): Boolean = !getApiKey().isNullOrBlank()
+    // --- per-service API keys ----------------------------------------------------
 
-    /** Raw key — used only by the network layer. Never log or export this value. */
-    override fun getApiKey(): String? = prefs?.getString(KEY_API, null)?.takeIf { it.isNotBlank() }
+    /** Returns true when a non-blank key is stored for [serviceId]. */
+    override fun hasApiKey(serviceId: String): Boolean = !getApiKey(serviceId).isNullOrBlank()
 
-    fun saveApiKey(value: String) {
-        prefs?.edit()?.putString(KEY_API, value.trim())?.apply()
+    /**
+     * Raw key of one service — used only by the network layer. The v1
+     * single-service key transparently becomes the "default" service's key.
+     */
+    override fun getApiKey(serviceId: String): String? {
+        val perService = prefs?.getString(keyFor(serviceId), null)?.takeIf { it.isNotBlank() }
+        if (perService != null) return perService
+        if (serviceId == AiService.LEGACY_DEFAULT_ID) {
+            return prefs?.getString(KEY_API_LEGACY, null)?.takeIf { it.isNotBlank() }
+        }
+        return null
     }
 
-    fun clearApiKey() {
-        prefs?.edit()?.remove(KEY_API)?.apply()
+    override fun saveApiKey(serviceId: String, value: String) {
+        prefs?.edit()?.putString(keyFor(serviceId), value.trim())?.apply()
+    }
+
+    override fun clearApiKey(serviceId: String) {
+        prefs?.edit()?.remove(keyFor(serviceId))?.apply()
     }
 
     /**
      * Masked form for the UI, e.g. «cc_nNl8••••••••t3» — first 6 and last 4
-     * characters only. Returns null when no key is stored.
+     * characters only. Returns null when no key is stored for the service.
      */
-    fun maskApiKey(): String? {
-        val key = getApiKey() ?: return null
+    fun maskApiKey(serviceId: String): String? {
+        val key = getApiKey(serviceId) ?: return null
         if (key.length <= 10) return "•".repeat(key.length)
         return key.take(6) + "•".repeat(8) + key.takeLast(4)
     }
+
+    private fun keyFor(serviceId: String): String = KEY_API_PREFIX + serviceId
 
     private fun createPrefsSafely(): SharedPreferences? =
         runCatching { createPrefs() }
@@ -84,7 +99,8 @@ class SecureKeyStore @Inject constructor(
 
     private companion object {
         const val FILE_NAME = "prompt_saz_secure"
-        const val KEY_API = "ai_api_key"
+        const val KEY_API_LEGACY = "ai_api_key"
+        const val KEY_API_PREFIX = "ai_api_key_"
         const val ANDROID_KEYSTORE = "AndroidKeyStore"
         const val MASTER_KEY_ALIAS = "_androidx_security_master_key_"
     }

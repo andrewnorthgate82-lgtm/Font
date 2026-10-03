@@ -55,7 +55,11 @@ class OpenAiCompatibleProvider @Inject constructor(
 
     override suspend fun isConfigured(): Boolean = withContext(ioDispatcher) {
         val settings = settingsRepository.settings.first()
-        settings.aiBaseUrl.isNotBlank() && settings.aiModel.isNotBlank() && secureKeyStore.hasApiKey()
+        val service = settings.activeService
+        service != null &&
+            service.baseUrl.isNotBlank() &&
+            service.model.isNotBlank() &&
+            secureKeyStore.hasApiKey(service.id)
     }
 
     override suspend fun testConnection(): ProviderHealth = withContext(ioDispatcher) {
@@ -289,11 +293,12 @@ class OpenAiCompatibleProvider @Inject constructor(
         val imagesUrl: String get() = baseUrl + IMAGES_PATH
     }
 
-    /** Key + base URL — enough for /models and the connection test. */
+    /** Key + base URL of the ACTIVE service — enough for /models and the test. */
     private suspend fun readConnectionConfig(): ProviderConfig? {
         val settings = settingsRepository.settings.first()
-        val key = secureKeyStore.getApiKey()
-        val base = settings.aiBaseUrl.trim().trimEnd('/')
+        val service = settings.activeService ?: return null
+        val key = secureKeyStore.getApiKey(service.id)
+        val base = service.baseUrl.trim().trimEnd('/')
         if (key.isNullOrBlank() || base.isBlank()) return null
         return ProviderConfig(key = key, model = "", baseUrl = base)
     }
@@ -312,10 +317,11 @@ class OpenAiCompatibleProvider @Inject constructor(
      */
     private suspend fun configGapFa(requireModel: Boolean): String {
         val settings = settingsRepository.settings.first()
+        val service = settings.activeService
         return missingConfigMessageFa(
-            hasKey = secureKeyStore.hasApiKey(),
-            hasBaseUrl = settings.aiBaseUrl.isNotBlank(),
-            hasModel = settings.aiModel.isNotBlank(),
+            hasKey = service != null && secureKeyStore.hasApiKey(service.id),
+            hasBaseUrl = !service?.baseUrl.isNullOrBlank(),
+            hasModel = !service?.model.isNullOrBlank(),
             requireModel = requireModel,
         ) ?: NO_KEY_FA
     }
@@ -444,7 +450,9 @@ class OpenAiCompatibleProvider @Inject constructor(
         }
 
         const val NO_KEY_FA = "کلید API ذخیره نشده است. کلید را در تنظیمات وارد و دکمهٔ «ذخیره کلید» را بزن."
-        const val NO_BASE_URL_FA = "نشانی سرور (Base URL) خالی است؛ مثل https://codecraftapi.com/v1 واردش کن."
+        const val NO_BASE_URL_FA =
+            "نشانی سرور (Base URL) خالی است؛ در تنظیمات، سرویس را ویرایش کن و آدرس درست را وارد کن. " +
+                "مثل https://codecraftapi.com/v1 یا https://api.openai.com/v1"
         const val NO_MODEL_FA = "نام مدل انتخاب نشده است. با دکمهٔ «دریافت فهرست مدل‌ها» یکی را انتخاب کن یا در کادر «نام مدل» بنویس."
         const val BAD_REPLY_FA = "پاسخ سرور قابل خواندن نبود. مدل دیگری را امتحان کن یا دوباره تلاش کن."
         const val BAD_IMAGE_REPLY_FA =

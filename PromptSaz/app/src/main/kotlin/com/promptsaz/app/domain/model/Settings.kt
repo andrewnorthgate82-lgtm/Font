@@ -1,5 +1,7 @@
 package com.promptsaz.app.domain.model
 
+import kotlinx.serialization.Serializable
+
 /**
  * Theme preference for the app (default follows the system).
  */
@@ -19,6 +21,27 @@ enum class ThemeMode(val id: String, val labelFa: String) {
  * it lives only in EncryptedSharedPreferences (see SecureKeyStore) and is never
  * exported or backed up.
  */
+/**
+ * One configured AI service (OpenAI-compatible): a name the user gives it,
+ * its base URL, its API key id reference and its own model picks. Users can
+ * keep several services side by side and switch the active one anytime.
+ */
+@Serializable
+data class AiService(
+    val id: String,
+    val name: String,
+    val baseUrl: String,
+    /** Chat/prompt model of THIS service. */
+    val model: String = "",
+    /** Image model of THIS service (falls back to [model]). */
+    val imageModel: String = "",
+) {
+    companion object {
+        /** Id of the service auto-created from the v1 single-service settings. */
+        const val LEGACY_DEFAULT_ID = "default"
+    }
+}
+
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val defaultDomainId: String = "general",
@@ -26,11 +49,19 @@ data class AppSettings(
     val defaultOutputLanguage: OutputLanguage = OutputLanguage.SAME_AS_INPUT,
     val defaultDetailLevel: DetailLevel = DetailLevel.STANDARD,
     val aiEnabled: Boolean = false,
-    val aiBaseUrl: String = DEFAULT_AI_BASE_URL,
-    val aiModel: String = "",
-    /** Last model used in the تصویر tab (image models often differ from chat models). */
-    val aiImageModel: String = "",
+    /** All configured AI services; exactly one is [activeServiceId]. */
+    val aiServices: List<AiService> = emptyList(),
+    val activeServiceId: String = "",
 ) {
+    /** The service every AI call goes through right now. */
+    val activeService: AiService?
+        get() = aiServices.firstOrNull { it.id == activeServiceId } ?: aiServices.firstOrNull()
+
+    /** Views kept for the v1 single-service consumers (provider, view models). */
+    val aiBaseUrl: String get() = activeService?.baseUrl?.trim()?.trimEnd('/') ?: ""
+    val aiModel: String get() = activeService?.model ?: ""
+    val aiImageModel: String get() = activeService?.imageModel ?: ""
+
     companion object {
         /**
          * Default suggestion for the OpenAI-compatible provider base URL.

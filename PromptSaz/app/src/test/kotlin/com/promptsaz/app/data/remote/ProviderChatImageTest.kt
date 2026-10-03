@@ -1,6 +1,7 @@
 package com.promptsaz.app.data.remote
 
 import com.promptsaz.app.data.settings.ApiKeyStore
+import com.promptsaz.app.domain.model.AiService
 import com.promptsaz.app.domain.model.ChatTurn
 import com.promptsaz.app.domain.model.DetailLevel
 import com.promptsaz.app.domain.model.GeneratedImage
@@ -32,8 +33,10 @@ import org.junit.Test
 class ProviderChatImageTest {
 
     private class FakeKeyStore(private val key: String?) : ApiKeyStore {
-        override fun hasApiKey(): Boolean = !key.isNullOrBlank()
-        override fun getApiKey(): String? = key
+        override fun hasApiKey(serviceId: String): Boolean = !key.isNullOrBlank()
+        override fun getApiKey(serviceId: String): String? = key
+        override fun saveApiKey(serviceId: String, value: String) {}
+        override fun clearApiKey(serviceId: String) {}
     }
 
     private class FakeSettingsRepository(initial: AppSettings) : SettingsRepository {
@@ -45,9 +48,20 @@ class ProviderChatImageTest {
         override suspend fun setDefaultLanguage(language: OutputLanguage) { flow.value = flow.value.copy(defaultOutputLanguage = language) }
         override suspend fun setDefaultDetail(level: DetailLevel) { flow.value = flow.value.copy(defaultDetailLevel = level) }
         override suspend fun setAiEnabled(enabled: Boolean) { flow.value = flow.value.copy(aiEnabled = enabled) }
-        override suspend fun setAiBaseUrl(url: String) { flow.value = flow.value.copy(aiBaseUrl = url) }
-        override suspend fun setAiModel(model: String) { flow.value = flow.value.copy(aiModel = model) }
-        override suspend fun setAiImageModel(model: String) { flow.value = flow.value.copy(aiImageModel = model) }
+        override suspend fun setAiBaseUrl(url: String) { updateActiveService { it.copy(baseUrl = url) } }
+        override suspend fun setAiModel(model: String) { updateActiveService { it.copy(model = model) } }
+        override suspend fun setAiImageModel(model: String) { updateActiveService { it.copy(imageModel = model) } }
+        override suspend fun addService(name: String, baseUrl: String): String = "svc-new"
+        override suspend fun updateService(id: String, name: String, baseUrl: String) {}
+        override suspend fun removeService(id: String) {}
+        override suspend fun setActiveService(id: String) { flow.value = flow.value.copy(activeServiceId = id) }
+
+        private fun updateActiveService(block: (AiService) -> AiService) {
+            val current = flow.value
+            flow.value = current.copy(
+                aiServices = current.aiServices.map { if (it.id == current.activeServiceId) block(it) else it },
+            )
+        }
     }
 
     @Volatile private var chatBody: String? = null
@@ -95,8 +109,15 @@ class ProviderChatImageTest {
             settingsRepository = FakeSettingsRepository(
                 AppSettings(
                     aiEnabled = true,
-                    aiBaseUrl = "http://127.0.0.1:${server!!.address.port}/v1",
-                    aiModel = "chat-model-selected",
+                    aiServices = listOf(
+                        AiService(
+                            id = "s1",
+                            name = "تست",
+                            baseUrl = "http://127.0.0.1:${server!!.address.port}/v1",
+                            model = "chat-model-selected",
+                        ),
+                    ),
+                    activeServiceId = "s1",
                 ),
             ),
             secureKeyStore = FakeKeyStore("test-key-123"),
