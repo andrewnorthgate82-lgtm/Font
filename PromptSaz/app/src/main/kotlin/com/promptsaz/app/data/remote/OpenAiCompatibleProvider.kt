@@ -1,6 +1,6 @@
 package com.promptsaz.app.data.remote
 
-import com.promptsaz.app.data.settings.SecureKeyStore
+import com.promptsaz.app.data.settings.ApiKeyStore
 import com.promptsaz.app.di.IoDispatcher
 import com.promptsaz.app.domain.model.DomainKnowledge
 import com.promptsaz.app.domain.model.OutputLanguage
@@ -11,6 +11,7 @@ import com.promptsaz.app.domain.provider.PromptProvider
 import com.promptsaz.app.domain.provider.ProviderGeneration
 import com.promptsaz.app.domain.provider.ProviderHealth
 import com.promptsaz.app.domain.repository.SettingsRepository
+import com.promptsaz.app.util.toPersianDigits
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -33,7 +34,7 @@ import kotlinx.serialization.json.Json
 @Singleton
 class OpenAiCompatibleProvider @Inject constructor(
     private val settingsRepository: SettingsRepository,
-    private val secureKeyStore: SecureKeyStore,
+    private val secureKeyStore: ApiKeyStore,
     private val json: Json,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : PromptProvider {
@@ -278,7 +279,7 @@ class OpenAiCompatibleProvider @Inject constructor(
         return buildString {
             append(reason)
             append(" (کد HTTP: ")
-            append(code)
+            append(code.toPersianDigits())
             append(")")
             if (bodySnippet.isNotEmpty()) {
                 append("\nپاسخ سرور: ")

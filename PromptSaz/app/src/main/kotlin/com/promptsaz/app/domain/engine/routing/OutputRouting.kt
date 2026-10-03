@@ -31,6 +31,10 @@ enum class TaskCategory { TEXT, DESIGN, CALENDAR, VIDEO }
 
 object OutputRouter {
 
+    /** Domain ids whose very nature fixes the deliverable. */
+    const val IMAGE_DOMAIN_ID = "ai_image"
+    const val VIDEO_DOMAIN_ID = "ai_video"
+
     /** Answer chip labels of the «خروجی چه باشد؟» question (KB: deliverable-type). */
     private val answerToType = mapOf(
         "متن و ساختار" to OutputType.TEXT,
@@ -45,8 +49,10 @@ object OutputRouter {
         listOf("میدجرنی", "midjourney", "دالی", "dall-e", "پرامپت تصویر", "پرامپت ساخت تصویر", "تصویر با هوش مصنوعی")
     private val calendarWords =
         listOf("تقویم", "برنامه انتشار", "برنامه‌ی انتشار", "برنامه‌ریزی محتوا", "برنامه ریزی محتوا")
-    private val videoWords =
-        listOf("ویدیو", "ریلز", "شورتز", "تیزر", "ویدیویی", "سناریو", "اسکریپت ویدیو")
+    private val videoWords = listOf(
+        "ویدیو", "ریلز", "شورتز", "تیزر", "ویدیویی", "سناریو", "اسکریپت ویدیو",
+        "سورا", "sora", "رانوی", "runway", "کلینگ", "kling",
+    )
 
     /** Platform/social tokens that must not influence persona/structure selection. */
     val platformTokens = setOf(
@@ -64,6 +70,8 @@ object OutputRouter {
         answer?.value?.let { value ->
             answerToType.entries.firstOrNull { value.contains(it.key) }?.let { return it.value }
         }
+        // The image-generation domain is inherently image prompts.
+        if (spec.domainId == IMAGE_DOMAIN_ID) return OutputType.IMAGE_PROMPT
         return defaultOutputType(spec.idea)
     }
 
@@ -99,6 +107,8 @@ object OutputRouter {
         return when {
             answerType == OutputType.TEXT && ideaCategory == TaskCategory.DESIGN -> TaskCategory.TEXT
             answerType == OutputType.DESIGN_BRIEF && ideaCategory == TaskCategory.TEXT -> TaskCategory.DESIGN
+            // The video-generation domain makes every idea a video task.
+            spec.domainId == VIDEO_DOMAIN_ID && ideaCategory == TaskCategory.TEXT -> TaskCategory.VIDEO
             else -> ideaCategory
         }
     }

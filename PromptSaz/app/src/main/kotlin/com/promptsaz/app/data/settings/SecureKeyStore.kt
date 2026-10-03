@@ -20,7 +20,7 @@ import javax.inject.Singleton
 @Singleton
 class SecureKeyStore @Inject constructor(
     @ApplicationContext private val context: Context,
-) {
+) : ApiKeyStore {
 
     private val prefs: SharedPreferences? = createPrefsSafely()
 
