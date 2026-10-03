@@ -16,6 +16,7 @@ import com.promptsaz.app.domain.model.OutputLanguage
 import com.promptsaz.app.domain.model.PromptMode
 import com.promptsaz.app.domain.model.PromptSection
 import com.promptsaz.app.domain.model.PromptSpec
+import com.promptsaz.app.domain.model.TargetAi
 import com.promptsaz.app.domain.model.SectionKind
 import com.promptsaz.app.util.toPersianDigits
 import javax.inject.Inject
@@ -138,9 +139,10 @@ class PromptAssembler @Inject constructor() {
             }
             append(
                 if (variables.isEmpty()) {
-                    " خروجی بدون جای خالی و آماده انتشار باشد."
+                    " هرچه لازم است در زمینه آمده است؛ چیزی که کاربر نداده از خودت نساز."
                 } else {
-                    " مقادیر [متغیر] را در متن نهایی با اطلاعات واقعی جایگزین کن و هیچ جای خالی رها نکن."
+                    " اطلاعاتی که کاربر نداده را از خودت نساز؛ جای آن‌ها همان [متغیر] مشخص بماند" +
+                        " و در پایان پاسخ، فهرست این موارد را برای تکمیل بیاور."
                 },
             )
         }
@@ -273,8 +275,13 @@ class PromptAssembler @Inject constructor() {
                 lines += "نسبت تصویر: ${ratioFor(facts)}."
             }
             outputType == OutputType.IMAGE_PROMPT -> {
-                lines += "ساختار: یک پاراگراف پرامپت نهایی برای مدل تولید تصویر؛ ترتیب اجزا: سوژه، سبک، ترکیب‌بندی، نور، پالت رنگی؛ در پایان پارامترهای فنی (نسبت تصویر و جزئیات)."
+                lines += "ساختار: دو بخش مجزا با تیتر واضح —"
+                lines += "۱) پرامپت تصویر (به انگلیسی): یک پاراگراف ${fa(60)} تا ${fa(150)} کلمه؛ ترتیب اجزا: سوژه و حال‌وهوا، ترکیب‌بندی با جای خالی برای متن (نوار بالایی برای تیتر، نوار پایینی برای اطلاعات)، سبک هنری، نور، پالت رنگی؛ در پایان پرامپت، نسبت تصویر و فهرست «نباشد»ها را با پارامترهای استاندارد همان ابزار تصویرساز بنویس."
+                lines += "۲) لایهٔ متن (فارسی، کاملاً جدا از پرامپت تصویر): متن دقیقی که کاربر بعداً با فتوشاپ یا کنوا روی تصویر می‌گذارد — تیتر، زیرتیتر، نام مدرس یا برند، تاریخ و ساعت، دعوت به اقدام — با محل و اندازهٔ نسبی هر کدام."
                 lines += "نسبت تصویر: ${ratioFor(facts)}."
+                if (spec.targetAi == TargetAi.MIDJOURNEY) {
+                    lines += "پارامترها به سبک میدجرنی: نسبت تصویر و فهرست «نباشد»ها در پایان پرامپت، طبق قالب استاندارد خود میدجرنی."
+                }
             }
             outputType == OutputType.ALL -> {
                 lines += "ساختار: سه بخش مجزا با تیتر واضح — ۱) متن و ساختار محتوا ۲) بریف طراحی گرافیک ۳) پرامپت تولید تصویر."
@@ -291,13 +298,23 @@ class PromptAssembler @Inject constructor() {
                 }
             }
         }
-        lines += "زبان پاسخ: ${languageRule(spec)}."
-        if (tone != null || !quick) lines += "لحن: ${tone ?: "نیمه‌رسمی روان"}."
-        lines += "طول: ${length ?: when (spec.detailLevel) {
-            DetailLevel.QUICK -> "کوتاه؛ حداکثر ${fa(150)} کلمه."
-            DetailLevel.STANDARD -> "متوسط؛ ${fa(150)} تا ${fa(400)} کلمه."
-            DetailLevel.EXPERT -> "کامل و بدون حاشیه؛ طول تابع کامل بودن است."
-        }}"
+        when {
+            outputType == OutputType.IMAGE_PROMPT ->
+                lines += "زبان: پرامپت تصویر به انگلیسی (بهترین عملکرد ابزارهای تصویرساز)؛ لایهٔ متن و توضیحات به ${languageRule(spec)}."
+            else -> lines += "زبان پاسخ: ${languageRule(spec)}."
+        }
+        if (tone != null || (!quick && outputType != OutputType.IMAGE_PROMPT)) {
+            lines += "لحن: ${tone ?: "نیمه‌رسمی روان"}."
+        }
+        when {
+            outputType == OutputType.IMAGE_PROMPT ->
+                lines += "طول: پاراگراف پرامپت تصویر ${fa(60)} تا ${fa(150)} کلمه؛ لایهٔ متن کوتاه و دقیق."
+            else -> lines += "طول: ${length ?: when (spec.detailLevel) {
+                DetailLevel.QUICK -> "کوتاه؛ حداکثر ${fa(150)} کلمه."
+                DetailLevel.STANDARD -> "متوسط؛ ${fa(150)} تا ${fa(400)} کلمه."
+                DetailLevel.EXPERT -> "کامل و بدون حاشیه؛ طول تابع کامل بودن است."
+            }}"
+        }
         if (quick) lines += "پیش‌درآمد و جمع‌بندی تکراری ننویس."
         return PromptSection(SectionKind.OUTPUT_FORMAT, "قالب خروجی", lines.joinToString("\n"))
     }
@@ -319,18 +336,19 @@ class PromptAssembler @Inject constructor() {
         val chosen = count?.let { selected.take(it) } ?: selected
         val lines = chosen.map { "- ${it.doFa}؛ ${it.dontFa}." }.toMutableList()
         when {
+            outputType == OutputType.IMAGE_PROMPT ->
+                lines += listOf(
+                    "- تصویر بدون هیچ متن، حرف یا لوگویی ساخته شود؛ حروف فارسی روی تصویر تولید نکن (متن‌ها در لایهٔ متن جدا داده می‌شوند).",
+                    "- در ترکیب‌بندی، جای خالی مناسب متن در نظر بگیر: بخش بالایی برای تیتر و بخش پایینی برای اطلاعات.",
+                    "- فهرست «نباشد»ها حتماً در پرامپت بیاید: بدون متن، بدون حروف به‌هم‌ریخته، بدون واترمارک، بدون لوگو.",
+                )
             outputType == OutputType.DESIGN_BRIEF || taskCategory == TaskCategory.DESIGN ->
                 lines += listOf(
-                    "- نسبت تصویر با پلتفرم هدف هماهنگ باشد (${ratioFor(facts)}).",
+                    "- نسبت تصویر با پلتفرم هدف هماهنگ باشد: ${ratioFor(facts)}.",
                     "- متن روی تصویر کوتاه و خوانا با حداکثر سه سطح سلسله‌مراتب (عنوان، زیرعنوان، جزئیات).",
                     "- فونت فارسی استاندارد و خوانا؛ کنتراست متن و پس‌زمینه کافی باشد.",
                     "- جای مشخص و واضح برای اطلاعات کلیدی (تاریخ، نام مدرس یا برند، ثبت‌نام یا تماس) در نظر بگیر.",
                     "- رنگ‌ها با هم هویت بصری واحد بسازند؛ از شلوغی بصری پرهیز کن.",
-                )
-            outputType == OutputType.IMAGE_PROMPT ->
-                lines += listOf(
-                    "- پرامپت تصویر یکپارچه و بدون تناقض بین اجزا باشد.",
-                    "- متن فارسی روی تصویر را دقیق و کوتاه مشخص کن؛ از جمله‌های بلند روی تصویر پرهیز کن.",
                 )
             taskCategory == TaskCategory.CALENDAR ->
                 lines += listOf(
@@ -343,8 +361,13 @@ class PromptAssembler @Inject constructor() {
                     "- برای هر پلان، تصویر و حرکت دوربین مشخص تعریف شود.",
                 )
         }
-        lines += "- از عدد، منبع یا آماری که در ورودی نیست استفاده نکن؛ مطلب نامطمئن را همین‌طور نگو."
-        lines += "- مستقیم وارد محتوا شو؛ مقدمه‌چینی و جمله انگیزشی ننویس."
+        // Single, clear no-fabrication rule — KB guardrails never duplicate it.
+        if (lines.none { it.contains("از خودت نساز") || it.contains("از خودت درست نکن") }) {
+            lines += "- هیچ عدد، آمار، نام یا ادعایی که در ورودی نیامده از خودت نساز."
+        }
+        if (lines.none { it.contains("مقدمه‌چینی") }) {
+            lines += "- مستقیم وارد محتوا شو؛ مقدمه‌چینی و جمله انگیزشی ننویس."
+        }
         return PromptSection(SectionKind.CONSTRAINTS, "محدودیت‌ها و نگه‌داشت‌ها", lines.joinToString("\n"))
     }
 
@@ -365,12 +388,20 @@ class PromptAssembler @Inject constructor() {
             "۳) بدون حاشیه، تکرار و کلی‌گویی.",
             "۴) یکدستی زبان، لحن و ارقام فارسی در کل پاسخ.",
         )
-        kb?.failureModes?.firstOrNull()?.let { mode ->
-            // The KB fix is already phrased as an instruction — use it directly.
-            criteria += "${fa(criteria.size + 1)}) ${mode.fixFa}"
-        }
-        if (taskCategory == TaskCategory.DESIGN || outputType == OutputType.DESIGN_BRIEF) {
-            criteria += "${fa(criteria.size + 1)}) خوانایی متن در اندازهٔ کوچک و اولویت‌بندی صحیح اطلاعات روی طرح."
+        when {
+            outputType == OutputType.IMAGE_PROMPT -> {
+                criteria += "۵) پرامپت تصویر کاملاً بدون متن و حروف باشد و جای متن‌ها خالی بماند."
+                criteria += "۶) لایهٔ متن فارسی، دقیق و کامل، جدا از پرامپت تصویر بیاید."
+            }
+            else -> {
+                kb?.failureModes?.firstOrNull()?.let { mode ->
+                    // The KB fix is already phrased as an instruction — use it directly.
+                    criteria += "${fa(criteria.size + 1)}) ${withPeriod(mode.fixFa)}"
+                }
+                if (taskCategory == TaskCategory.DESIGN || outputType == OutputType.DESIGN_BRIEF) {
+                    criteria += "${fa(criteria.size + 1)}) خوانایی متن در اندازهٔ کوچک و اولویت‌بندی صحیح اطلاعات روی طرح."
+                }
+            }
         }
         val body = "پیش از ارسال، پاسخ را بی‌صدا با این معیارها بسنج و در صورت نقض، اصلاحش کن:\n" +
             criteria.joinToString("\n")
@@ -399,6 +430,10 @@ class PromptAssembler @Inject constructor() {
         "instructor" to listOf(FactCategory.INSTRUCTOR),
         "date" to listOf(FactCategory.DATE),
         "duration" to listOf(FactCategory.DURATION),
+        "event-mode" to listOf(FactCategory.MODE),
+        "registration" to listOf(FactCategory.REGISTRATION),
+        "event-time" to listOf(FactCategory.TIME),
+        "location" to listOf(FactCategory.LOCATION),
     )
 
     private fun variablesFor(spec: PromptSpec, facts: IdeaFacts, idea: String): List<Variable> {
@@ -497,11 +532,17 @@ class PromptAssembler @Inject constructor() {
     ): KbExample? {
         val examples = kb?.examples ?: return null
         if (examples.isEmpty()) return null
-        val ideaTokens = scoringTokens(spec.idea)
-        // An example of the wrong medium (video example for a text task, design
-        // example for a video task) must never be offered as a model.
-        val eligible = examples.filter { example -> matchesTaskMedium(example, taskCategory) }
+        // The example must be the SAME KIND of deliverable as the requested
+        // output: an image-prompt example for image prompts, a brief for a
+        // brief — never a brief for an image prompt or vice versa.
+        val eligible = when (outputType) {
+            OutputType.IMAGE_PROMPT -> examples.filter { it.targetAi == IMAGE_EXAMPLE_TARGET }
+            else -> examples
+                .filter { it.targetAi != IMAGE_EXAMPLE_TARGET }
+                .filter { example -> matchesTaskMedium(example, taskCategory) }
+        }
         if (eligible.isEmpty()) return null
+        val ideaTokens = scoringTokens(spec.idea)
         val scored = eligible.map { example ->
             val titleTokens = tokenize(example.titleFa)
             val bodyTokens = tokenize(example.promptFa)
@@ -580,13 +621,18 @@ class PromptAssembler @Inject constructor() {
 
     private fun fa(number: Int): String = number.toPersianDigits()
 
+    /** Ensures a KB instruction read as a quality criterion ends with a period. */
+    private fun withPeriod(text: String): String =
+        if (text.trimEnd().endsWith('.') || text.trimEnd().endsWith('؟') || text.trimEnd().endsWith('!')) text else text.trimEnd() + "."
+
     private fun isImageOrVideo(spec: PromptSpec, outputType: OutputType): Boolean =
         spec.targetAi.isImageOrVideoModel
 
     private fun variableToken(questionId: String): String = when (questionId) {
         "audience" -> "AUDIENCE"
         "product-service", "content-topic" -> "TOPIC_OR_PRODUCT"
-        "campaign-goal", "goal", "purpose" -> "GOAL"
+        "campaign-goal" -> "CAMPAIGN_GOAL"
+        "goal", "purpose" -> "GOAL_OR_PURPOSE"
         "platform" -> "PLATFORM"
         "brand-tone", "tone" -> "TONE"
         "competitive-edge" -> "COMPETITIVE_EDGE"
@@ -598,7 +644,11 @@ class PromptAssembler @Inject constructor() {
         "context" -> "CONTEXT_DETAILS"
         "environment" -> "ENVIRONMENT"
         "testing-need" -> "TESTING"
-        "format" -> "FORMAT"
+        "format" -> "RESPONSE_FORMAT"
+        "event-mode" -> "EVENT_MODE"
+        "registration" -> "REGISTRATION_INFO"
+        "event-time" -> "EVENT_TIME"
+        "style-colors" -> "STYLE_AND_COLORS"
         else -> questionId.replace('-', '_').uppercase()
     }
 
@@ -608,6 +658,8 @@ class PromptAssembler @Inject constructor() {
         const val DESIGN_BOOST = 5
         const val MIN_EXAMPLE_RELEVANCE = 2
         const val TITLE_WEIGHT = 3
+        /** targetAi value that marks an example as an image-prompt example. */
+        const val IMAGE_EXAMPLE_TARGET = "midjourney"
         val TONE_QUESTION_IDS = setOf("brand-tone", "tone")
         val LENGTH_QUESTION_IDS = setOf("length-limit", "video-length", "length")
         val DESIGN_PERSONA_TOKENS = setOf(

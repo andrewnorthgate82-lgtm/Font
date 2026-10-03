@@ -176,6 +176,10 @@ def validate_domain(kb: dict, file_name: str) -> None:
                 err(f"{w}: duplicate chip ids")
         if not chips and q.get("allowFreeText") is False:
             err(f"{w}: no chips and allowFreeText=false leaves the user no way to answer")
+        applies = q.get("appliesTo", [])
+        valid_scopes = {"design", "event", "calendar", "video", "text"}
+        if not isinstance(applies, list) or any(a not in valid_scopes for a in applies):
+            err(f"{w}: appliesTo must be a list drawn from {sorted(valid_scopes)}, got {applies!r}")
     check_unique_ids(questions, "id", f"{where}.clarifyingQuestions")
 
     # content minimums

@@ -151,7 +151,12 @@
               }
             }
           },
-          "gapKeywordsFa": {
+          "appliesTo": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["design", "event", "calendar", "video", "text"] },
+          "description": "Task categories this question applies to; empty = all tasks."
+        },
+        "gapKeywordsFa": {
             "type": "array",
             "items": { "type": "string", "minLength": 2 }
           }

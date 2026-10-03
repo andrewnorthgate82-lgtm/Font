@@ -188,7 +188,7 @@
     {
       "id": "generic-output",
       "symptomFa": "متن تبلیغاتی خروجی، برای هر محصول دیگری هم صدق می‌کند",
-      "fixFa": "در پرامپت، مخاطب دقیق، مزیت رقابتی و یک مثال از ورودی واقعی بده و بخواه تیترها حول مزیت باشند"
+      "fixFa": "تیترها و پیام اصلی را حول مخاطب و مزیت رقابتیِ آمده در زمینه بنویس؛ از کلی‌گویی بپرهیز."
     },
     {
       "id": "unsupported-claims",
@@ -235,208 +235,15 @@
       "titleFa": "بریف طراحی پوستر برای دوره آموزشی",
       "targetAi": "any",
       "promptFa": "نقش: تو کارگردان هنری و طراح پوستر تبلیغاتی هستی؛ متخصص تایپوگرافی فارسی و کمپین‌های آموزشی.\nهدف: بریف کامل طراحی پوستر برای دوره آموزشی «تحلیل داده با پایتون» با مدرس سارا رستمی؛ شروع ۲۰ آبان به مدت ۵ روز؛ انتشار در اینستاگرام.\nزمینه: مخاطب، تحلیل‌گران جوانی است که می‌خواهند مهارتشان را حرفه‌ای کنند؛ حس موردنظر، تخصصی و دلگرم‌کننده است.\nروند کار: ۱) پیام اصلی را در یک جمله خلاصه کن. ۲) سلسله‌مراتب متن را بچین: عنوان دوره، نام مدرس، تاریخ و مدت، دعوت به ثبت‌نام. ۳) سبک بصری و پالت رنگی پیشنهاد بده. ۴) بریف نهایی را کامل بنویس.\nقالب خروجی: بریف طراحی با بخش‌های پیام اصلی، مشخصات فنی (ابعاد ۱۰۸۰ در ۱۳۵۰ پیکسل با نسبت ۴:۵)، سلسله‌مراتب متن، عناصر اجباری، سبک و رنگ.\nمحدودیت‌ها: متن روی پوستر کوتاه و خوانا با حداکثر سه سطح تایپوگرافی؛ فونت فارسی استاندارد؛ جای ثبت‌نام کاملاً مشخص؛ بدون شلوغی بصری؛ از آمار ساختگی استفاده نکن.\nمعیارهای کیفیت: خوانایی اطلاعات کلیدی در نمای کوچک؛ هماهنگی رنگ‌ها با حس تخصصی؛ اولویت درست اطلاعات.\nقاعده شفاف‌سازی: اگر اطلاعات ضروری کم است، حداکثر ۲ سؤال کوتاه بپرس و بعد شروع کن."
+    },
+    {
+      "id": "course-poster-image-prompt",
+      "titleFa": "پرامپت تصویر پوستر دوره آموزشی برای میدجرنی",
+      "targetAi": "midjourney",
+      "promptFa": "Vertical poster background for an artificial intelligence training course, modern tech aesthetic, glowing abstract neural network pattern in deep blue and violet, soft gradient lighting, minimalist composition with a clear empty band in the top third reserved for a bold headline and a clean strip across the bottom third reserved for course details, subtle geometric depth, high contrast for light text, professional educational mood, no people, no letters --ar 4:5 --v 6 --no text, watermark, logo\n\nلایهٔ متن (فارسی — جدا از پرامپت، بعداً روی تصویر اضافه کن):\n- تیتر (یک‌سوم بالایی، بزرگ‌ترین اندازه): «هوش مصنوعی را از پایه یاد بگیر»\n- زیرتیتر: دورهٔ آموزشی کاربردی با پروژهٔ واقعی\n- مدرس: سارا رستمی\n- تاریخ و مدت: ۲۰ آبان به مدت ۵ روز\n- دعوت به اقدام (نوار پایینی): ثبت‌نام و جزئیات در site.com"
     }
   ],
   "clarifyingQuestions": [
-    {
-      "id": "product-service",
-      "questionFa": "محصول یا خدمت دقیقاً چیست؟",
-      "priority": 1,
-      "chips": [],
-      "allowFreeText": true,
-      "gapKeywordsFa": [
-        "دوره",
-        "موضوع",
-        "آموزش",
-        "محصول",
-        "خدمت",
-        "وبینار",
-        "کارگاه",
-        "کلاس",
-        "سمینار",
-        "رویداد"
-      ]
-    },
-    {
-      "id": "audience",
-      "questionFa": "مخاطب اصلی کیست؟",
-      "priority": 2,
-      "chips": [
-        {
-          "id": "b2c",
-          "labelFa": "مصرف‌کننده نهایی"
-        },
-        {
-          "id": "b2b",
-          "labelFa": "کسب‌وکارها و مدیران"
-        },
-        {
-          "id": "young",
-          "labelFa": "جوانان ۱۸ تا ۳۰ سال"
-        },
-        {
-          "id": "parents",
-          "labelFa": "والدین"
-        }
-      ],
-      "allowFreeText": true,
-      "gapKeywordsFa": [
-        "مخاطب",
-        "مشتری",
-        "مصرف‌کننده",
-        "کاربر"
-      ]
-    },
-    {
-      "id": "campaign-goal",
-      "questionFa": "هدف اصلی این کار چیست؟",
-      "priority": 3,
-      "chips": [
-        {
-          "id": "sales",
-          "labelFa": "افزایش فروش"
-        },
-        {
-          "id": "leads",
-          "labelFa": "دریافت سرنخ و تماس"
-        },
-        {
-          "id": "awareness",
-          "labelFa": "معرفی برند"
-        },
-        {
-          "id": "traffic",
-          "labelFa": "ترافیک سایت یا پیج"
-        }
-      ],
-      "allowFreeText": true,
-      "gapKeywordsFa": [
-        "فروش",
-        "سرنخ",
-        "برند",
-        "ترافیک"
-      ]
-    },
-    {
-      "id": "platform",
-      "questionFa": "خروجی برای کدام پلتفرم است؟",
-      "priority": 4,
-      "chips": [
-        {
-          "id": "instagram",
-          "labelFa": "اینستاگرام"
-        },
-        {
-          "id": "google",
-          "labelFa": "تبلیغات گوگل"
-        },
-        {
-          "id": "telegram",
-          "labelFa": "تلگرام"
-        },
-        {
-          "id": "web",
-          "labelFa": "وب‌سایت"
-        },
-        {
-          "id": "email",
-          "labelFa": "ایمیل"
-        }
-      ],
-      "allowFreeText": true,
-      "gapKeywordsFa": [
-        "اینستاگرام",
-        "گوگل",
-        "تلگرام",
-        "سایت",
-        "ایمیل"
-      ]
-    },
-    {
-      "id": "brand-tone",
-      "questionFa": "لحن برند چطور است؟",
-      "priority": 5,
-      "chips": [
-        {
-          "id": "formal",
-          "labelFa": "رسمی و حرفه‌ای"
-        },
-        {
-          "id": "semi",
-          "labelFa": "نیمه‌رسمی"
-        },
-        {
-          "id": "friendly",
-          "labelFa": "صمیمی و خودمانی"
-        },
-        {
-          "id": "playful",
-          "labelFa": "طنز و جسورانه"
-        }
-      ],
-      "allowFreeText": true,
-      "gapKeywordsFa": [
-        "لحن",
-        "رسمی",
-        "صمیمی",
-        "طنز"
-      ]
-    },
-    {
-      "id": "competitive-edge",
-      "questionFa": "مزیت اصلی شما نسبت به رقبا چیست؟",
-      "priority": 6,
-      "chips": [
-        {
-          "id": "price",
-          "labelFa": "قیمت مناسب‌تر"
-        },
-        {
-          "id": "quality",
-          "labelFa": "کیفیت بالاتر"
-        },
-        {
-          "id": "speed",
-          "labelFa": "سرعت اجرا"
-        },
-        {
-          "id": "support",
-          "labelFa": "پشتیبانی قوی"
-        }
-      ],
-      "allowFreeText": true,
-      "gapKeywordsFa": [
-        "مزیت",
-        "تفاوت",
-        "بهتر از"
-      ]
-    },
-    {
-      "id": "length-limit",
-      "questionFa": "محدودیت طول متن چقدر است؟",
-      "priority": 7,
-      "chips": [
-        {
-          "id": "short",
-          "labelFa": "کوتاه؛ مثل تیتر و بیو"
-        },
-        {
-          "id": "medium",
-          "labelFa": "متوسط؛ مثل کپشن"
-        },
-        {
-          "id": "long",
-          "labelFa": "بلند؛ مثل صفحه فرود"
-        }
-      ],
-      "allowFreeText": true,
-      "gapKeywordsFa": [
-        "کاراکتر",
-        "کلمه",
-        "کوتاه",
-        "بلند"
-      ]
-    },
     {
       "id": "deliverable-type",
       "questionFa": "خروجی چه باشد؟",
@@ -488,6 +295,298 @@
         "جواب",
         "پاسخ",
         "متن"
+      ]
+    },
+    {
+      "id": "event-mode",
+      "questionFa": "برنامه حضوری است یا آنلاین؟",
+      "priority": 2,
+      "chips": [
+        {
+          "id": "inperson",
+          "labelFa": "حضوری"
+        },
+        {
+          "id": "online",
+          "labelFa": "آنلاین"
+        },
+        {
+          "id": "hybrid",
+          "labelFa": "ترکیبی"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "حضوری",
+        "آنلاین",
+        "ترکیبی"
+      ],
+      "appliesTo": [
+        "event"
+      ]
+    },
+    {
+      "id": "registration",
+      "questionFa": "راه ثبت‌نام یا تماس چیست؟",
+      "priority": 3,
+      "chips": [],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "ثبت‌نام",
+        "ثبت نام",
+        "لینک ثبت",
+        "شماره تماس",
+        "راه ارتباطی"
+      ],
+      "appliesTo": [
+        "event",
+        "design"
+      ]
+    },
+    {
+      "id": "event-time",
+      "questionFa": "ساعت برگزاری چه زمانی است؟",
+      "priority": 4,
+      "chips": [],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "ساعت"
+      ],
+      "appliesTo": [
+        "event"
+      ]
+    },
+    {
+      "id": "style-colors",
+      "questionFa": "سبک و رنگ دلخواه چیست؟",
+      "priority": 5,
+      "chips": [
+        {
+          "id": "minimal",
+          "labelFa": "مینیمال"
+        },
+        {
+          "id": "energetic",
+          "labelFa": "شاد و پرانرژی"
+        },
+        {
+          "id": "luxury",
+          "labelFa": "لوکس"
+        },
+        {
+          "id": "dark",
+          "labelFa": "تیره و جدی"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "سبک",
+        "رنگ",
+        "پالت رنگی",
+        "مینیمال",
+        "لوکس"
+      ],
+      "appliesTo": [
+        "design"
+      ]
+    },
+    {
+      "id": "audience",
+      "questionFa": "مخاطب این محتوا یا پوستر کیست؟",
+      "priority": 6,
+      "chips": [
+        {
+          "id": "b2c",
+          "labelFa": "مصرف‌کننده نهایی"
+        },
+        {
+          "id": "b2b",
+          "labelFa": "کسب‌وکارها و مدیران"
+        },
+        {
+          "id": "young",
+          "labelFa": "جوانان ۱۸ تا ۳۰ سال"
+        },
+        {
+          "id": "parents",
+          "labelFa": "والدین"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "مخاطب",
+        "مشتری",
+        "مصرف‌کننده",
+        "کاربر"
+      ]
+    },
+    {
+      "id": "product-service",
+      "questionFa": "محصول یا خدمت دقیقاً چیست؟",
+      "priority": 7,
+      "chips": [],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "دوره",
+        "موضوع",
+        "آموزش",
+        "محصول",
+        "خدمت",
+        "وبینار",
+        "کارگاه",
+        "کلاس",
+        "سمینار",
+        "رویداد"
+      ]
+    },
+    {
+      "id": "campaign-goal",
+      "questionFa": "هدف اصلی این کار چیست؟",
+      "priority": 8,
+      "chips": [
+        {
+          "id": "sales",
+          "labelFa": "افزایش فروش"
+        },
+        {
+          "id": "leads",
+          "labelFa": "دریافت سرنخ و تماس"
+        },
+        {
+          "id": "awareness",
+          "labelFa": "معرفی برند"
+        },
+        {
+          "id": "traffic",
+          "labelFa": "ترافیک سایت یا پیج"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "فروش",
+        "سرنخ",
+        "برند",
+        "ترافیک"
+      ]
+    },
+    {
+      "id": "brand-tone",
+      "questionFa": "لحن برند چطور است؟",
+      "priority": 9,
+      "chips": [
+        {
+          "id": "formal",
+          "labelFa": "رسمی و حرفه‌ای"
+        },
+        {
+          "id": "semi",
+          "labelFa": "نیمه‌رسمی"
+        },
+        {
+          "id": "friendly",
+          "labelFa": "صمیمی و خودمانی"
+        },
+        {
+          "id": "playful",
+          "labelFa": "طنز و جسورانه"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "لحن",
+        "رسمی",
+        "صمیمی",
+        "طنز"
+      ]
+    },
+    {
+      "id": "competitive-edge",
+      "questionFa": "مزیت اصلی شما نسبت به رقبا چیست؟",
+      "priority": 9,
+      "chips": [
+        {
+          "id": "price",
+          "labelFa": "قیمت مناسب‌تر"
+        },
+        {
+          "id": "quality",
+          "labelFa": "کیفیت بالاتر"
+        },
+        {
+          "id": "speed",
+          "labelFa": "سرعت اجرا"
+        },
+        {
+          "id": "support",
+          "labelFa": "پشتیبانی قوی"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "مزیت",
+        "تفاوت",
+        "بهتر از"
+      ]
+    },
+    {
+      "id": "length-limit",
+      "questionFa": "محدودیت طول متن چقدر است؟",
+      "priority": 9,
+      "chips": [
+        {
+          "id": "short",
+          "labelFa": "کوتاه؛ مثل تیتر و بیو"
+        },
+        {
+          "id": "medium",
+          "labelFa": "متوسط؛ مثل کپشن"
+        },
+        {
+          "id": "long",
+          "labelFa": "بلند؛ مثل صفحه فرود"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "کاراکتر",
+        "کلمه",
+        "کوتاه",
+        "بلند"
+      ]
+    },
+    {
+      "id": "platform",
+      "questionFa": "خروجی برای کدام پلتفرم است؟",
+      "priority": 9,
+      "chips": [
+        {
+          "id": "instagram",
+          "labelFa": "اینستاگرام"
+        },
+        {
+          "id": "google",
+          "labelFa": "تبلیغات گوگل"
+        },
+        {
+          "id": "telegram",
+          "labelFa": "تلگرام"
+        },
+        {
+          "id": "web",
+          "labelFa": "وب‌سایت"
+        },
+        {
+          "id": "email",
+          "labelFa": "ایمیل"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "اینستاگرام",
+        "گوگل",
+        "تلگرام",
+        "سایت",
+        "ایمیل"
       ]
     }
   ]

@@ -83,7 +83,7 @@
   "guardrails": [
     {
       "id": "no-generic-advice",
-      "doFa": "برای هر ادعا، مثال یا عدد مشخص بیان کن",
+      "doFa": "برای هر ادعا، مثال یا عدد مشخصِ موجود در ورودی بیاور",
       "dontFa": "توصیه کلی و بی‌ربط مثل «تحقیق کنید» یا «بهترین‌ها را انتخاب کنید» ننویس",
       "whyFa": "پاسخ کلی قابل استفاده نیست و خواننده را جایی نمی‌گذارد"
     },
@@ -107,7 +107,7 @@
     },
     {
       "id": "honesty-first",
-      "doFa": "اگر داده یا منبع لازم را نداری، صادقانه بگو و چیزی که می‌دانستنی نیست نشناس",
+      "doFa": "اگر داده یا منبع لازم را نداری، صادقانه همان را بگو و چیزی را که نمی‌دانی از خودت نساز",
       "dontFa": "آمار، منبع یا جزئیات واقعی‌نما نساز",
       "whyFa": "یک عدد ساختگی می‌تواند کل تصمیم را غلط کند"
     },
@@ -122,7 +122,7 @@
     {
       "id": "too-generic",
       "symptomFa": "پاسخ درست است اما برای هر موضوع دیگری هم می‌شد نوشتش",
-      "fixFa": "در پرامپت، مخاطب، هدف و محدودیت را با جزئیات مشخص کن و یک مثال از ورودی واقعی بده"
+      "fixFa": "مخاطب، هدف و محدودیت‌ها را از زمینه بردار و پاسخ را دقیقاً برای همان شرایط بنویس؛ از کلی‌گویی بپرهیز."
     },
     {
       "id": "rambling",
@@ -158,150 +158,15 @@
       "titleFa": "بریف طراحی پوستر رویداد",
       "targetAi": "any",
       "promptFa": "نقش: تو کارگردان هنری و طراح پوستر هستی؛ متخصص رویدادهای فرهنگی و آموزشی.\nهدف: بریف کامل طراحی پوستر برای جشن فارغ‌التحصیلی دانشجویان کارشناسی، تاریخ ۲۵ خرداد در سالن مرکزی دانشگاه.\nزمینه: رویداد رسمی اما صمیمی است؛ شرکت‌کنندگان، دانشجویان و خانواده‌هایشان هستند.\nروند کار: ۱) پیام اصلی جشن را در یک جمله تعریف کن. ۲) سلسله‌مراتب متن را بچین: عنوان، تاریخ و مکان، اطلاعات تماس. ۳) سبک و رنگ مناسب حال‌وهوا پیشنهاد بده. ۴) بریف نهایی را کامل بنویس.\nقالب خروجی: بریف طراحی با بخش‌های پیام اصلی، نسبت تصویر (۴:۵ برای پست و ۹:۱۶ برای استوری)، سلسله‌مراتب متن، عناصر اجباری، سبک و رنگ.\nمحدودیت‌ها: متن کوتاه و خوانا؛ فونت فارسی استاندارد؛ اطلاعات زمان و مکان کاملاً مشخص؛ بدون شلوغی بصری.\nمعیارهای کیفیت: خوانایی اطلاعات کلیدی در یک نگاه؛ هماهنگی سبک با حال‌وهوای رویداد.\nقاعده شفاف‌سازی: اگر اطلاعات ضروری کم است، حداکثر ۲ سؤال کوتاه بپرس."
+    },
+    {
+      "id": "graduation-poster-image-prompt",
+      "titleFa": "پرامپت تصویر پوستر جشن فارغ‌التحصیلی برای میدجرنی",
+      "targetAi": "midjourney",
+      "promptFa": "Vertical poster background for a university graduation celebration, elegant festive academic mood, soft golden-hour light, abstract composition of falling confetti and a stylized graduation cap silhouette, deep navy background with gold accents, large clean empty area in the middle and top for text, minimal modern design, dignified celebratory atmosphere, no people, no letters --ar 4:5 --v 6 --no text, watermark, logo\n\nلایهٔ متن (فارسی — جدا از پرامپت، بعداً روی تصویر اضافه کن):\n- تیتر (بالا، بزرگ‌ترین): «جشن فارغ‌التحصیلی ۱۴۰۴»\n- زیرتیتر: دانشکدهٔ مهندسی کامپیوتر\n- زمان: ۲۵ شهریور، ساعت ۱۸\n- مکان: سالن مرکزی دانشگاه"
     }
   ],
   "clarifyingQuestions": [
-    {
-      "id": "audience",
-      "questionFa": "این پاسخ برای چه کسی است؟",
-      "priority": 1,
-      "chips": [
-        {
-          "id": "self",
-          "labelFa": "خودم"
-        },
-        {
-          "id": "colleague",
-          "labelFa": "همکار یا مدیر"
-        },
-        {
-          "id": "customer",
-          "labelFa": "مشتری"
-        },
-        {
-          "id": "public",
-          "labelFa": "مخاطب عمومی"
-        }
-      ],
-      "allowFreeText": true,
-      "gapKeywordsFa": [
-        "برای من",
-        "مخاطب",
-        "خواننده",
-        "مشتری"
-      ]
-    },
-    {
-      "id": "purpose",
-      "questionFa": "با این پاسخ چه می‌خواهی انجام دهی؟",
-      "priority": 2,
-      "chips": [
-        {
-          "id": "learn",
-          "labelFa": "یاد گرفتن"
-        },
-        {
-          "id": "execute",
-          "labelFa": "اجرا کردن"
-        },
-        {
-          "id": "decide",
-          "labelFa": "تصمیم گرفتن"
-        },
-        {
-          "id": "write",
-          "labelFa": "نوشتن متن نهایی"
-        }
-      ],
-      "allowFreeText": true,
-      "gapKeywordsFa": [
-        "تصمیم",
-        "اجرا",
-        "یاد بگیرم",
-        "بنویسم"
-      ]
-    },
-    {
-      "id": "format",
-      "questionFa": "قالب مطلوب پاسخ چیست؟",
-      "priority": 3,
-      "chips": [
-        {
-          "id": "text",
-          "labelFa": "متن روان"
-        },
-        {
-          "id": "list",
-          "labelFa": "فهرست نکته‌ای"
-        },
-        {
-          "id": "table",
-          "labelFa": "جدول"
-        },
-        {
-          "id": "steps",
-          "labelFa": "گام‌به‌گام"
-        }
-      ],
-      "allowFreeText": true,
-      "gapKeywordsFa": [
-        "جدول",
-        "فهرست",
-        "مرحله",
-        "بخش"
-      ]
-    },
-    {
-      "id": "tone",
-      "questionFa": "لحن پاسخ چطور باشد؟",
-      "priority": 4,
-      "chips": [
-        {
-          "id": "formal",
-          "labelFa": "رسمی"
-        },
-        {
-          "id": "semi-formal",
-          "labelFa": "نیمه‌رسمی"
-        },
-        {
-          "id": "friendly",
-          "labelFa": "صمیمی"
-        }
-      ],
-      "allowFreeText": false,
-      "gapKeywordsFa": [
-        "لحن",
-        "رسمی",
-        "صمیمی"
-      ]
-    },
-    {
-      "id": "length",
-      "questionFa": "حجم تقریبی پاسخ چقدر باشد؟",
-      "priority": 5,
-      "chips": [
-        {
-          "id": "short",
-          "labelFa": "کوتاه (زیر ۱۵۰ کلمه)"
-        },
-        {
-          "id": "medium",
-          "labelFa": "متوسط (۱۵۰ تا ۴۰۰ کلمه)"
-        },
-        {
-          "id": "long",
-          "labelFa": "بلند (بالای ۴۰۰ کلمه)"
-        }
-      ],
-      "allowFreeText": false,
-      "gapKeywordsFa": [
-        "کوتاه",
-        "خلاصه",
-        "مفصل",
-        "کلمه"
-      ]
-    },
     {
       "id": "deliverable-type",
       "questionFa": "خروجی چه باشد؟",
@@ -353,6 +218,240 @@
         "جواب",
         "پاسخ",
         "متن"
+      ]
+    },
+    {
+      "id": "event-mode",
+      "questionFa": "برنامه حضوری است یا آنلاین؟",
+      "priority": 2,
+      "chips": [
+        {
+          "id": "inperson",
+          "labelFa": "حضوری"
+        },
+        {
+          "id": "online",
+          "labelFa": "آنلاین"
+        },
+        {
+          "id": "hybrid",
+          "labelFa": "ترکیبی"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "حضوری",
+        "آنلاین",
+        "ترکیبی"
+      ],
+      "appliesTo": [
+        "event"
+      ]
+    },
+    {
+      "id": "registration",
+      "questionFa": "راه ثبت‌نام یا تماس چیست؟",
+      "priority": 3,
+      "chips": [],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "ثبت‌نام",
+        "ثبت نام",
+        "لینک ثبت",
+        "شماره تماس",
+        "راه ارتباطی"
+      ],
+      "appliesTo": [
+        "event",
+        "design"
+      ]
+    },
+    {
+      "id": "event-time",
+      "questionFa": "ساعت برگزاری چه زمانی است؟",
+      "priority": 4,
+      "chips": [],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "ساعت"
+      ],
+      "appliesTo": [
+        "event"
+      ]
+    },
+    {
+      "id": "style-colors",
+      "questionFa": "سبک و رنگ دلخواه چیست؟",
+      "priority": 5,
+      "chips": [
+        {
+          "id": "minimal",
+          "labelFa": "مینیمال"
+        },
+        {
+          "id": "energetic",
+          "labelFa": "شاد و پرانرژی"
+        },
+        {
+          "id": "luxury",
+          "labelFa": "لوکس"
+        },
+        {
+          "id": "dark",
+          "labelFa": "تیره و جدی"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "سبک",
+        "رنگ",
+        "پالت رنگی",
+        "مینیمال",
+        "لوکس"
+      ],
+      "appliesTo": [
+        "design"
+      ]
+    },
+    {
+      "id": "audience",
+      "questionFa": "مخاطب این محتوا یا پوستر کیست؟",
+      "priority": 6,
+      "chips": [
+        {
+          "id": "self",
+          "labelFa": "خودم"
+        },
+        {
+          "id": "colleague",
+          "labelFa": "همکار یا مدیر"
+        },
+        {
+          "id": "customer",
+          "labelFa": "مشتری"
+        },
+        {
+          "id": "public",
+          "labelFa": "مخاطب عمومی"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "برای من",
+        "مخاطب",
+        "خواننده",
+        "مشتری"
+      ]
+    },
+    {
+      "id": "purpose",
+      "questionFa": "با این پاسخ چه می‌خواهی انجام دهی؟",
+      "priority": 7,
+      "chips": [
+        {
+          "id": "learn",
+          "labelFa": "یاد گرفتن"
+        },
+        {
+          "id": "execute",
+          "labelFa": "اجرا کردن"
+        },
+        {
+          "id": "decide",
+          "labelFa": "تصمیم گرفتن"
+        },
+        {
+          "id": "write",
+          "labelFa": "نوشتن متن نهایی"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "تصمیم",
+        "اجرا",
+        "یاد بگیرم",
+        "بنویسم"
+      ]
+    },
+    {
+      "id": "format",
+      "questionFa": "قالب مطلوب پاسخ چیست؟",
+      "priority": 8,
+      "chips": [
+        {
+          "id": "text",
+          "labelFa": "متن روان"
+        },
+        {
+          "id": "list",
+          "labelFa": "فهرست نکته‌ای"
+        },
+        {
+          "id": "table",
+          "labelFa": "جدول"
+        },
+        {
+          "id": "steps",
+          "labelFa": "گام‌به‌گام"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "جدول",
+        "فهرست",
+        "مرحله",
+        "بخش"
+      ]
+    },
+    {
+      "id": "length",
+      "questionFa": "حجم تقریبی پاسخ چقدر باشد؟",
+      "priority": 9,
+      "chips": [
+        {
+          "id": "short",
+          "labelFa": "کوتاه (زیر ۱۵۰ کلمه)"
+        },
+        {
+          "id": "medium",
+          "labelFa": "متوسط (۱۵۰ تا ۴۰۰ کلمه)"
+        },
+        {
+          "id": "long",
+          "labelFa": "بلند (بالای ۴۰۰ کلمه)"
+        }
+      ],
+      "allowFreeText": false,
+      "gapKeywordsFa": [
+        "کوتاه",
+        "خلاصه",
+        "مفصل",
+        "کلمه"
+      ]
+    },
+    {
+      "id": "tone",
+      "questionFa": "لحن پاسخ چطور باشد؟",
+      "priority": 9,
+      "chips": [
+        {
+          "id": "formal",
+          "labelFa": "رسمی"
+        },
+        {
+          "id": "semi-formal",
+          "labelFa": "نیمه‌رسمی"
+        },
+        {
+          "id": "friendly",
+          "labelFa": "صمیمی"
+        }
+      ],
+      "allowFreeText": false,
+      "gapKeywordsFa": [
+        "لحن",
+        "رسمی",
+        "صمیمی"
       ]
     }
   ]

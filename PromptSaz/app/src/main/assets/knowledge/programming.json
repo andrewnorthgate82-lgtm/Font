@@ -176,7 +176,7 @@
     {
       "id": "pseudo-code-output",
       "symptomFa": "پاسخ پر از «...» و «به همین ترتیب» است و اجرا نمی‌شود",
-      "fixFa": "در پرامپت بخواه کد کامل قابل کامپایل باشد و صریحاً شبه‌کد و حذف بخش‌ها را ممنوع کن"
+      "fixFa": "کد را کامل و قابل کامپایل بنویس؛ شبه‌کد، «بقیه مشابه است» و حذف بخش‌ها ممنوع است."
     },
     {
       "id": "hallucinated-api",
@@ -221,9 +221,102 @@
   ],
   "clarifyingQuestions": [
     {
+      "id": "event-mode",
+      "questionFa": "برنامه حضوری است یا آنلاین؟",
+      "priority": 2,
+      "chips": [
+        {
+          "id": "inperson",
+          "labelFa": "حضوری"
+        },
+        {
+          "id": "online",
+          "labelFa": "آنلاین"
+        },
+        {
+          "id": "hybrid",
+          "labelFa": "ترکیبی"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "حضوری",
+        "آنلاین",
+        "ترکیبی"
+      ],
+      "appliesTo": [
+        "event"
+      ]
+    },
+    {
+      "id": "registration",
+      "questionFa": "راه ثبت‌نام یا تماس چیست؟",
+      "priority": 3,
+      "chips": [],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "ثبت‌نام",
+        "ثبت نام",
+        "لینک ثبت",
+        "شماره تماس",
+        "راه ارتباطی"
+      ],
+      "appliesTo": [
+        "event",
+        "design"
+      ]
+    },
+    {
+      "id": "event-time",
+      "questionFa": "ساعت برگزاری چه زمانی است؟",
+      "priority": 4,
+      "chips": [],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "ساعت"
+      ],
+      "appliesTo": [
+        "event"
+      ]
+    },
+    {
+      "id": "style-colors",
+      "questionFa": "سبک و رنگ دلخواه چیست؟",
+      "priority": 5,
+      "chips": [
+        {
+          "id": "minimal",
+          "labelFa": "مینیمال"
+        },
+        {
+          "id": "energetic",
+          "labelFa": "شاد و پرانرژی"
+        },
+        {
+          "id": "luxury",
+          "labelFa": "لوکس"
+        },
+        {
+          "id": "dark",
+          "labelFa": "تیره و جدی"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "سبک",
+        "رنگ",
+        "پالت رنگی",
+        "مینیمال",
+        "لوکس"
+      ],
+      "appliesTo": [
+        "design"
+      ]
+    },
+    {
       "id": "language-stack",
       "questionFa": "با چه زبان یا فریم‌ورکی کار می‌کنی؟",
-      "priority": 1,
+      "priority": 6,
       "chips": [
         {
           "id": "kotlin",
@@ -266,7 +359,7 @@
     {
       "id": "skill-level",
       "questionFa": "سطح آشنایی تو با این حوزه چقدر است؟",
-      "priority": 2,
+      "priority": 7,
       "chips": [
         {
           "id": "beginner",
@@ -287,7 +380,7 @@
     {
       "id": "output-type",
       "questionFa": "چه نوع خروجی می‌خواهی؟",
-      "priority": 3,
+      "priority": 8,
       "chips": [
         {
           "id": "code",
@@ -317,7 +410,7 @@
     {
       "id": "context",
       "questionFa": "کد یا خطای مربوطه را کجا بگذاریم؟",
-      "priority": 4,
+      "priority": 9,
       "chips": [
         {
           "id": "will-paste",
@@ -334,7 +427,7 @@
     {
       "id": "environment",
       "questionFa": "محیط و محدودیت‌های پروژه چیست؟",
-      "priority": 5,
+      "priority": 9,
       "chips": [
         {
           "id": "personal",
@@ -359,7 +452,7 @@
     {
       "id": "testing-need",
       "questionFa": "تست هم می‌خواهی؟",
-      "priority": 6,
+      "priority": 9,
       "chips": [
         {
           "id": "yes",

@@ -1,5 +1,6 @@
 package com.promptsaz.app.domain.engine.style
 
+import com.promptsaz.app.domain.engine.facts.IdeaFactsExtractor
 import com.promptsaz.app.domain.model.PromptSection
 import com.promptsaz.app.domain.model.PromptSpec
 
@@ -8,6 +9,11 @@ import com.promptsaz.app.domain.model.PromptSpec
  * parameters. Roles, process steps and clarification rules are genuinely
  * irrelevant here, so those parts are intentionally folded into the scene
  * description (allowed by the product spec).
+ *
+ * Per user feedback the image is built WITHOUT any text (image models break
+ * Persian letters); a separate «لایهٔ متن» block lists the Persian text the
+ * user adds later in Canva/Photoshop, and the negative list forbids text,
+ * watermarks, logos and garbled letters.
  */
 class ImageModelStyleAdapter : TargetStyleAdapter {
 
@@ -21,9 +27,18 @@ class ImageModelStyleAdapter : TargetStyleAdapter {
         val descriptor = buildString {
             append("$subject, ")
             append(style)
-            append(", sharp focus, high detail")
+            append(", large clean empty areas for text, sharp focus, high detail")
         }
-        return descriptor.take(MAX_WORDS_CHUNK).trim() + " --ar 4:5 --v 6 --no text, watermark"
+        val prompt = descriptor.take(MAX_WORDS_CHUNK).trim() +
+            " --ar 4:5 --v 6 --no text, watermark, logo, letters"
+
+        val textLayer = IdeaFactsExtractor.extract(spec.idea).entries
+        return if (textLayer.isEmpty()) {
+            prompt
+        } else {
+            prompt + "\n\nلایهٔ متن (فارسی — جدا از پرامپت، بعداً روی تصویر اضافه کن):\n" +
+                textLayer.joinToString("\n") { fact -> "- ${fact.labelFa}: ${fact.valueFa}" }
+        }
     }
 
     private companion object {

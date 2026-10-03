@@ -35,6 +35,10 @@ jobs:
         run: |
           set -o pipefail
           ./gradlew :app:testDebugUnitTest --stacktrace > /tmp/gradle.log 2>&1 || {
+            grep -E "FAILED|tests completed|AssertionError" /tmp/gradle.log | head -40 | sed 's/^/::error::/' || true
+            find app/build/test-results -name "*.xml" 2>/dev/null | while read f; do
+              grep -o 'message="[^"]*"' "$f" 2>/dev/null | head -3 | sed "s|^|::error::$(basename "$f"): |" || true
+            done
             grep -E "error:|^e: |Caused by|What went wrong|Could not" /tmp/gradle.log | head -25 | sed 's/^/::error::/' || true
             exit 1
           }

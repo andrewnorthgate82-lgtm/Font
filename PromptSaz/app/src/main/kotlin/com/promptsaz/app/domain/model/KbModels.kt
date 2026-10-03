@@ -104,12 +104,18 @@ data class KbExample(
 data class KbClarifyingQuestion(
     val id: String,
     val questionFa: String,
-    /** Lower = asked earlier (1 = first). The engine shows at most 4 questions. */
+    /** Lower = asked earlier (1 = first). The engine shows at most 5 questions. */
     val priority: Int,
     val chips: List<KbChip> = emptyList(),
     val allowFreeText: Boolean = true,
     /** Keywords that, when present in the idea, mark this gap as already answered. */
     val gapKeywordsFa: List<String> = emptyList(),
+    /**
+     * Task categories this question applies to (design / event / calendar /
+     * video / text). Empty = asked for every task. Lets poster questions
+     * (سبک و رنگ، ثبت‌نام…) appear only where they make sense.
+     */
+    val appliesTo: List<String> = emptyList(),
 )
 
 @Serializable

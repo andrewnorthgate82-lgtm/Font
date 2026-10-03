@@ -117,6 +117,21 @@ added. Platform names (اینستاگرام، تلگرام…) never change the 
 Every ready domain should therefore contain at least one design persona and
 one complete design example.
 
+## Task-scoped questions (appliesTo)
+
+A question may carry an `appliesTo` list: `design`, `event`, `calendar`, `video`, `text`.
+A task-scoped question is only asked when the idea is that kind of task (for example
+«سبک و رنگ دلخواه چیست؟» only for design work). Event questions (حضوری/آنلاین، ساعت
+برگزاری، راه ثبت‌نام) only appear when an event is detected in the idea (دوره، کارگاه،
+جشن و…). No `appliesTo` means "always applicable".
+
+## Image-prompt examples
+
+An example with `targetAi` = `midjourney` is a complete image prompt: one English
+paragraph with tool parameters plus a separate Persian «لایهٔ متن». These examples are
+selected only for the «پرامپت ساخت تصویر» deliverable — a brief example never takes
+their place, and vice versa.
+
 ## Validation
 
 ```bash

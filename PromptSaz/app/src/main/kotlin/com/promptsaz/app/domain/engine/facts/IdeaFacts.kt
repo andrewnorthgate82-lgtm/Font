@@ -8,8 +8,13 @@ import com.promptsaz.app.util.toPersianDigits
  * prompt context, drive the "never re-ask what the user already said" rule,
  * and suppress placeholder variables for information that is already known.
  *
- * Extractors are deliberately conservative: a missing fact is always better
- * than a wrong one.
+ * Extraction is LABEL-BASED: a field starts at its label (موضوع، مدرس،
+ * تاریخ، مدت، ساعت، مکان، بستر، قیمت، مخاطب، ثبت‌نام…) and ends at the
+ * NEXT label, the end of the line, or the end of the sentence — whichever
+ * comes first. This works with colons, without colons, multi-line and
+ * single-line input. Values are trimmed of connector words («از»، «به»،
+ * «هست»…) at both ends. Extractors are deliberately conservative: a missing
+ * fact is always better than a wrong one.
  */
 data class IdeaFacts(val entries: List<Fact>) {
 
@@ -28,9 +33,52 @@ data class IdeaFacts(val entries: List<Fact>) {
     val isEmpty: Boolean get() = entries.isEmpty()
 }
 
-enum class FactCategory { SUBJECT, EVENT, INSTRUCTOR, DATE, DURATION, PLATFORM, PRICE, AUDIENCE }
+enum class FactCategory {
+    SUBJECT, EVENT, INSTRUCTOR, DATE, TIME, DURATION, PLATFORM,
+    LOCATION, MODE, PRICE, AUDIENCE, REGISTRATION,
+}
 
 object IdeaFactsExtractor {
+
+    private data class FieldLabel(
+        val pattern: Regex,
+        val category: FactCategory,
+        val labelFa: String,
+        /** Value is the label word itself (حضوری / آنلاین). */
+        val selfValue: Boolean = false,
+    )
+
+    /** All labels that can start a field. Word-boundary guarded at match time. */
+    private val labels = listOf(
+        FieldLabel(Regex("موضوع\\s*(?:آموزشی|اصلی)?"), FactCategory.SUBJECT, "موضوع"),
+        FieldLabel(Regex("(?:مدرس|استاد|سخنران|برگزارکننده|گوینده)"), FactCategory.INSTRUCTOR, "مدرس"),
+        FieldLabel(Regex("تاریخ\\s*(?:برگزاری|شروع)?"), FactCategory.DATE, "تاریخ"),
+        FieldLabel(Regex("ساعت\\s*(?:برگزاری)?"), FactCategory.TIME, "ساعت"),
+        FieldLabel(Regex("مدت(?:\\s*زمان)?"), FactCategory.DURATION, "مدت"),
+        FieldLabel(Regex("(?:مکان|محل)(?:\\s*برگزاری)?"), FactCategory.LOCATION, "مکان"),
+        FieldLabel(
+            Regex("بستر(?:\\s*(?:و\\s*)?(?:تبلیغ|انتشار|نشر))*"),
+            FactCategory.PLATFORM,
+            "بستر انتشار",
+        ),
+        FieldLabel(Regex("(?:پلتفرم|کانال\\s*انتشار)"), FactCategory.PLATFORM, "پلتفرم"),
+        FieldLabel(Regex("(?:قیمت|هزینه)"), FactCategory.PRICE, "قیمت"),
+        FieldLabel(Regex("مخاطبان?"), FactCategory.AUDIENCE, "مخاطب"),
+        FieldLabel(
+            Regex("(?:ثبت[‌ ]?نام|راه\\s*ارتباطی|شماره\\s*تماس|لینک\\s*ثبت)"),
+            FactCategory.REGISTRATION,
+            "راه ثبت‌نام",
+        ),
+        FieldLabel(Regex("حضوری"), FactCategory.MODE, "شیوه برگزاری", selfValue = true),
+        FieldLabel(Regex("آنلاین"), FactCategory.MODE, "شیوه برگزاری", selfValue = true),
+        FieldLabel(Regex("ترکیبی"), FactCategory.MODE, "شیوه برگزاری", selfValue = true),
+    )
+
+    /** Event words for the (label-less) EVENT fact. */
+    private val eventRegex = Regex(
+        "(دوره|وبینار|کارگاه|سمینار|کلاس|همایش|جلسه|رویداد|جشن|مراسم|کنسرت|نمایشگاه)" +
+            "(?:\\s+(آموزشی|تخصصی|آنلاین|حضوری|معرفی))?",
+    )
 
     private val months = listOf(
         "فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور",
@@ -49,85 +97,204 @@ object IdeaFactsExtractor {
         "فیسبوک", "آپارات", "وبسایت", "وب‌سایت", "سایت", "وبلاگ", "پادکست",
     )
 
-    private val dateRegex = Regex("[۰-۹0-9]{1,2}\\s*(${months.joinToString("|")})")
-    private val durationRegex = Regex(
+    private val dateFallbackRegex = Regex("[۰-۹0-9]{1,2}\\s*(${months.joinToString("|")})")
+    private val durationFallbackRegex = Regex(
         "(?:به\\s*مدت|مدت)\\s*([۰-۹0-9]{1,3}|${wordNumbers.keys.joinToString("|")})\\s*(روز|هفته|ماه|ساعت|دقیقه|ثانیه)",
     )
-    private val bareDurationRegex = Regex(
-        "([۰-۹0-9]{1,3})\\s*(روز|هفته|ماه)ه?\\s",
+
+    /** Connector words stripped from the start/end of a field value. */
+    private val leadingConnectors = listOf("از", "به", "برای", "با", "در", "که", "و", "هم")
+    private val trailingConnectors = listOf(
+        "از", "به", "تا", "و", "برای", "است", "هست", "بود", "شد", "می‌باشد", "خواهد بود",
     )
-    private val instructorRegex =
-        Regex("(?:مدرس|استاد|سخنران|برگزارکننده|گوینده)\\s*[:،]?\\s*([آ-ی ة‌]{3,40})")
-    private val subjectRegex = Regex("موضوع\\s*(?:آموزشی|اصلی)?\\s*[:،]?\\s*([^،.؛:\\n\\r]{3,50})")
-    private val audienceRegex = Regex("(?:مخاطب|مخاطبان)\\s*[:،]?\\s*([^،.؛:\\n\\r]{3,50})")
-    private val eventRegex =
-        Regex("(دوره|وبینار|کارگاه|سمینار|کلاس|همایش|جلسه|رویداد)(?:\\s+(آموزشی|تخصصی|آنلاین|حضوری|معرفی))?")
 
     fun extract(idea: String): IdeaFacts {
         val text = idea
             .replace("ي", "ی")
             .replace("ك", "ک")
-            .replace(Regex("\\s+"), " ")
+            .replace(Regex("[ \\t]+"), " ")
             .trim()
-        val facts = mutableListOf<IdeaFacts.Fact>()
+        if (text.isEmpty()) return IdeaFacts(emptyList())
 
-        eventRegex.find(text)?.let { match ->
-            val phrase = (match.groupValues[1] + " " + match.groupValues[2]).trim()
-            facts += IdeaFacts.Fact("نوع رویداد", phrase, FactCategory.EVENT)
-        }
-        subjectRegex.find(text)?.let { match ->
-            facts += IdeaFacts.Fact("موضوع", clean(match.groupValues[1]), FactCategory.SUBJECT)
-        }
-        instructorRegex.find(text)?.let { match ->
-            facts += IdeaFacts.Fact("مدرس", clean(match.groupValues[1]), FactCategory.INSTRUCTOR)
-        }
-        dateRegex.find(text)?.let { match ->
-            facts += IdeaFacts.Fact(
-                "تاریخ",
-                normalizeNumber(match.groupValues[0]).replace("  ", " "),
-                FactCategory.DATE,
-            )
-        }
-        (durationRegex.find(text) ?: bareDurationRegex.find(text))?.let { match ->
-            val number = normalizeNumber(match.groupValues[1])
-            facts += IdeaFacts.Fact("مدت", "$number ${match.groupValues[2]}", FactCategory.DURATION)
-        }
-        platforms.filter { text.contains(it) }.forEach { platform ->
-            facts += IdeaFacts.Fact("پلتفرم/بستر انتشار", platform, FactCategory.PLATFORM)
-        }
-        if (text.contains("رایگان")) {
-            facts += IdeaFacts.Fact("قیمت", "رایگان", FactCategory.PRICE)
-        } else {
-            Regex("([۰-۹0-9،٬]+\\s*(?:تومان|ریال|میلیون))").find(text)?.let { match ->
-                facts += IdeaFacts.Fact("قیمت", normalizeNumber(match.groupValues[1]), FactCategory.PRICE)
+        val facts = mutableListOf<IdeaFacts.Fact>()
+        var locationFromMode: String? = null
+
+        // --- 1. label-based fields ------------------------------------------------
+        val matches = findAllLabels(text)
+        matches.forEachIndexed { index, match ->
+            val valueStart = match.range.last + 1
+            val valueEnd = if (index + 1 < matches.size) matches[index + 1].range.first else text.length
+            val raw = text.substring(valueStart, valueEnd)
+
+            val value = when {
+                match.label.selfValue -> {
+                    // «حضوری در تهران» → MODE=حضوری + LOCATION=تهران
+                    Regex("\\s*در\\s+([^،.؛:!؟\\n]{2,30})").find(raw)?.let { placeMatch ->
+                        locationFromMode = cleanValue(placeMatch.groupValues[1], cutAtConjunction = false)
+                    }
+                    match.text
+                }
+                else -> cleanValue(raw, cutAtConjunction = match.label.category == FactCategory.INSTRUCTOR)
+            }
+            if (value.isNotBlank()) {
+                facts += IdeaFacts.Fact(match.label.labelFa, normalizeNumbers(value), match.label.category)
             }
         }
-        audienceRegex.find(text)?.let { match ->
-            facts += IdeaFacts.Fact("مخاطب", clean(match.groupValues[1]), FactCategory.AUDIENCE)
+        locationFromMode?.let { facts += IdeaFacts.Fact("مکان", it, FactCategory.LOCATION) }
+
+        // --- 2. label-less fallbacks (only for categories not found yet) ----------
+        val present = facts.map { it.category }.toSet()
+        if (FactCategory.EVENT !in present) {
+            eventRegex.find(text)?.let { match ->
+                val phrase = (match.groupValues[1] + " " + match.groupValues[2]).trim()
+                facts += IdeaFacts.Fact("نوع رویداد", phrase, FactCategory.EVENT)
+            }
+        }
+        if (FactCategory.DATE !in present) {
+            dateFallbackRegex.find(text)?.let { match ->
+                facts += IdeaFacts.Fact(
+                    "تاریخ",
+                    normalizeNumbers(match.groupValues[0]).replace("  ", " "),
+                    FactCategory.DATE,
+                )
+            }
+        }
+        if (FactCategory.DURATION !in present) {
+            durationFallbackRegex.find(text)?.let { match ->
+                val number = normalizeNumbers(match.groupValues[1])
+                facts += IdeaFacts.Fact("مدت", "$number ${match.groupValues[2]}", FactCategory.DURATION)
+            }
+        }
+        if (FactCategory.PLATFORM !in present) {
+            platforms.firstOrNull { text.contains(it) }?.let { platform ->
+                facts += IdeaFacts.Fact("پلتفرم/بستر انتشار", platform, FactCategory.PLATFORM)
+            }
+        }
+        if (FactCategory.PRICE !in present) {
+            when {
+                text.contains("رایگان") -> facts += IdeaFacts.Fact("قیمت", "رایگان", FactCategory.PRICE)
+                Regex("([۰-۹0-9،٬]+\\s*(?:تومان|ریال|میلیون))").find(text)?.let { match ->
+                    facts += IdeaFacts.Fact("قیمت", normalizeNumbers(match.groupValues[1]), FactCategory.PRICE)
+                    true
+                } != null -> Unit
+                else -> Unit
+            }
         }
 
-        // De-duplicate by category, keep first (most reliable) occurrence.
-        return IdeaFacts(facts.distinctBy { it.category to it.labelFa })
+        // Keep first (earliest, most reliable) fact per category, in text order.
+        val deduped = facts.distinctBy { it.category }.sortedBy { fact ->
+            matches.firstOrNull { it.label.category == fact.category }?.range?.first ?: Int.MAX_VALUE
+        }
+        return IdeaFacts(deduped)
     }
 
-    /** Trims filler verbs/pronouns and cuts the value where a new clause begins. */
-    private fun clean(raw: String): String = raw
-        .trim()
-        .split(Regex("\\s+(هستند|هستیم|می‌خواهم|می‌خواهیم|می‌خوام|می‌خواه|برای|تا)\\s"))[0]
-        .replace(Regex("^(ما|من|همه)\\s+"), "")
-        .replace(Regex("\\s*(هست|است|می\\s*باشد|بود)\\s*$"), "")
-        .replace(Regex("\\s+"), " ")
-        .trim()
+    private data class LabelMatch(
+        val range: IntRange,
+        val label: FieldLabel,
+        val text: String,
+    )
 
-    private fun normalizeNumber(raw: String): String {
-        val latin = raw.trim().toEnglishDigitsOrWord()
-        return latin.toPersianDigits()
+    /** Finds all label occurrences that stand as whole words, sorted by position. */
+    private fun findAllLabels(text: String): List<LabelMatch> {
+        val result = mutableListOf<LabelMatch>()
+        labels.forEach { label ->
+            label.pattern.findAll(text).forEach { match ->
+                var start = match.range.first
+                var end = match.range.last
+                // Label patterns like «موضوع\s*(…)» swallow the separator
+                // space; trim it back so the word-boundary check and the
+                // value slice stay correct.
+                while (end > start && text[end].isWhitespace()) end--
+                while (start < end && text[start].isWhitespace()) start++
+                val beforeOk = start == 0 || !text[start - 1].isLetterOrDigit()
+                val afterOk = end == text.length - 1 || !text[end + 1].isLetterOrDigit()
+                if (beforeOk && afterOk) {
+                    result += LabelMatch(start..end, label, text.substring(start, end + 1))
+                }
+            }
+        }
+        return result
+            .sortedWith(compareBy({ it.range.first }, { it.range.last }))
+            .fold(mutableListOf<LabelMatch>()) { acc, match ->
+                // drop matches overlapping an already-accepted label span
+                if (acc.none { it.range.overlaps(match.range) }) acc += match
+                acc
+            }
     }
 
-    private fun String.toEnglishDigitsOrWord(): String {
-        val asEnglish = StringBuilder()
-        for (ch in this) {
-            asEnglish.append(
+    private fun IntRange.overlaps(other: IntRange): Boolean =
+        first <= other.last && other.first <= last
+
+    /**
+     * Index of the first real sentence boundary (end of line, ؛!؟, or a
+     * period followed by space/end). A period between letters or digits
+     * (site.com، ۴.۵) is not a boundary. Null when there is none.
+     */
+    private fun sentenceCut(value: String): Int? {
+        var best: Int? = null
+        fun consider(index: Int) {
+            if (index >= 0 && (best == null || index < best!!)) best = index
+        }
+        for (ch in listOf('؛', '!', '؟', '\n')) consider(value.indexOf(ch))
+        var dot = value.indexOf('.')
+        while (dot >= 0) {
+            val next = dot + 1
+            if (next >= value.length || !value[next].isLetterOrDigit()) {
+                consider(dot)
+                break
+            }
+            dot = value.indexOf('.', next)
+        }
+        return best
+    }
+
+    /**
+     * Trims a raw field slice into a clean value: stops at the first sentence
+     * boundary or line break, strips punctuation and connector words at both
+     * ends, and (for person names) cuts at conjunctions. A period inside a
+     * word (site.com، ۴.۵) is NOT a sentence boundary.
+     */
+    private fun cleanValue(raw: String, cutAtConjunction: Boolean): String {
+        var value = raw
+        val cut = sentenceCut(value)
+        if (cut != null) value = value.substring(0, cut)
+        value = value.trim()
+            .trim(':', '،', ';', ' ')
+        // Person values stop at conjunctions/relative pronouns.
+        if (cutAtConjunction) {
+            value = value.split(Regex("\\s+(?:و|که)\\s+"))[0]
+        }
+        // Strip leading connector words (از، به، برای…).
+        var stripped = value
+        var changed = true
+        while (changed) {
+            changed = false
+            leadingConnectors.forEach { connector ->
+                val token = "$connector "
+                if (stripped.startsWith(token)) {
+                    stripped = stripped.removePrefix(token).trim(); changed = true
+                }
+            }
+        }
+        // Strip trailing connector words (به، تا، است، هست…).
+        changed = true
+        while (changed) {
+            changed = false
+            trailingConnectors.forEach { connector ->
+                val token = " $connector"
+                if (stripped.endsWith(token)) {
+                    stripped = stripped.removeSuffix(token).trim(); changed = true
+                }
+            }
+        }
+        stripped = stripped.trim(':', '،', '.', '؛', ' ')
+        return if (stripped.length > MAX_VALUE_LEN) stripped.take(MAX_VALUE_LEN).trim() else stripped
+    }
+
+    private fun normalizeNumbers(value: String): String {
+        val english = StringBuilder()
+        for (ch in value) {
+            english.append(
                 when (ch) {
                     in '۰'..'۹' -> '0' + (ch - '۰')
                     in '٠'..'٩' -> '0' + (ch - '٠')
@@ -135,7 +302,11 @@ object IdeaFactsExtractor {
                 },
             )
         }
-        val text = asEnglish.toString()
-        return wordNumbers[text] ?: text
+        val text = english.toString()
+        return wordNumbers.entries.fold(text) { acc, (word, digit) ->
+            acc.replace(Regex("(?<![\\p{L}\\p{N}])$word(?![\\p{L}\\p{N}])"), digit)
+        }.toPersianDigits()
     }
+
+    private const val MAX_VALUE_LEN = 60
 }

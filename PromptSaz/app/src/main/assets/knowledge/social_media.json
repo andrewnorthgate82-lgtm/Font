@@ -194,7 +194,7 @@
     {
       "id": "weak-hook",
       "symptomFa": "ویدیو از ثانیه سوم به بعد افت شدید دارد",
-      "fixFa": "در پرامپت بخواه ۵ گزینه قلاب با زوایای متفاوت (درد، عدد، سؤال، خلاف انتظار) نوشته شود و بهترین انتخاب و دلیلش را بگوید"
+      "fixFa": "پنج گزینه قلاب با زوایای متفاوت (درد، عدد، سؤال، خلاف انتظار) پیشنهاد بده و بهترین را با دلیل انتخاب کن."
     },
     {
       "id": "too-long",
@@ -241,201 +241,15 @@
       "titleFa": "بریف طراحی کاور پیج و پوستر معرفی",
       "targetAi": "any",
       "promptFa": "نقش: تو طراح گرافیک شبکه‌های اجتماعی هستی؛ متخصص کاور، پوستر و هویت بصری پیج.\nهدف: بریف طراحی کاور پیج اینستاگرام برای کافه «رانتسیا» با حال‌وهوای گرم و نشاط‌آور.\nزمینه: منوی کافه قهوه تخصصی و دسرهای خانگی است؛ مخاطب، جوانان ۲۰ تا ۳۵ سال شهر هستند.\nروند کار: ۱) پیام اصلی کاور را انتخاب کن. ۲) ترکیب‌بندی و تایپوگرافی فارسی خوانا پیشنهاد بده. ۳) پالت رنگی گرم هماهنگ با لوگو تعریف کن. ۴) بریف نهایی را کامل بنویس.\nقالب خروجی: بریف طراحی شامل پیام اصلی، ابعاد (۱۰۸۰ در ۱۰۸۰ پیکسل با نسبت ۱:۱)، تایپوگرافی، عناصر اجباری (لوگو و نام کافه)، سبک و رنگ.\nمحدودیت‌ها: کاور در نمای کوچک خوانا باشد؛ حداکثر دو سطح متن؛ بدون شلوغی و افکت اضافه.\nمعیارهای کیفیت: تشخیص هویت کافه در یک نگاه؛ خوانایی نام؛ یکدستی با پست‌های قبلی.\nقاعده شفاف‌سازی: اگر اطلاعات ضروری کم است، حداکثر ۲ سؤال کوتاه بپرس."
+    },
+    {
+      "id": "cafe-post-image-prompt",
+      "titleFa": "پرامپت تصویر پست اینستاگرام کافه برای میدجرنی",
+      "targetAi": "midjourney",
+      "promptFa": "Vertical Instagram post background for a cozy specialty coffee shop, warm flat-lay style, top-down view of a ceramic cup with latte art on a rustic wooden table, scattered coffee beans and a small notebook, soft natural window light, warm brown and cream palette, generous negative space in the upper half for a headline and a clear thin strip at the bottom for a call to action, appetizing calm mood, no people, no letters --ar 4:5 --v 6 --no text, watermark, logo\n\nلایهٔ متن (فارسی — جدا از پرامپت، بعداً روی تصویر اضافه کن):\n- تیتر (نیمهٔ بالایی): «صبح‌هایت را با ما گرم کن»\n- زیرتیتر: کافهٔ اسپشیالیتی — دانهٔ تازه‌برشت\n- دعوت به اقدام (نوار پایینی): تا ۳۰ مهر، اردوی صبحگاهی رایگان"
     }
   ],
   "clarifyingQuestions": [
-    {
-      "id": "content-topic",
-      "questionFa": "موضوع محتوا چیست؟",
-      "priority": 1,
-      "chips": [],
-      "allowFreeText": true,
-      "gapKeywordsFa": [
-        "موضوع",
-        "محصول",
-        "معرفی",
-        "آموزش",
-        "دوره",
-        "برند"
-      ]
-    },
-    {
-      "id": "platform",
-      "questionFa": "برای کدام پلتفرم می‌خواهی؟",
-      "priority": 2,
-      "chips": [
-        {
-          "id": "reels",
-          "labelFa": "ریلز اینستاگرام"
-        },
-        {
-          "id": "shorts",
-          "labelFa": "یوتیوب شورتز"
-        },
-        {
-          "id": "post",
-          "labelFa": "پست اینستاگرام"
-        },
-        {
-          "id": "telegram",
-          "labelFa": "تلگرام"
-        }
-      ],
-      "allowFreeText": true,
-      "gapKeywordsFa": [
-        "ریلز",
-        "شورتز",
-        "پست",
-        "تلگرام"
-      ]
-    },
-    {
-      "id": "audience",
-      "questionFa": "مخاطب پیج چه کسانی‌اند؟",
-      "priority": 3,
-      "chips": [
-        {
-          "id": "general",
-          "labelFa": "مخاطب عمومی"
-        },
-        {
-          "id": "business",
-          "labelFa": "کسب‌وکارکارها"
-        },
-        {
-          "id": "students",
-          "labelFa": "دانش‌آموز و دانشجو"
-        },
-        {
-          "id": "women",
-          "labelFa": "زنان ۲۵ تا ۴۵ سال"
-        }
-      ],
-      "allowFreeText": true,
-      "gapKeywordsFa": [
-        "مخاطب",
-        "فالوور",
-        "مخاطبین"
-      ]
-    },
-    {
-      "id": "video-length",
-      "questionFa": "طول ویدیو چقدر باشد؟",
-      "priority": 4,
-      "chips": [
-        {
-          "id": "s15",
-          "labelFa": "حدود ۱۵ ثانیه"
-        },
-        {
-          "id": "s30",
-          "labelFa": "حدود ۳۰ ثانیه"
-        },
-        {
-          "id": "s60",
-          "labelFa": "حدود ۶۰ ثانیه"
-        },
-        {
-          "id": "no-video",
-          "labelFa": "ویدیو نیست؛ متن است"
-        }
-      ],
-      "allowFreeText": false,
-      "gapKeywordsFa": [
-        "ثانیه",
-        "دقیقه"
-      ]
-    },
-    {
-      "id": "tone",
-      "questionFa": "لحن محتوا چطور باشد؟",
-      "priority": 5,
-      "chips": [
-        {
-          "id": "educational",
-          "labelFa": "آموزشی و صمیمی"
-        },
-        {
-          "id": "motivational",
-          "labelFa": "انگیزشی"
-        },
-        {
-          "id": "funny",
-          "labelFa": "طنز"
-        },
-        {
-          "id": "story",
-          "labelFa": "روایی و داستانی"
-        }
-      ],
-      "allowFreeText": true,
-      "gapKeywordsFa": [
-        "لحن",
-        "طنز",
-        "آموزشی",
-        "داستان"
-      ]
-    },
-    {
-      "id": "goal",
-      "questionFa": "هدف این محتوا چیست؟",
-      "priority": 6,
-      "chips": [
-        {
-          "id": "sell",
-          "labelFa": "فروش محصول یا خدمت"
-        },
-        {
-          "id": "growth",
-          "labelFa": "رشد فالوور"
-        },
-        {
-          "id": "teach",
-          "labelFa": "آموزش"
-        },
-        {
-          "id": "trust",
-          "labelFa": "اعتمادسازی"
-        }
-      ],
-      "allowFreeText": true,
-      "gapKeywordsFa": [
-        "فروش",
-        "فالوور",
-        "آموزش",
-        "اعتماد"
-      ]
-    },
-    {
-      "id": "cta",
-      "questionFa": "در پایان از مخاطب چه بخواهیم؟",
-      "priority": 7,
-      "chips": [
-        {
-          "id": "save",
-          "labelFa": "ذخیره و اشتراک‌گذاری"
-        },
-        {
-          "id": "comment",
-          "labelFa": "کامنت گذاشتن"
-        },
-        {
-          "id": "dm",
-          "labelFa": "ارسال پیام"
-        },
-        {
-          "id": "link",
-          "labelFa": "رفتن به لینک بیو"
-        }
-      ],
-      "allowFreeText": true,
-      "gapKeywordsFa": [
-        "کامنت",
-        "ذخیره",
-        "لینک",
-        "پیام بده"
-      ]
-    },
     {
       "id": "deliverable-type",
       "questionFa": "خروجی چه باشد؟",
@@ -487,6 +301,291 @@
         "جواب",
         "پاسخ",
         "متن"
+      ]
+    },
+    {
+      "id": "event-mode",
+      "questionFa": "برنامه حضوری است یا آنلاین؟",
+      "priority": 2,
+      "chips": [
+        {
+          "id": "inperson",
+          "labelFa": "حضوری"
+        },
+        {
+          "id": "online",
+          "labelFa": "آنلاین"
+        },
+        {
+          "id": "hybrid",
+          "labelFa": "ترکیبی"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "حضوری",
+        "آنلاین",
+        "ترکیبی"
+      ],
+      "appliesTo": [
+        "event"
+      ]
+    },
+    {
+      "id": "registration",
+      "questionFa": "راه ثبت‌نام یا تماس چیست؟",
+      "priority": 3,
+      "chips": [],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "ثبت‌نام",
+        "ثبت نام",
+        "لینک ثبت",
+        "شماره تماس",
+        "راه ارتباطی"
+      ],
+      "appliesTo": [
+        "event",
+        "design"
+      ]
+    },
+    {
+      "id": "event-time",
+      "questionFa": "ساعت برگزاری چه زمانی است؟",
+      "priority": 4,
+      "chips": [],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "ساعت"
+      ],
+      "appliesTo": [
+        "event"
+      ]
+    },
+    {
+      "id": "style-colors",
+      "questionFa": "سبک و رنگ دلخواه چیست؟",
+      "priority": 5,
+      "chips": [
+        {
+          "id": "minimal",
+          "labelFa": "مینیمال"
+        },
+        {
+          "id": "energetic",
+          "labelFa": "شاد و پرانرژی"
+        },
+        {
+          "id": "luxury",
+          "labelFa": "لوکس"
+        },
+        {
+          "id": "dark",
+          "labelFa": "تیره و جدی"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "سبک",
+        "رنگ",
+        "پالت رنگی",
+        "مینیمال",
+        "لوکس"
+      ],
+      "appliesTo": [
+        "design"
+      ]
+    },
+    {
+      "id": "content-topic",
+      "questionFa": "موضوع محتوا چیست؟",
+      "priority": 6,
+      "chips": [],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "موضوع",
+        "محصول",
+        "معرفی",
+        "آموزش",
+        "دوره",
+        "برند"
+      ]
+    },
+    {
+      "id": "audience",
+      "questionFa": "مخاطب این محتوا یا پوستر کیست؟",
+      "priority": 7,
+      "chips": [
+        {
+          "id": "general",
+          "labelFa": "مخاطب عمومی"
+        },
+        {
+          "id": "business",
+          "labelFa": "کسب‌وکارکارها"
+        },
+        {
+          "id": "students",
+          "labelFa": "دانش‌آموز و دانشجو"
+        },
+        {
+          "id": "women",
+          "labelFa": "زنان ۲۵ تا ۴۵ سال"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "مخاطب",
+        "فالوور",
+        "مخاطبین"
+      ]
+    },
+    {
+      "id": "tone",
+      "questionFa": "لحن محتوا چطور باشد؟",
+      "priority": 8,
+      "chips": [
+        {
+          "id": "educational",
+          "labelFa": "آموزشی و صمیمی"
+        },
+        {
+          "id": "motivational",
+          "labelFa": "انگیزشی"
+        },
+        {
+          "id": "funny",
+          "labelFa": "طنز"
+        },
+        {
+          "id": "story",
+          "labelFa": "روایی و داستانی"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "لحن",
+        "طنز",
+        "آموزشی",
+        "داستان"
+      ]
+    },
+    {
+      "id": "cta",
+      "questionFa": "در پایان از مخاطب چه بخواهیم؟",
+      "priority": 9,
+      "chips": [
+        {
+          "id": "save",
+          "labelFa": "ذخیره و اشتراک‌گذاری"
+        },
+        {
+          "id": "comment",
+          "labelFa": "کامنت گذاشتن"
+        },
+        {
+          "id": "dm",
+          "labelFa": "ارسال پیام"
+        },
+        {
+          "id": "link",
+          "labelFa": "رفتن به لینک بیو"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "کامنت",
+        "ذخیره",
+        "لینک",
+        "پیام بده"
+      ]
+    },
+    {
+      "id": "goal",
+      "questionFa": "هدف این محتوا چیست؟",
+      "priority": 9,
+      "chips": [
+        {
+          "id": "sell",
+          "labelFa": "فروش محصول یا خدمت"
+        },
+        {
+          "id": "growth",
+          "labelFa": "رشد فالوور"
+        },
+        {
+          "id": "teach",
+          "labelFa": "آموزش"
+        },
+        {
+          "id": "trust",
+          "labelFa": "اعتمادسازی"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "فروش",
+        "فالوور",
+        "آموزش",
+        "اعتماد"
+      ]
+    },
+    {
+      "id": "platform",
+      "questionFa": "برای کدام پلتفرم می‌خواهی؟",
+      "priority": 9,
+      "chips": [
+        {
+          "id": "reels",
+          "labelFa": "ریلز اینستاگرام"
+        },
+        {
+          "id": "shorts",
+          "labelFa": "یوتیوب شورتز"
+        },
+        {
+          "id": "post",
+          "labelFa": "پست اینستاگرام"
+        },
+        {
+          "id": "telegram",
+          "labelFa": "تلگرام"
+        }
+      ],
+      "allowFreeText": true,
+      "gapKeywordsFa": [
+        "ریلز",
+        "شورتز",
+        "پست",
+        "تلگرام"
+      ]
+    },
+    {
+      "id": "video-length",
+      "questionFa": "طول ویدیو چقدر باشد؟",
+      "priority": 9,
+      "chips": [
+        {
+          "id": "s15",
+          "labelFa": "حدود ۱۵ ثانیه"
+        },
+        {
+          "id": "s30",
+          "labelFa": "حدود ۳۰ ثانیه"
+        },
+        {
+          "id": "s60",
+          "labelFa": "حدود ۶۰ ثانیه"
+        },
+        {
+          "id": "no-video",
+          "labelFa": "ویدیو نیست؛ متن است"
+        }
+      ],
+      "allowFreeText": false,
+      "gapKeywordsFa": [
+        "ثانیه",
+        "دقیقه"
       ]
     }
   ]

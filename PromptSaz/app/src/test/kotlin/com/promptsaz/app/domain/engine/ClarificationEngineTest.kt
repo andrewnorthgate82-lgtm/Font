@@ -54,10 +54,10 @@ class ClarificationEngineTest {
     )
 
     @Test
-    fun `asks at most four questions sorted by priority`() {
+    fun `asks at most five questions sorted by priority`() {
         val questions = engine.questionsFor(kb, "یک ایده ساده")
-        assertEquals(4, questions.size)
-        assertEquals(listOf(1, 2, 3, 4), questions.map { it.priority })
+        assertEquals(5, questions.size)
+        assertEquals(listOf(1, 2, 3, 4, 5), questions.map { it.priority })
     }
 
     @Test
