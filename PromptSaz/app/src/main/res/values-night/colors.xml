@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="starting_background">#0E1B1E</color>
+    <!-- Boot window background at night — matches the dark theme (#0F0F17). -->
+    <color name="starting_background">#0F0F17</color>
 </resources>

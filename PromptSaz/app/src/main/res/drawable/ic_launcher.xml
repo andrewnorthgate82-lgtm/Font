@@ -1,20 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Launcher icon: teal rounded square with a white four-point "prompt spark". -->
+<!-- Launcher icon: indigo→violet brand gradient with a white "prompt spark". -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <path android:pathData="M24,4 h60 a20,20 0 0 1 20,20 v60 a20,20 0 0 1 -20,20 h-60 a20,20 0 0 1 -20,-20 v-60 a20,20 0 0 1 20,-20 z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="0"
+                android:startY="0"
+                android:endX="108"
+                android:endY="108"
+                android:type="linear">
+                <item
+                    android:color="#FF4F46E5"
+                    android:offset="0.0" />
+                <item
+                    android:color="#FF8B5CF6"
+                    android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
     <path
-        android:fillColor="#004F58"
-        android:pathData="M24,4 h60 a20,20 0 0 1 20,20 v60 a20,20 0 0 1 -20,20 h-60 a20,20 0 0 1 -20,-20 v-60 a20,20 0 0 1 20,-20 z" />
-    <path
-        android:fillColor="#83F5F0"
+        android:fillColor="#FFFFFFFF"
         android:pathData="M54,22 L59.5,42.5 L80,48 L59.5,53.5 L54,74 L48.5,53.5 L28,48 L48.5,42.5 Z" />
     <path
-        android:fillColor="#83F5F0"
+        android:fillColor="#FFF59E0B"
         android:pathData="M78,70 m-4,0 a4,4 0 1 0 8,0 a4,4 0 1 0 -8,0" />
     <path
-        android:fillColor="#83F5F0"
+        android:fillColor="#B3FFFFFF"
         android:pathData="M32,82 m-3,0 a3,3 0 1 0 6,0 a3,3 0 1 0 -6,0" />
 </vector>
