@@ -74,12 +74,6 @@ room {
     schemaDirectory("$projectDir/schemas")
 }
 
-hilt {
-    // KSP2-safe aggregation: the ASM aggregating task cannot resolve
-    // annotations in the same module under built-in Kotlin + KSP 2.3.x.
-    enableAggregatingTask = false
-}
-
 ksp {
     arg("room.generateKotlin", "true")
 }
