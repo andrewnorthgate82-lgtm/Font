@@ -6,18 +6,11 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.ViewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewModelScope
-import com.promptsaz.app.domain.model.AppSettings
-import com.promptsaz.app.domain.repository.SettingsRepository
 import com.promptsaz.app.ui.nav.AppNavHost
 import com.promptsaz.app.ui.theme.PromptSazTheme
 import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.stateIn
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -35,12 +28,4 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-}
-
-@HiltViewModel
-class MainViewModel @Inject constructor(
-    settingsRepository: SettingsRepository,
-) : ViewModel() {
-    val settings = settingsRepository.settings
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppSettings())
 }
