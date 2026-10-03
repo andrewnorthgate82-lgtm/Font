@@ -287,7 +287,7 @@ class OpenAiCompatibleProvider @Inject constructor(
         }
     }
 
-    private companion object {
+    companion object {
         const val ID = "openai_compatible"
         const val DISPLAY_NAME_FA = "سازگار با OpenAI (Codecraft و مشابه)"
 
