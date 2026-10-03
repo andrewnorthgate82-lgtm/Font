@@ -25,7 +25,6 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
-import kotlinx.serialization.encodeToJsonElement
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -381,7 +380,7 @@ class OpenAiCompatibleProvider @Inject constructor(
         val element = json.encodeToJsonElement(serializer, request)
         val obj = element as? JsonObject ?: return json.encodeToString(serializer, request)
         return if (obj["max_tokens"] is JsonNull) {
-            JsonObject(obj.filterKeys { it.key != "max_tokens" }).toString()
+            JsonObject(obj.filterKeys { it != "max_tokens" }).toString()
         } else {
             obj.toString()
         }
