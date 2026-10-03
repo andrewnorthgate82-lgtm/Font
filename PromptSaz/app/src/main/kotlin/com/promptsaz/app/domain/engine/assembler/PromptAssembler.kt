@@ -51,7 +51,7 @@ class PromptAssembler @Inject constructor() {
         val sections = mutableListOf<PromptSection>()
 
         sections += role(spec, kb, facts, outputType, taskCategory, quick, expert)
-        sections += objective(spec, facts, outputType, taskCategory, variables, idea)
+        sections += objective(spec, facts, outputType, taskCategory, variables)
         sections += context(spec, kb, idea, facts, answered, expert)
         sections += inputs(variables)
         if (!isImageOrVideo(spec, outputType)) {

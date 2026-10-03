@@ -60,7 +60,6 @@ object IdeaFactsExtractor {
         Regex("(?:مدرس|استاد|سخنران|برگزارکننده|گوینده)\\s*[:،]?\\s*([آ-ی ة‌]{3,40})")
     private val subjectRegex = Regex("موضوع\\s*(?:آموزشی|اصلی)?\\s*[:،]?\\s*([^،.؛:\\n\\r]{3,50})")
     private val audienceRegex = Regex("(?:مخاطب|مخاطبان)\\s*[:،]?\\s*([^،.؛:\\n\\r]{3,50})")
-    private val brandRegex = Regex("(?:برند|شرکت)\\s*[:،]?\\s*([^،.؛:\\n\\r]{2,30})")
     private val eventRegex =
         Regex("(دوره|وبینار|کارگاه|سمینار|کلاس|همایش|جلسه|رویداد)(?:\\s+(آموزشی|تخصصی|آنلاین|حضوری|معرفی))?")
 
@@ -106,18 +105,18 @@ object IdeaFactsExtractor {
         audienceRegex.find(text)?.let { match ->
             facts += IdeaFacts.Fact("مخاطب", clean(match.groupValues[1]), FactCategory.AUDIENCE)
         }
-        brandRegex.find(text)?.let { match ->
-            facts += IdeaFacts.Fact("برند", clean(match.groupValues[1]), FactCategory.BRAND)
-        }
 
         // De-duplicate by category, keep first (most reliable) occurrence.
         return IdeaFacts(facts.distinctBy { it.category to it.labelFa })
     }
 
-    /** Trims filler verbs and whitespace the user may have trailing in the sentence. */
+    /** Trims filler verbs/pronouns and cuts the value where a new clause begins. */
     private fun clean(raw: String): String = raw
         .trim()
+        .split(Regex("\\s+(هستند|هستیم|می‌خواهم|می‌خواهیم|می‌خوام|می‌خواه|برای|تا)\\s"))[0]
+        .replace(Regex("^(ما|من|همه)\\s+"), "")
         .replace(Regex("\\s*(هست|است|می\\s*باشد|بود)\\s*$"), "")
+        .replace(Regex("\\s+"), " ")
         .trim()
 
     private fun normalizeNumber(raw: String): String {
