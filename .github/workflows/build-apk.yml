@@ -23,7 +23,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -38,12 +38,13 @@ jobs:
         run: |
           set -o pipefail
           ./gradlew :app:testDebugUnitTest --stacktrace > /tmp/gradle.log 2>&1 || {
-            echo "=== GRADLE FAILURE (key lines) ==="
-            grep -nE "FAILURE|error:|^e: |Caused by|What went wrong|Could not|Unsupported|requires|incompatible|Unable to|Problem" /tmp/gradle.log | head -40 || true
-            echo "=== LAST 40 LINES ==="
-            tail -n 40 /tmp/gradle.log || true
-            echo "=== dumping key lines as annotations ==="
-            grep -E "error:|^e: |Caused by|What went wrong|Could not|Unsupported|requires|incompatible" /tmp/gradle.log | head -20 | sed 's/^/::error::/' || true
+            {
+              echo "### Gradle unit-test failure"
+              echo '```'
+              tail -n 150 /tmp/gradle.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            grep -E "error:|^e: |Caused by|What went wrong|Could not|Unsupported|requires|incompatible|compile against" /tmp/gradle.log | head -25 | sed 's/^/::error::/' || true
             exit 1
           }
 
@@ -51,11 +52,13 @@ jobs:
         run: |
           set -o pipefail
           ./gradlew :app:assembleDebug --stacktrace > /tmp/gradle-build.log 2>&1 || {
-            echo "=== GRADLE FAILURE (key lines) ==="
-            grep -nE "FAILURE|error:|^e: |Caused by|What went wrong|Could not|Unsupported|requires|incompatible|Unable to|Problem" /tmp/gradle-build.log | head -40 || true
-            echo "=== LAST 40 LINES ==="
-            tail -n 40 /tmp/gradle-build.log || true
-            grep -E "error:|^e: |Caused by|What went wrong|Could not|Unsupported|requires|incompatible" /tmp/gradle-build.log | head -20 | sed 's/^/::error::/' || true
+            {
+              echo "### Gradle build failure"
+              echo '```'
+              tail -n 150 /tmp/gradle-build.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            grep -E "error:|^e: |Caused by|What went wrong|Could not|Unsupported|requires|incompatible|compile against" /tmp/gradle-build.log | head -25 | sed 's/^/::error::/' || true
             exit 1
           }
 

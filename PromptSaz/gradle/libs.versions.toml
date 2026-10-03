@@ -8,10 +8,14 @@
 #     (per Google's official agp-9-upgrade skill, updated 2026-09-18). Both are satisfied.
 
 [versions]
-agp = "9.4.0"
-kotlin = "2.4.20"
-ksp = "2.3.12"
-hilt = "2.60.1"
+# Toolchain pinned to the Google-verified AGP-9 set (Now in Android, Sept 2026):
+# Kotlin 2.3.0 + KSP 2.3.6 (>= 2.3.6 required on AGP 9) + Hilt 2.59.2 (>= 2.59.2
+# required on AGP 9). Kotlin 2.4.20 made Dagger's KSP InjectProcessingStep fail
+# to resolve @HiltViewModel ("HiltViewModel could not be resolved").
+agp = "9.3.2"
+kotlin = "2.3.0"
+ksp = "2.3.6"
+hilt = "2.59.2"
 androidxHiltLifecycleViewmodel = "1.4.0"
 androidxCore = "1.19.0"
 androidxActivityCompose = "1.13.0"
