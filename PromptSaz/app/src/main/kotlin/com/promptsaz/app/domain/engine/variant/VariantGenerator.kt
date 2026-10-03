@@ -2,6 +2,7 @@ package com.promptsaz.app.domain.engine.variant
 
 import com.promptsaz.app.domain.model.PromptSection
 import com.promptsaz.app.domain.model.SectionKind
+import com.promptsaz.app.util.toPersianDigits
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -32,7 +33,8 @@ class VariantGenerator @Inject constructor() {
                 body = section.body + "\n- یک زاویه غیرکلیشه‌ای و به‌یادماندنی پیدا کن؛ اما هرگز به قیمت واقع‌گرایی و دقت نه.",
             )
             SectionKind.QUALITY -> section.copy(
-                body = section.body + "\n${section.body.lines().size}) تازگی: ایده‌ی اصلی از کلیشه‌های تکراری فاصله بگیرد.",
+                body = section.body + "\n" +
+                    "${(section.body.lines().size).toPersianDigits()}) تازگی: ایدهٔ اصلی از کلیشه‌های تکراری فاصله بگیرد.",
             )
             else -> section
         }

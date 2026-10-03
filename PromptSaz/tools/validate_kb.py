@@ -114,6 +114,11 @@ def validate_domain(kb: dict, file_name: str) -> None:
         check_persian("titleFa", s.get("titleFa", ""), w, min_len=3)
         check_persian("descriptionFa", s.get("descriptionFa", ""), w, min_len=20)
         check_persian("templateFa", s.get("templateFa", ""), w, min_len=40)
+        keywords = s.get("keywordsFa", [])
+        if not isinstance(keywords, list) or any(
+            not isinstance(k, str) or len(k.strip()) < 2 for k in keywords
+        ):
+            err(f"{w}: 'keywordsFa' must be a list of non-empty strings")
     check_unique_ids(structures, "id", f"{where}.outputStructures")
 
     # guardrails

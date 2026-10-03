@@ -64,6 +64,12 @@ data class KbOutputStructure(
     val titleFa: String,
     val descriptionFa: String,
     val templateFa: String,
+    /**
+     * When non-empty, this structure is ONLY offered when the user's idea
+     * contains one of these keywords (e.g. a content calendar must be
+     * explicitly requested). Empty means the structure is always a candidate.
+     */
+    val keywordsFa: List<String> = emptyList(),
 )
 
 @Serializable

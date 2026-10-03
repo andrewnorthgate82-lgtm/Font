@@ -98,6 +98,24 @@ they show as «به‌زودی» in the UI.
 - **priorities are 1–9**; the engine asks at most 4 questions, sorted by priority.
 - **`gapKeywordsFa`** are checked against the user's idea: if any keyword is
   present, that question is considered already answered and is not asked.
+  The engine additionally auto-skips questions whose answer it extracted as a
+  fact from the idea (subject, platform, date, duration, instructor, price,
+  audience) — the user is never re-asked anything they already said.
+- **Examples are never truncated** — no `…`/`...` inside `promptFa`; the
+  validator rejects them.
+- **`keywordsFa` on structures** gates niche structures (content calendar,
+  shot list, content pillars) behind explicit request; without the keyword
+  they never win the selection.
+
+### Design/output routing (engine, automatic)
+
+Words like پوستر، بنر، لوگو، کاور، طراحی، تصویر route to design work in EVERY
+domain: a designer persona is preferred, the deliverable becomes a designer
+brief (or an image prompt / normal text when the user answers the
+«خروجی چه باشد؟» question differently), and poster-specific constraints are
+added. Platform names (اینستاگرام، تلگرام…) never change the deliverable.
+Every ready domain should therefore contain at least one design persona and
+one complete design example.
 
 ## Validation
 

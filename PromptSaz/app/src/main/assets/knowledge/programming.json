@@ -156,7 +156,7 @@
     {
       "id": "meaningful-names",
       "doFa": "نام‌ها را طوری انتخاب کن که توضیح لازم برای کامنت نماند",
-      "dontFa": "نام‌های تک‌حرفی و کلی مثل data2 و tempMgr نگذار",
+      "dontFa": "نام‌های تک‌حرفی و کلی مثل data و temp نگذار",
       "whyFa": "خوانایی، ویژگی شماره یک کدی است که سال‌ها زنده می‌ماند"
     },
     {
@@ -225,22 +225,61 @@
       "questionFa": "با چه زبان یا فریم‌ورکی کار می‌کنی؟",
       "priority": 1,
       "chips": [
-        { "id": "kotlin", "labelFa": "کاتلین / اندروید" },
-        { "id": "web-js", "labelFa": "جاوااسکریپت / React" },
-        { "id": "python", "labelFa": "پایتون" },
-        { "id": "backend", "labelFa": "بک‌اند (Node، Java، Go…)" }
+        {
+          "id": "kotlin",
+          "labelFa": "کاتلین / اندروید"
+        },
+        {
+          "id": "web-js",
+          "labelFa": "جاوااسکریپت / React"
+        },
+        {
+          "id": "python",
+          "labelFa": "پایتون"
+        },
+        {
+          "id": "backend",
+          "labelFa": "بک‌اند (Node، Java، Go…)"
+        }
       ],
       "allowFreeText": true,
-      "gapKeywordsFa": ["پایتون", "کاتلین", "جاوا", "React", "Node"]
+      "gapKeywordsFa": [
+        "پایتون",
+        "کاتلین",
+        "جاوا",
+        "React",
+        "Node",
+        "فلاتر",
+        "flutter",
+        "ری‌اکت",
+        "react",
+        "django",
+        "جنگو",
+        "لاراول",
+        "اندروید",
+        "ios",
+        "سوییفت",
+        "swift",
+        "kotlin"
+      ]
     },
     {
       "id": "skill-level",
       "questionFa": "سطح آشنایی تو با این حوزه چقدر است؟",
       "priority": 2,
       "chips": [
-        { "id": "beginner", "labelFa": "مبتدی؛ توضیح ساده بخواه" },
-        { "id": "intermediate", "labelFa": "متوسط" },
-        { "id": "advanced", "labelFa": "پیشرفته؛ مستقیم سراغ کد برو" }
+        {
+          "id": "beginner",
+          "labelFa": "مبتدی؛ توضیح ساده بخواه"
+        },
+        {
+          "id": "intermediate",
+          "labelFa": "متوسط"
+        },
+        {
+          "id": "advanced",
+          "labelFa": "پیشرفته؛ مستقیم سراغ کد برو"
+        }
       ],
       "allowFreeText": false,
       "gapKeywordsFa": []
@@ -250,21 +289,44 @@
       "questionFa": "چه نوع خروجی می‌خواهی؟",
       "priority": 3,
       "chips": [
-        { "id": "code", "labelFa": "کد آماده اجرا" },
-        { "id": "review", "labelFa": "بازبینی کد من" },
-        { "id": "explain", "labelFa": "توضیح مفهوم" },
-        { "id": "debug", "labelFa": "رفع باگ" }
+        {
+          "id": "code",
+          "labelFa": "کد آماده اجرا"
+        },
+        {
+          "id": "review",
+          "labelFa": "بازبینی کد من"
+        },
+        {
+          "id": "explain",
+          "labelFa": "توضیح مفهوم"
+        },
+        {
+          "id": "debug",
+          "labelFa": "رفع باگ"
+        }
       ],
       "allowFreeText": true,
-      "gapKeywordsFa": ["بازبینی", "توضیح", "باگ", "پیاده‌سازی"]
+      "gapKeywordsFa": [
+        "بازبینی",
+        "توضیح",
+        "باگ",
+        "پیاده‌سازی"
+      ]
     },
     {
       "id": "context",
       "questionFa": "کد یا خطای مربوطه را کجا بگذاریم؟",
       "priority": 4,
       "chips": [
-        { "id": "will-paste", "labelFa": "خودم در ورودی می‌گذارم" },
-        { "id": "from-scratch", "labelFa": "از صفر شروع می‌کنیم" }
+        {
+          "id": "will-paste",
+          "labelFa": "خودم در ورودی می‌گذارم"
+        },
+        {
+          "id": "from-scratch",
+          "labelFa": "از صفر شروع می‌کنیم"
+        }
       ],
       "allowFreeText": false,
       "gapKeywordsFa": []
@@ -274,23 +336,46 @@
       "questionFa": "محیط و محدودیت‌های پروژه چیست؟",
       "priority": 5,
       "chips": [
-        { "id": "personal", "labelFa": "پروژه شخصی؛ آزادیم" },
-        { "id": "production", "labelFa": "محیط عملیاتی؛ محتاط باش" },
-        { "id": "learning", "labelFa": "هدف یادگیری است" }
+        {
+          "id": "personal",
+          "labelFa": "پروژه شخصی؛ آزادیم"
+        },
+        {
+          "id": "production",
+          "labelFa": "محیط عملیاتی؛ محتاط باش"
+        },
+        {
+          "id": "learning",
+          "labelFa": "هدف یادگیری است"
+        }
       ],
       "allowFreeText": true,
-      "gapKeywordsFa": ["production", "عملیاتی", "شخصی"]
+      "gapKeywordsFa": [
+        "production",
+        "عملیاتی",
+        "شخصی"
+      ]
     },
     {
       "id": "testing-need",
       "questionFa": "تست هم می‌خواهی؟",
       "priority": 6,
       "chips": [
-        { "id": "yes", "labelFa": "بله؛ با تست واحد" },
-        { "id": "no", "labelFa": "نه؛ فقط کد" }
+        {
+          "id": "yes",
+          "labelFa": "بله؛ با تست واحد"
+        },
+        {
+          "id": "no",
+          "labelFa": "نه؛ فقط کد"
+        }
       ],
       "allowFreeText": false,
-      "gapKeywordsFa": ["تست", "junit", "pytest"]
+      "gapKeywordsFa": [
+        "تست",
+        "junit",
+        "pytest"
+      ]
     }
   ]
 }

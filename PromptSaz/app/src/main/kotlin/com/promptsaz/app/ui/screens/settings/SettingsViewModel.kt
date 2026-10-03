@@ -13,6 +13,7 @@ import com.promptsaz.app.domain.provider.ProviderHealth
 import com.promptsaz.app.domain.provider.ProviderRegistry
 import com.promptsaz.app.domain.repository.KbRepository
 import com.promptsaz.app.domain.repository.SettingsRepository
+import com.promptsaz.app.util.toPersianDigits
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -132,7 +133,7 @@ class SettingsViewModel @Inject constructor(
                         it.copy(
                             testing = false,
                             testResult = true to "اتصال موفق ✓" +
-                                if (count > 0) " ($count مدل پیدا شد)" else "",
+                                if (count > 0) " (${count.toPersianDigits()} مدل پیدا شد)" else "",
                             models = health.models,
                         )
                     }
