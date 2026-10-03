@@ -27,10 +27,10 @@ class SecureKeyStore @Inject constructor(
     val isAvailable: Boolean get() = prefs != null
 
     /** Returns true when a non-blank key is stored. */
-    fun hasApiKey(): Boolean = !getApiKey().isNullOrBlank()
+    override fun hasApiKey(): Boolean = !getApiKey().isNullOrBlank()
 
     /** Raw key — used only by the network layer. Never log or export this value. */
-    fun getApiKey(): String? = prefs?.getString(KEY_API, null)?.takeIf { it.isNotBlank() }
+    override fun getApiKey(): String? = prefs?.getString(KEY_API, null)?.takeIf { it.isNotBlank() }
 
     fun saveApiKey(value: String) {
         prefs?.edit()?.putString(KEY_API, value.trim())?.apply()
