@@ -565,9 +565,11 @@ class PromptAssembler @Inject constructor() {
         }
     }
 
-    /** Tokens used for relevance scoring — platform names removed per user rule. */
+    /** Tokens used for relevance scoring — platform names and Persian
+     *  function words (برای، های، …) removed: they match everything and
+     *  nothing, so they must never pick the persona/structure/example. */
     private fun scoringTokens(text: String): Set<String> =
-        tokenize(text).filterNot { it in OutputRouter.platformTokens }.toSet()
+        tokenize(text).filterNot { it in OutputRouter.platformTokens || it in STOPWORDS }.toSet()
 
     private fun tokenize(text: String): Set<String> =
         text.replace("ي", "ی").replace("ك", "ک")
@@ -610,6 +612,10 @@ class PromptAssembler @Inject constructor() {
         val LENGTH_QUESTION_IDS = setOf("length-limit", "video-length", "length")
         val DESIGN_PERSONA_TOKENS = setOf(
             "پوستر", "طراح", "طراحی", "گرافیک", "هنری", "بصری", "بنر", "لوگو", "کاور", "هویت",
+        )
+        val STOPWORDS = setOf(
+            "برای", "های", "این", "آن", "با", "از", "که", "را", "تا", "یا", "هم", "روی",
+            "می", "کنم", "کنیم", "شود", "شده", "دارد", "است", "هست",
         )
         val VIDEO_EXAMPLE_TOKENS = listOf("ویدیو", "ریلز", "شورتز", "تیزر", "صحنه", "شات", "دوربین")
     }
