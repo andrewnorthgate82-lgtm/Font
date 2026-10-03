@@ -12,8 +12,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Archive
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Cloud
@@ -168,9 +168,9 @@ fun HomeScreen(
             )
             Icon(
                 imageVector = if (optionsExpanded) {
-                    Icons.AutoMirrored.Rounded.KeyboardArrowUp
+                    Icons.Rounded.KeyboardArrowUp
                 } else {
-                    Icons.AutoMirrored.Rounded.KeyboardArrowDown
+                    Icons.Rounded.KeyboardArrowDown
                 },
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,

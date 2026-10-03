@@ -15,6 +15,7 @@ import com.promptsaz.app.domain.provider.ProviderRegistry
 import com.promptsaz.app.domain.repository.KbRepository
 import com.promptsaz.app.domain.repository.PromptRepository
 import com.promptsaz.app.domain.repository.SettingsRepository
+import com.promptsaz.app.domain.usecase.toArchived
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -43,6 +44,7 @@ class ImprovePromptUseCase @Inject constructor(
         val report: ImprovementReport,
         val result: GeneratedPrompt,
         val savedId: Long,
+        val groupId: String,
         val aiErrorFa: String? = null,
     )
 
@@ -87,11 +89,9 @@ class ImprovePromptUseCase @Inject constructor(
             )
         }
 
-        val now = System.currentTimeMillis()
         val groupId = UUID.randomUUID().toString()
-        val savedId = promptRepository.save(
-            finalResult.toArchived(groupId, createdAt = now, updatedAt = now),
-        )
+        val now = System.currentTimeMillis()
+        val savedId = promptRepository.save(finalResult.toArchived(groupId, now, now))
         return Outcome(report, finalResult, savedId, groupId, aiError)
     }
 }

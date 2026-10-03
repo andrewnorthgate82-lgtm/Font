@@ -1,10 +1,5 @@
 package com.promptsaz.app.data.remote
 
-import com.promptsaz.app.data.remote.ProviderModels.ChatCompletionRequestDto
-import com.promptsaz.app.data.remote.ProviderModels.ChatCompletionResponseDto
-import com.promptsaz.app.data.remote.ProviderModels.ChatMessageDto
-import com.promptsaz.app.data.remote.ProviderModels.GenerationReplyDto
-import com.promptsaz.app.data.remote.ProviderModels.ModelsResponseDto
 import com.promptsaz.app.data.settings.SecureKeyStore
 import com.promptsaz.app.di.IoDispatcher
 import com.promptsaz.app.domain.model.DomainKnowledge

@@ -1,6 +1,7 @@
 package com.promptsaz.app.domain.engine
 
 import com.promptsaz.app.domain.engine.improve.PromptAnalyzer
+import com.promptsaz.app.domain.engine.improve.toQualityReport
 import com.promptsaz.app.domain.model.DetailLevel
 import com.promptsaz.app.domain.model.PromptSpec
 import com.promptsaz.app.domain.model.TargetAi
@@ -63,7 +64,7 @@ class PromptAnalyzerTest {
     @Test
     fun `findings convert to a quality report with fix suggestions`() {
         val report = analyzer.analyze("کمک کن", spec)
-        val quality = com.promptsaz.app.domain.engine.improve.toQualityReport(report)
+        val quality = report.toQualityReport()
         assertTrue(quality.total < 100)
         assertTrue(quality.suggestionsFa.isNotEmpty())
         assertEquals(report.findings.map { it.fixFa }.distinct(), quality.suggestionsFa)

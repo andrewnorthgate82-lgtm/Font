@@ -48,18 +48,22 @@ class PromptRepositoryImpl @Inject constructor(
         dao.upsertAll(prompts.map { it.toEntity().copy(id = 0L) })
     }
 
-    override suspend fun update(prompt: ArchivedPrompt) = withContext(ioDispatcher) {
+    override suspend fun update(prompt: ArchivedPrompt) {
         require(prompt.id != 0L) { "Cannot update a prompt without an id" }
-        dao.upsert(prompt.toEntity())
+        withContext(ioDispatcher) {
+            dao.upsert(prompt.toEntity())
+        }
     }
 
     override suspend fun delete(id: Long) = withContext(ioDispatcher) {
         dao.deleteById(id)
     }
 
-    override suspend fun toggleFavorite(id: Long) = withContext(ioDispatcher) {
-        dao.getPrompt(id)?.let { row ->
-            dao.setFavorite(id, !row.isFavorite, System.currentTimeMillis())
+    override suspend fun toggleFavorite(id: Long) {
+        withContext(ioDispatcher) {
+            dao.getPrompt(id)?.let { row ->
+                dao.setFavorite(id, !row.isFavorite, System.currentTimeMillis())
+            }
         }
     }
 

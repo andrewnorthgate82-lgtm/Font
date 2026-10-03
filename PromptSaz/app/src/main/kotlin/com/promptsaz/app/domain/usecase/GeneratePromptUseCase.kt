@@ -34,6 +34,8 @@ class GeneratePromptUseCase @Inject constructor(
     data class Outcome(
         val result: GeneratedPrompt,
         val savedId: Long,
+        /** groupId shared by all variants of this generation. */
+        val groupId: String,
         /** Persian error message when AI mode failed and we fell back offline. */
         val aiErrorFa: String? = null,
     )
@@ -72,25 +74,21 @@ class GeneratePromptUseCase @Inject constructor(
 
         val finalResult = result ?: engine.generate(spec, kb)
         val groupId = UUID.randomUUID().toString()
-        val savedId = save(finalResult, groupId)
+        val now = System.currentTimeMillis()
+        val savedId = promptRepository.save(finalResult.toArchived(groupId, now, now))
         return Outcome(result = finalResult, savedId = savedId, groupId = groupId, aiErrorFa = aiError)
     }
 
     /** Saves a variant generated on the Result screen. */
-    suspend fun saveVariant(variant: GeneratedPrompt, groupId: String): Long =
-        promptRepository.save(variant.toArchived(groupId))
-
-    private suspend fun save(result: GeneratedPrompt): Long {
+    suspend fun saveVariant(variant: GeneratedPrompt, groupId: String): Long {
         val now = System.currentTimeMillis()
-        return promptRepository.save(
-            result.toArchived(UUID.randomUUID().toString(), createdAt = now, updatedAt = now),
-        )
+        return promptRepository.save(variant.toArchived(groupId, now, now))
     }
 }
 
 /** Maps a generation into its archive representation. */
-fun GeneratedPrompt.toArchived(groupId: String, createdAt: Long, updatedAt: Long): ArchivedPrompt {
-    val domain = ArchivedPrompt(
+fun GeneratedPrompt.toArchived(groupId: String, createdAt: Long, updatedAt: Long): ArchivedPrompt =
+    ArchivedPrompt(
         groupId = groupId,
         title = title,
         promptText = text,
@@ -108,5 +106,3 @@ fun GeneratedPrompt.toArchived(groupId: String, createdAt: Long, updatedAt: Long
         createdAt = createdAt,
         updatedAt = updatedAt,
     )
-    return domain
-}

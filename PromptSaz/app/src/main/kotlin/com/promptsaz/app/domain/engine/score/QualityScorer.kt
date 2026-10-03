@@ -1,6 +1,7 @@
 package com.promptsaz.app.domain.engine.score
 
 import com.promptsaz.app.domain.engine.improve.PromptAnalyzer
+import com.promptsaz.app.domain.engine.improve.toQualityReport
 import com.promptsaz.app.domain.model.PromptSection
 import com.promptsaz.app.domain.model.QualityReport
 import com.promptsaz.app.domain.model.SectionKind

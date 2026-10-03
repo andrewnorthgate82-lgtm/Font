@@ -7,9 +7,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -30,9 +33,6 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.promptsaz.app.ui.components.AppHeader
 import com.promptsaz.app.ui.components.EmptyState
-import com.promptsaz.app.domain.model.PromptMode
-import com.promptsaz.app.ui.session.GenerationSession
-import javax.inject.Inject
 
 /**
  * Clarifying questions: tap-to-answer chips where possible, optional free
@@ -55,7 +55,7 @@ fun ClarifyScreen(
 
         when {
             state.errorFa != null && state.questions.isEmpty() && !state.loading -> {
-                EmptyState(icon = androidx.compose.material.icons.Icons.Rounded.Warning, title = "مشکلی پیش آمد", hint = state.errorFa ?: "")
+                EmptyState(icon = Icons.Rounded.Warning, title = "مشکلی پیش آمد", hint = state.errorFa ?: "")
                 Button(
                     onClick = onBack,
                     modifier = Modifier

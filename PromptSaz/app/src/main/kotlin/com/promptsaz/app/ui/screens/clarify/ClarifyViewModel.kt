@@ -41,18 +41,20 @@ class ClarifyViewModel @Inject constructor(
 
     init {
         val spec = session.spec
-        if (spec == null) {
-            _uiState.update { it.copy(errorFa = "خطای غیرمنتظره؛ دوباره از صفحه اول شروع کن") }
-            return
-        }
-        if (spec.mode == PromptMode.IMPROVE) {
-            // Improve mode analyzes the pasted prompt directly; no questions.
-            return
-        }
-        viewModelScope.launch {
-            val kb = runCatching { kbRepository.getDomain(spec.domainId) }.getOrNull()
-            val questions = engine.clarifyingQuestions(kb, spec.idea)
-            _uiState.update { it.copy(questions = questions) }
+        when {
+            spec == null -> {
+                _uiState.update { it.copy(errorFa = "خطای غیرمنتظره؛ دوباره از صفحه اول شروع کن") }
+            }
+            spec.mode == PromptMode.IMPROVE -> {
+                // Improve mode analyzes the pasted prompt directly; no questions.
+            }
+            else -> {
+                viewModelScope.launch {
+                    val kb = runCatching { kbRepository.getDomain(spec.domainId) }.getOrNull()
+                    val questions = engine.clarifyingQuestions(kb, spec.idea)
+                    _uiState.update { it.copy(questions = questions) }
+                }
+            }
         }
     }
 

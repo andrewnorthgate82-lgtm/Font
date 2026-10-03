@@ -4,6 +4,7 @@ import android.content.ContentResolver
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.promptsaz.app.data.db.toEntity
 import com.promptsaz.app.data.export.ArchiveExportFile
 import com.promptsaz.app.data.export.toArchived
 import com.promptsaz.app.data.export.toExportDto
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.promptsaz.app.util.toPersianDigits
 import kotlinx.serialization.json.Json
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -122,5 +124,5 @@ class ArchiveViewModel @Inject constructor(
         }
     }
 
-    private fun Int.toPersianDigitsSafe(): String = com.promptsaz.app.util.toPersianDigits(this)
+    private fun Int.toPersianDigitsSafe(): String = toPersianDigits()
 }
