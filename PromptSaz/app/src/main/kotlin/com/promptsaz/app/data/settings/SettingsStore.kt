@@ -37,6 +37,8 @@ class SettingsStore(private val context: Context) {
         val AI_BASE_URL = stringPreferencesKey("ai_base_url")
         val AI_MODEL = stringPreferencesKey("ai_model")
         val AI_IMAGE_MODEL = stringPreferencesKey("ai_image_model")
+        val AI_SERVICES = stringPreferencesKey("ai_services")
+        val ACTIVE_SERVICE_ID = stringPreferencesKey("active_service_id")
     }
 
     /** Settings stream; falls back to defaults if the store is unreadable. */
