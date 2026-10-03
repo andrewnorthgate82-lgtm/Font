@@ -22,12 +22,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Archive
 import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Lightbulb
 import androidx.compose.material.icons.rounded.MenuBook
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -45,6 +48,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -59,10 +63,12 @@ import com.promptsaz.app.ui.theme.BrandGradient
 import com.promptsaz.app.util.toPersianDigits
 
 /**
- * تولید پرامپت tab — same skeleton as the گفتگو tab: a top bar with the
- * model pill, a calm scrollable middle (mode switch + prompt settings) and a
- * bottom input bar with the gradient action button.
+ * تولید پرامپت tab — the گفتگو tab's skeleton at its most minimal: a top bar
+ * with ONE overflow menu (everything secondary lives there) + the model pill,
+ * a calm scrollable middle (mode switch + prompt settings) and the bottom
+ * input bar with the gradient action button.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     onNavigateToClarify: () -> Unit,
@@ -73,13 +79,14 @@ fun HomeScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var optionsExpanded by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .imePadding(),
     ) {
-        // --- top bar (like the گفتگو tab) ---------------------------------
+        // --- top bar: one menu + title + model pill — nothing else ------------
         Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -88,11 +95,45 @@ fun HomeScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 10.dp),
             ) {
-                SoftIconButton(Icons.Rounded.MenuBook, "دانش‌نامه حوزه‌ها", onNavigateToKb)
+                Box {
+                    SoftIconButton(
+                        icon = Icons.Rounded.MoreVert,
+                        contentDescription = "گزینه‌های بیشتر",
+                        onClick = { menuOpen = true },
+                    )
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("دانش‌نامه حوزه‌ها") },
+                            leadingIcon = { Icon(Icons.Rounded.MenuBook, contentDescription = null) },
+                            onClick = {
+                                menuOpen = false
+                                onNavigateToKb()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("آرشیو پرامپت‌ها") },
+                            leadingIcon = { Icon(Icons.Rounded.Archive, contentDescription = null) },
+                            onClick = {
+                                menuOpen = false
+                                onNavigateToArchive()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("تنظیمات") },
+                            leadingIcon = { Icon(Icons.Rounded.Settings, contentDescription = null) },
+                            onClick = {
+                                menuOpen = false
+                                onNavigateToSettings()
+                            },
+                        )
+                    }
+                }
                 Text(
                     text = "تولید پرامپت",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
                 // model chip → picker sheet (offline engine when AI is off)
@@ -109,17 +150,16 @@ fun HomeScreen(
                         },
                         style = MaterialTheme.typography.labelMedium,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier
-                            .widthIn(max = 110.dp)
+                            .widthIn(max = 130.dp)
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                     )
                 }
-                SoftIconButton(Icons.Rounded.Archive, "آرشیو پرامپت‌ها", onNavigateToArchive)
-                SoftIconButton(Icons.Rounded.Settings, "تنظیمات", onNavigateToSettings)
             }
         }
 
-        // --- middle: mode + settings --------------------------------------
+        // --- middle: mode + prompt settings ----------------------------------
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -129,7 +169,7 @@ fun HomeScreen(
         ) {
             Text(
                 text = if (state.improveMode) {
-                    "پرامپت فعلی‌ات را همین‌جا بچسبان تا نقاط ضعفش پیدا و حرفه‌ای بازنویسی شود"
+                    "پرامپت فعلی‌ات را همین‌جا بچسبان تا حرفه‌ای بازنویسی شود"
                 } else {
                     "بگو چه می‌خواهی؛ پرامپت حرفه‌ایش را می‌سازم"
                 },
@@ -138,48 +178,15 @@ fun HomeScreen(
                 modifier = Modifier.padding(top = 20.dp, bottom = 12.dp),
             )
 
-            // mode switch + AI badge
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                ModeSegment(
-                    firstLabel = "پرامپت جدید",
-                    secondLabel = "بهبود پرامپت موجود",
-                    secondSelected = state.improveMode,
-                    onFirst = { viewModel.setImproveMode(false) },
-                    onSecond = { viewModel.setImproveMode(true) },
-                    modifier = Modifier.weight(1f),
-                )
-                if (state.aiEnabled) {
-                    Surface(
-                        shape = RoundedCornerShape(50),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Icon(
-                                Icons.Rounded.Cloud,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(16.dp),
-                            )
-                            Text(
-                                text = "هوش مصنوعی",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                    }
-                }
-            }
+            // mode switch — full width, two short labels
+            ModeSegment(
+                firstLabel = "پرامپت جدید",
+                secondLabel = "بهبود پرامپت",
+                secondSelected = state.improveMode,
+                onFirst = { viewModel.setImproveMode(false) },
+                onSecond = { viewModel.setImproveMode(true) },
+                modifier = Modifier.fillMaxWidth(),
+            )
 
             // prompt settings (expandable)
             Surface(
@@ -190,6 +197,7 @@ fun HomeScreen(
                 } else {
                     MaterialTheme.colorScheme.surfaceVariant
                 },
+                modifier = Modifier.padding(top = 10.dp),
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
@@ -247,12 +255,12 @@ fun HomeScreen(
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(20.dp))
 
             Row(
                 modifier = Modifier
                     .align(Alignment.CenterHorizontally)
-                    .padding(vertical = 6.dp),
+                    .padding(bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
@@ -263,15 +271,14 @@ fun HomeScreen(
                     modifier = Modifier.size(16.dp),
                 )
                 Text(
-                    text = "پاسخ چند سؤال کوتاه، پرامپت را دقیق‌تر می‌کند؛ می‌توانی همه را رد کنی.",
+                    text = "چند سؤال کوتاه بعدی، پرامپت را دقیق‌تر می‌کند.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Spacer(Modifier.height(8.dp))
         }
 
-        // --- bottom input bar (like the گفتگو tab) ------------------------
+        // --- bottom input bar (like the گفتگو tab) ----------------------------
         Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 8.dp) {
             Row(
                 verticalAlignment = Alignment.Bottom,
@@ -286,9 +293,9 @@ fun HomeScreen(
                     placeholder = {
                         Text(
                             text = if (state.improveMode) {
-                                "پرامپت فعلی را کامل بچسبان…"
+                                "پرامپت فعلی را بچسبان…"
                             } else {
-                                "مثلاً: می‌خواهم برای فروش دوره آنلاینم تبلیغ اینستاگرام بنویسم"
+                                "مثلاً: تبلیغ اینستاگرام برای دورهٔ آنلاینی"
                             },
                         )
                     },
@@ -307,12 +314,15 @@ fun HomeScreen(
                                 text = state.errorFa ?: "",
                                 color = MaterialTheme.colorScheme.error,
                                 style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f),
                             )
-                            Text(
-                                text = "${state.ideaLength.toPersianDigits()} از ${4000.toPersianDigits()}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            if (state.ideaLength > 0) {
+                                Text(
+                                    text = "${state.ideaLength.toPersianDigits()} از ${4000.toPersianDigits()}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     },
                     modifier = Modifier.weight(1f),
