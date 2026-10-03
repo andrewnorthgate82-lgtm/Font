@@ -1,8 +1,12 @@
 package com.promptsaz.app.di
 
+import com.promptsaz.app.data.repository.ChatRepositoryImpl
+import com.promptsaz.app.data.repository.ImageRepositoryImpl
 import com.promptsaz.app.data.repository.KbRepositoryImpl
 import com.promptsaz.app.data.repository.PromptRepositoryImpl
 import com.promptsaz.app.data.repository.SettingsRepositoryImpl
+import com.promptsaz.app.domain.repository.ChatRepository
+import com.promptsaz.app.domain.repository.ImageRepository
 import com.promptsaz.app.domain.repository.KbRepository
 import com.promptsaz.app.domain.repository.PromptRepository
 import com.promptsaz.app.domain.repository.SettingsRepository
@@ -30,4 +34,12 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindSettingsRepository(impl: SettingsRepositoryImpl): SettingsRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindChatRepository(impl: ChatRepositoryImpl): ChatRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindImageRepository(impl: ImageRepositoryImpl): ImageRepository
 }

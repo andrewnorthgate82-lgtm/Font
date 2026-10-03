@@ -34,4 +34,6 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setAiBaseUrl(url: String) = store.setAiBaseUrl(url)
 
     override suspend fun setAiModel(model: String) = store.setAiModel(model)
+
+    override suspend fun setAiImageModel(model: String) = store.setAiImageModel(model)
 }

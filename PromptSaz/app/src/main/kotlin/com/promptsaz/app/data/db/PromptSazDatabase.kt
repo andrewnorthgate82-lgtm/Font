@@ -5,11 +5,18 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 
 @Database(
-    entities = [PromptEntity::class],
-    version = 1,
+    entities = [
+        PromptEntity::class,
+        ChatConversationEntity::class,
+        ChatMessageEntity::class,
+        ImageGenerationEntity::class,
+    ],
+    version = 2,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
 abstract class PromptSazDatabase : RoomDatabase() {
     abstract fun promptDao(): PromptDao
+    abstract fun chatDao(): ChatDao
+    abstract fun imageGenerationDao(): ImageGenerationDao
 }

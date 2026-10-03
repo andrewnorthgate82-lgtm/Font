@@ -6,7 +6,10 @@ import com.promptsaz.app.domain.model.DomainKnowledge
 import com.promptsaz.app.domain.model.OutputLanguage
 import com.promptsaz.app.domain.model.PromptMode
 import com.promptsaz.app.domain.model.PromptSpec
+import com.promptsaz.app.domain.model.ChatTurn
+import com.promptsaz.app.domain.model.GeneratedImage
 import com.promptsaz.app.domain.provider.AiModePrompts
+import com.promptsaz.app.domain.provider.ChatAiProvider
 import com.promptsaz.app.domain.provider.PromptProvider
 import com.promptsaz.app.domain.provider.ProviderGeneration
 import com.promptsaz.app.domain.provider.ProviderHealth
@@ -21,6 +24,11 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * OpenAI-compatible provider (chat-completions format). Works with OpenAI,
@@ -37,7 +45,7 @@ class OpenAiCompatibleProvider @Inject constructor(
     private val secureKeyStore: ApiKeyStore,
     private val json: Json,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
-) : PromptProvider {
+) : PromptProvider, ChatAiProvider {
 
     override val id: String = ID
     override val displayNameFa: String = DISPLAY_NAME_FA
@@ -114,6 +122,114 @@ class OpenAiCompatibleProvider @Inject constructor(
         }
     }
 
+    // --- ChatAiProvider: chat + image generation -----------------------------------
+
+    /**
+     * One chat round-trip. Text turns become plain string contents; turns with
+     * an image become [text, image_url] part arrays (OpenAI vision format), so
+     * multimodal models can read and analyze the attached picture.
+     */
+    override suspend fun chat(model: String, turns: List<ChatTurn>): Result<String> = withContext(ioDispatcher) {
+        val config = readConnectionConfig()
+            ?: return@withContext Result.failure(IllegalStateException(configGapFa(requireModel = false)))
+        val selectedModel = model.trim()
+        if (selectedModel.isBlank()) {
+            return@withContext Result.failure(IllegalStateException(NO_MODEL_FA))
+        }
+        val request = ChatCompletionChatRequestDto(
+            model = selectedModel,
+            messages = turns.map { turn -> turn.toContentMessage() },
+        )
+        val body = json.encodeToString(ChatCompletionChatRequestDto.serializer(), request)
+        when (val response = httpCall("POST", config.chatUrl, config.key, body)) {
+            is HttpOutcome.Success -> {
+                if (response.code !in 200..299) {
+                    return@withContext Result.failure(
+                        IllegalStateException(persianHttpError(response.code, response.body)),
+                    )
+                }
+                runCatching {
+                    val parsed = json.decodeFromString(ChatCompletionResponseDto.serializer(), response.body)
+                    parsed.choices.firstOrNull()?.message?.content
+                        ?: throw IOException(BAD_REPLY_FA)
+                }
+            }
+            is HttpOutcome.Failure -> Result.failure(IllegalStateException(response.messageFa))
+        }
+    }
+
+    /** Generates one image via the OpenAI-compatible images endpoint. */
+    override suspend fun generateImage(model: String, prompt: String, size: String): Result<GeneratedImage> =
+        withContext(ioDispatcher) {
+            val config = readConnectionConfig()
+                ?: return@withContext Result.failure(IllegalStateException(configGapFa(requireModel = false)))
+            val selectedModel = model.trim()
+            if (selectedModel.isBlank()) {
+                return@withContext Result.failure(IllegalStateException(NO_MODEL_FA))
+            }
+            val request = ImageGenerationRequestDto(model = selectedModel, prompt = prompt, size = size)
+            val body = json.encodeToString(ImageGenerationRequestDto.serializer(), request)
+            when (val response = httpCall("POST", config.imagesUrl, config.key, body)) {
+                is HttpOutcome.Success -> {
+                    if (response.code !in 200..299) {
+                        return@withContext Result.failure(
+                            IllegalStateException(persianHttpError(response.code, response.body)),
+                        )
+                    }
+                    runCatching {
+                        val parsed = json.decodeFromString(ImageGenerationResponseDto.serializer(), response.body)
+                        val image = parsed.data.firstOrNull()
+                            ?: throw IOException(BAD_IMAGE_REPLY_FA)
+                        when {
+                            !image.url.isNullOrBlank() -> GeneratedImage.FromUrl(image.url)
+                            !image.b64Json.isNullOrBlank() -> GeneratedImage.FromBase64(image.b64Json)
+                            else -> throw IOException(BAD_IMAGE_REPLY_FA)
+                        }
+                    }
+                }
+                is HttpOutcome.Failure -> Result.failure(IllegalStateException(response.messageFa))
+            }
+        }
+
+    /** Downloads a generated image from its (pre-signed) URL. */
+    override suspend fun fetchImageBytes(url: String): Result<ByteArray> = withContext(ioDispatcher) {
+        runCatching {
+            val connection = URL(url).openConnection() as HttpURLConnection
+            connection.connectTimeout = CONNECT_TIMEOUT_MS
+            connection.readTimeout = READ_TIMEOUT_MS
+            try {
+                val code = connection.responseCode
+                val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+                stream?.use { it.readBytes() }
+                    ?: throw IOException(persianHttpError(code, ""))
+            } finally {
+                connection.disconnect()
+            }
+        }
+    }
+
+    private fun ChatTurn.toContentMessage(): ChatContentMessageDto {
+        val content: JsonElement = if (imageDataUrl == null) {
+            JsonPrimitive(text)
+        } else {
+            buildJsonArray {
+                add(
+                    buildJsonObject {
+                        put("type", "text")
+                        put("text", text)
+                    },
+                )
+                add(
+                    buildJsonObject {
+                        put("type", "image_url")
+                        put("image_url", buildJsonObject { put("url", imageDataUrl) })
+                    },
+                )
+            }
+        }
+        return ChatContentMessageDto(role = role, content = content)
+    }
+
     // --- user prompt construction -------------------------------------------------
 
     private fun buildUserPrompt(spec: PromptSpec, kb: DomainKnowledge?): String = buildString {
@@ -162,6 +278,7 @@ class OpenAiCompatibleProvider @Inject constructor(
     private data class ProviderConfig(val key: String, val model: String, val baseUrl: String) {
         val chatUrl: String get() = baseUrl + CHAT_COMPLETIONS_PATH
         val modelsUrl: String get() = baseUrl + MODELS_PATH
+        val imagesUrl: String get() = baseUrl + IMAGES_PATH
     }
 
     /** Key + base URL — enough for /models and the connection test. */
@@ -295,6 +412,7 @@ class OpenAiCompatibleProvider @Inject constructor(
         // --- Single place to change endpoints/auth — per user requirement ---
         const val CHAT_COMPLETIONS_PATH = "/chat/completions"
         const val MODELS_PATH = "/models"
+        const val IMAGES_PATH = "/images/generations"
         const val AUTH_HEADER = "Authorization"
         const val AUTH_PREFIX = "Bearer "
 
@@ -321,6 +439,8 @@ class OpenAiCompatibleProvider @Inject constructor(
         const val NO_BASE_URL_FA = "نشانی سرور (Base URL) خالی است؛ مثل https://codecraftapi.com/v1 واردش کن."
         const val NO_MODEL_FA = "نام مدل انتخاب نشده است. با دکمهٔ «دریافت فهرست مدل‌ها» یکی را انتخاب کن یا در کادر «نام مدل» بنویس."
         const val BAD_REPLY_FA = "پاسخ سرور قابل خواندن نبود. مدل دیگری را امتحان کن یا دوباره تلاش کن."
+        const val BAD_IMAGE_REPLY_FA =
+            "سرور تصویری برنگرداند. یک مدل ساخت تصویر (مثل dall-e یا flux) را انتخاب کن و دوباره امتحان کن."
         const val FALLBACK_TITLE_FA = "پرامپت ساخته‌شده با هوش مصنوعی"
     }
 }

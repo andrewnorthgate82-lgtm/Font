@@ -1,6 +1,7 @@
 package com.promptsaz.app.di
 
 import com.promptsaz.app.data.remote.OpenAiCompatibleProvider
+import com.promptsaz.app.domain.provider.ChatAiProvider
 import com.promptsaz.app.domain.provider.PromptProvider
 import dagger.Module
 import dagger.Provides
@@ -23,4 +24,9 @@ object ProviderModule {
     fun provideOpenAiCompatibleProvider(
         impl: OpenAiCompatibleProvider,
     ): PromptProvider = impl
+
+    /** Chat + image-generation capabilities (the گفتگو and تصویر tabs). */
+    @Provides
+    @Singleton
+    fun provideChatAiProvider(impl: OpenAiCompatibleProvider): ChatAiProvider = impl
 }

@@ -32,6 +32,53 @@ data class ModelsResponseDto(
     data class ModelDto(val id: String = "")
 }
 
+// --- Chat mode (multimodal) ------------------------------------------------
+
+/**
+ * A chat message whose content is either a plain string or an array of
+ * typed parts (text / image_url) — serialized as raw JSON.
+ */
+@Serializable
+data class ChatContentMessageDto(val role: String, val content: kotlinx.serialization.json.JsonElement)
+
+@Serializable
+data class ChatCompletionChatRequestDto(
+    val model: String,
+    val messages: List<ChatContentMessageDto>,
+    val temperature: Double = 0.7,
+)
+
+@Serializable
+data class ContentPartDto(
+    val type: String,
+    val text: String? = null,
+    val image_url: ImageUrlDto? = null,
+)
+
+@Serializable
+data class ImageUrlDto(val url: String)
+
+// --- Image generation --------------------------------------------------------
+
+@Serializable
+data class ImageGenerationRequestDto(
+    val model: String,
+    val prompt: String,
+    val n: Int = 1,
+    val size: String = "1024x1024",
+)
+
+@Serializable
+data class ImageGenerationResponseDto(
+    val data: List<GeneratedImageDto> = emptyList(),
+) {
+    @Serializable
+    data class GeneratedImageDto(
+        val url: String? = null,
+        @kotlinx.serialization.SerialName("b64_json") val b64Json: String? = null,
+    )
+}
+
 /** Expected strict-JSON reply from the model: {"title": "...", "prompt": "..."} */
 @Serializable
 data class GenerationReplyDto(

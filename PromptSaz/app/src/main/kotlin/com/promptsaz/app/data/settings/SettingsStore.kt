@@ -35,6 +35,7 @@ class SettingsStore(private val context: Context) {
         val AI_ENABLED = stringPreferencesKey("ai_enabled")
         val AI_BASE_URL = stringPreferencesKey("ai_base_url")
         val AI_MODEL = stringPreferencesKey("ai_model")
+        val AI_IMAGE_MODEL = stringPreferencesKey("ai_image_model")
     }
 
     /** Settings stream; falls back to defaults if the store is unreadable. */
@@ -54,6 +55,7 @@ class SettingsStore(private val context: Context) {
                 aiEnabled = (prefs[Keys.AI_ENABLED] ?: "false") == "true",
                 aiBaseUrl = prefs[Keys.AI_BASE_URL] ?: AppSettings.DEFAULT_AI_BASE_URL,
                 aiModel = prefs[Keys.AI_MODEL] ?: "",
+                aiImageModel = prefs[Keys.AI_IMAGE_MODEL] ?: "",
             )
         }
 
@@ -72,6 +74,8 @@ class SettingsStore(private val context: Context) {
     suspend fun setAiBaseUrl(url: String) = set(Keys.AI_BASE_URL, url.trim())
 
     suspend fun setAiModel(model: String) = set(Keys.AI_MODEL, model.trim())
+
+    suspend fun setAiImageModel(model: String) = set(Keys.AI_IMAGE_MODEL, model.trim())
 
     private suspend fun set(key: Preferences.Key<String>, value: String) {
         context.settingsDataStore.edit { prefs -> prefs[key] = value }

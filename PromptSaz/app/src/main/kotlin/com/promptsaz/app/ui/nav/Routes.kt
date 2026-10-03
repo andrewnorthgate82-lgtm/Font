@@ -1,8 +1,11 @@
 package com.promptsaz.app.ui.nav
 
-/** Navigation routes. Arguments carry ids only; flow state lives in GenerationSession. */
 object Routes {
-    const val HOME = "home"
+    /** Top-level tabs (bottom bar). */
+    const val CHAT = "chat"
+    const val HOME = "home" // تولید پرامپت
+    const val IMAGE = "image"
+
     const val CLARIFY = "clarify"
     const val RESULT = "result"
     const val ARCHIVE = "archive"

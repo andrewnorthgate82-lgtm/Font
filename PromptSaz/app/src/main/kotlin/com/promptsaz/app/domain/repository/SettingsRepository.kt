@@ -18,4 +18,5 @@ interface SettingsRepository {
     suspend fun setAiEnabled(enabled: Boolean)
     suspend fun setAiBaseUrl(url: String)
     suspend fun setAiModel(model: String)
+    suspend fun setAiImageModel(model: String)
 }

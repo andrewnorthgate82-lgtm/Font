@@ -28,6 +28,8 @@ data class AppSettings(
     val aiEnabled: Boolean = false,
     val aiBaseUrl: String = DEFAULT_AI_BASE_URL,
     val aiModel: String = "",
+    /** Last model used in the تصویر tab (image models often differ from chat models). */
+    val aiImageModel: String = "",
 ) {
     companion object {
         /**

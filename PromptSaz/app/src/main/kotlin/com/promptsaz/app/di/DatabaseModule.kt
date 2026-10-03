@@ -3,6 +3,8 @@ package com.promptsaz.app.di
 import android.content.Context
 import androidx.room.Room
 import com.promptsaz.app.data.db.Migrations
+import com.promptsaz.app.data.db.ChatDao
+import com.promptsaz.app.data.db.ImageGenerationDao
 import com.promptsaz.app.data.db.PromptDao
 import com.promptsaz.app.data.db.PromptSazDatabase
 import dagger.Module
@@ -29,4 +31,11 @@ object DatabaseModule {
 
     @Provides
     fun providePromptDao(database: PromptSazDatabase): PromptDao = database.promptDao()
+
+    @Provides
+    fun provideChatDao(database: PromptSazDatabase): ChatDao = database.chatDao()
+
+    @Provides
+    fun provideImageGenerationDao(database: PromptSazDatabase): ImageGenerationDao =
+        database.imageGenerationDao()
 }

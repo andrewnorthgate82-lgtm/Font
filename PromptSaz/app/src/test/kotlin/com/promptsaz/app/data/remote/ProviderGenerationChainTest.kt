@@ -48,6 +48,7 @@ class ProviderGenerationChainTest {
         override suspend fun setAiEnabled(enabled: Boolean) { flow.value = flow.value.copy(aiEnabled = enabled) }
         override suspend fun setAiBaseUrl(url: String) { flow.value = flow.value.copy(aiBaseUrl = url) }
         override suspend fun setAiModel(model: String) { flow.value = flow.value.copy(aiModel = model) }
+        override suspend fun setAiImageModel(model: String) { flow.value = flow.value.copy(aiImageModel = model) }
     }
 
     // --- captured request ----------------------------------------------------------

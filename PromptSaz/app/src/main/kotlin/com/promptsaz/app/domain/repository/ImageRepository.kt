@@ -1,0 +1,22 @@
+package com.promptsaz.app.domain.repository
+
+import com.promptsaz.app.domain.model.ImageGeneration
+import kotlinx.coroutines.flow.Flow
+
+/** History + generation flow of the تصویر (image studio) tab. */
+interface ImageRepository {
+
+    /** Past generations, newest first. */
+    fun history(): Flow<List<ImageGeneration>>
+
+    /**
+     * Generates one image with [model] and saves it into app storage.
+     * Returns the saved history entry.
+     */
+    suspend fun generate(prompt: String, model: String, size: String): Result<ImageGeneration>
+
+    /** Reads a saved generation's bytes (for the UI). */
+    fun readImage(fileName: String): ByteArray?
+
+    suspend fun delete(generationId: Long)
+}
