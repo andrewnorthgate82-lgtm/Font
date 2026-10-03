@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Boot theme only: the window background shown before Compose takes over.
+  The full Material 3 theme is applied in code (Phase 4, ui/theme).
+-->
+<resources>
+    <style name="Theme.PromptSaz.Starting" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/starting_background</item>
+    </style>
+</resources>

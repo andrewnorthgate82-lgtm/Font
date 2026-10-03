@@ -1,0 +1,21 @@
+# Gradle
+.gradle/
+build/
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+captures/
+local.properties
+
+# Kotlin
+.kotlin/
+
+# OS
+.DS_Store
+
+# Signing
+*.jks
+*.keystore
+
+# Room generated schemas are committed on purpose (app/schemas/).

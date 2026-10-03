@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The encrypted API-key store is excluded from backups: the Android Keystore
+     key it depends on is not backed up, so a restored copy would be useless
+     ciphertext anyway, and we keep secrets out of cloud backups entirely. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="prompt_saz_secure.xml" />
+</full-backup-content>

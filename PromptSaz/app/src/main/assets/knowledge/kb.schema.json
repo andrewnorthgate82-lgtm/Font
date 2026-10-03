@@ -1,0 +1,158 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "promptsaz/knowledge/kb.schema.json",
+  "title": "PromptSaz knowledge base schema",
+  "description": "Structure of every domain knowledge base file in assets/knowledge/. Registry files (_registry.json) follow kb-registry.schema. See docs/KNOWLEDGE_BASE_GUIDE.md. Validated by tools/validate_kb.py.",
+  "type": "object",
+  "required": [
+    "id",
+    "nameFa",
+    "status",
+    "personas",
+    "terminology",
+    "outputStructures",
+    "guardrails",
+    "failureModes",
+    "examples",
+    "clarifyingQuestions"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "Stable domain id; must match the registry entry."
+    },
+    "nameFa": {
+      "type": "string",
+      "minLength": 3,
+      "description": "Persian display name of the domain."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ready", "coming_soon"]
+    },
+    "personas": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["id", "titleFa", "expertiseFa", "whenToUseFa"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "titleFa": { "type": "string", "minLength": 5 },
+          "expertiseFa": { "type": "string", "minLength": 20 },
+          "whenToUseFa": { "type": "string", "minLength": 15 }
+        }
+      }
+    },
+    "terminology": {
+      "type": "array",
+      "minItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["termFa", "termEn", "definitionFa"],
+        "additionalProperties": false,
+        "properties": {
+          "termFa": { "type": "string", "minLength": 2 },
+          "termEn": { "type": "string", "minLength": 2 },
+          "definitionFa": { "type": "string", "minLength": 20 }
+        }
+      }
+    },
+    "outputStructures": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["id", "titleFa", "descriptionFa", "templateFa"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "titleFa": { "type": "string", "minLength": 3 },
+          "descriptionFa": { "type": "string", "minLength": 20 },
+          "templateFa": { "type": "string", "minLength": 40 }
+        }
+      }
+    },
+    "guardrails": {
+      "type": "array",
+      "minItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["id", "doFa", "dontFa", "whyFa"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "doFa": { "type": "string", "minLength": 15 },
+          "dontFa": { "type": "string", "minLength": 10 },
+          "whyFa": { "type": "string", "minLength": 15 }
+        }
+      }
+    },
+    "failureModes": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["id", "symptomFa", "fixFa"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "symptomFa": { "type": "string", "minLength": 15 },
+          "fixFa": { "type": "string", "minLength": 15 }
+        }
+      }
+    },
+    "examples": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["id", "titleFa", "targetAi", "promptFa"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "titleFa": { "type": "string", "minLength": 5 },
+          "targetAi": {
+            "type": "string",
+            "enum": ["chatgpt", "claude", "gemini", "deepseek", "midjourney", "video", "any"]
+          },
+          "promptFa": { "type": "string", "minLength": 300 }
+        }
+      }
+    },
+    "clarifyingQuestions": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "type": "object",
+        "required": ["id", "questionFa", "priority"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "questionFa": { "type": "string", "minLength": 10 },
+          "priority": { "type": "integer", "minimum": 1, "maximum": 9 },
+          "allowFreeText": { "type": "boolean", "default": true },
+          "chips": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "labelFa"],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+                "labelFa": { "type": "string", "minLength": 2 }
+              }
+            }
+          },
+          "gapKeywordsFa": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 2 }
+          }
+        }
+      }
+    }
+  }
+}

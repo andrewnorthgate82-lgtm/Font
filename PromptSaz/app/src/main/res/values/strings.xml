@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- All UI strings are Persian; the app has a single default locale (fa).
+     Most screen text lives next to its Compose code; only strings used from
+     non-composable contexts live here. -->
+<resources>
+    <string name="app_name">پرامپت‌ساز</string>
+    <string name="copy_success">کپی شد ✓</string>
+    <string name="copy_failed">کپی ناموفق بود؛ متن را انتخاب و دستی کپی کنید</string>
+    <string name="share_via">اشتراک‌گذاری از طریق</string>
+    <string name="share_failed">برنامه‌ای برای اشتراک‌گذاری پیدا نشد</string>
+</resources>

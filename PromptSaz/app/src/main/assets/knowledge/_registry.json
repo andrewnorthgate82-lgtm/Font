@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "domains": [
+    {
+      "id": "general",
+      "nameFa": "عمومی",
+      "descriptionFa": "برای ایده‌هایی که در هیچ حوزه‌ی خاصی نمی‌گنجند؛ ساختار و دقت، بدون تخصص حوزه‌ای",
+      "status": "ready",
+      "kbFile": "general.json"
+    },
+    {
+      "id": "marketing",
+      "nameFa": "بازاریابی و تبلیغات",
+      "descriptionFa": "کمپین، تیتر، کپی تبلیغاتی، بریف و استراتژی پیام برای رشد فروش و برند",
+      "status": "ready",
+      "kbFile": "marketing.json"
+    },
+    {
+      "id": "social_media",
+      "nameFa": "شبکه‌های اجتماعی و سناریو ویدیو",
+      "descriptionFa": "ریلز، شورتز، کپشن، تقویم محتوا و سناریوی ویدیوی کوتاه با هوک قوی",
+      "status": "ready",
+      "kbFile": "social_media.json"
+    },
+    {
+      "id": "programming",
+      "nameFa": "برنامه‌نویسی و نرم‌افزار",
+      "descriptionFa": "پیاده‌سازی قابلیت، بازبینی کد، رفع باگ و طراحی معماری با کد کامل و قابل‌اجرا",
+      "status": "ready",
+      "kbFile": "programming.json"
+    },
+    {
+      "id": "copywriting_sales",
+      "nameFa": "کپی‌رایتینگ و فروش",
+      "descriptionFa": "متن فروش، صفحه فرود، ایمیل مارکتینگ و متقاعدسازی مبتنی بر روان‌شناسی خرید",
+      "status": "coming_soon"
+    },
+    {
+      "id": "education_teaching",
+      "nameFa": "آموزش و تدریس",
+      "descriptionFa": "طرح درس، محتوای آموزشی، آزمون و ساده‌سازی مفاهیم برای هر سن",
+      "status": "coming_soon"
+    },
+    {
+      "id": "ai_image",
+      "nameFa": "تولید تصویر با هوش مصنوعی",
+      "descriptionFa": "پرامپت‌های تصویری برای Midjourney و مدل‌های مشابه با زبان بصری دقیق",
+      "status": "coming_soon"
+    },
+    {
+      "id": "ai_video",
+      "nameFa": "تولید ویدیو با هوش مصنوعی",
+      "descriptionFa": "توضیح صحنه‌به‌صحنه برای Sora، Runway و Kling با حرکت دوربین و ریتم",
+      "status": "coming_soon"
+    },
+    {
+      "id": "writing_translation",
+      "nameFa": "نگارش، ویرایش و ترجمه",
+      "descriptionFa": "مقاله، ویرایش متن، ترجمه طبیعی فارسی-انگلیسی و تطبیق لحن",
+      "status": "coming_soon"
+    },
+    {
+      "id": "research_analysis",
+      "nameFa": "پژوهش و تحلیل",
+      "descriptionFa": "مرور منابع، تحلیل موضوع و گزارش ساخت‌یافته با تفکیک واقعیت از برداشت",
+      "status": "coming_soon"
+    },
+    {
+      "id": "business_strategy",
+      "nameFa": "کسب‌وکار و استراتژی",
+      "descriptionFa": "مدل کسب‌وکار، تحلیل رقبا، قیمت‌گذاری و برنامه اجرایی",
+      "status": "coming_soon"
+    },
+    {
+      "id": "data_analysis",
+      "nameFa": "تحلیل داده",
+      "descriptionFa": "پاک‌سازی داده، تحلیل آماری، نمودار و روایت یافته‌ها از داده خام",
+      "status": "coming_soon"
+    },
+    {
+      "id": "productivity",
+      "nameFa": "بهره‌وری و زندگی روزمره",
+      "descriptionFa": "برنامه‌ریزی، تصمیم‌های روزمره، ایمیل‌های کاری و بهبود عادت‌ها",
+      "status": "coming_soon"
+    }
+  ]
+}
