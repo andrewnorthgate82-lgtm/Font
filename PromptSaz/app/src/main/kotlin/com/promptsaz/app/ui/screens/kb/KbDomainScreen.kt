@@ -63,7 +63,7 @@ fun KbDomainScreen(
                 )
             }
             else -> {
-                val kb = state.knowledge
+                val kb = checkNotNull(state.knowledge)
                 Column(
                     modifier = Modifier
                         .weight(1f)
