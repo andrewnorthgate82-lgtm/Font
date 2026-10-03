@@ -85,17 +85,19 @@ class ClarifyViewModel @Inject constructor(
             }
             val finalSpec = spec.copy(answers = answers)
             runCatching {
-                if (finalSpec.mode == PromptMode.IMPROVE) improveUseCase(finalSpec) else generateUseCase(finalSpec)
+                if (finalSpec.mode == PromptMode.IMPROVE) {
+                    val o = improveUseCase(finalSpec)
+                    GenerationOutcome(o.result, o.groupId, o.savedId, o.aiErrorFa, o.report.findings)
+                } else {
+                    val o = generateUseCase(finalSpec)
+                    GenerationOutcome(o.result, o.groupId, o.savedId, o.aiErrorFa, emptyList())
+                }
             }.onSuccess { outcome ->
                 session.baseResult = outcome.result
                 session.baseGroupId = outcome.groupId
                 session.baseSavedId = outcome.savedId
                 session.aiErrorFa = outcome.aiErrorFa
-                session.improveFindings = if (finalSpec.mode == PromptMode.IMPROVE) {
-                    outcome.report.findings
-                } else {
-                    emptyList()
-                }
+                session.improveFindings = outcome.findings
                 _uiState.update { it.copy(loading = false, done = true) }
             }.onFailure { error ->
                 _uiState.update {
@@ -108,3 +110,12 @@ class ClarifyViewModel @Inject constructor(
         }
     }
 }
+
+/** Unified result of either generation path, consumed by the session. */
+private data class GenerationOutcome(
+    val result: com.promptsaz.app.domain.model.GeneratedPrompt,
+    val groupId: String,
+    val savedId: Long,
+    val aiErrorFa: String?,
+    val findings: List<com.promptsaz.app.domain.model.ImprovementFinding>,
+)
