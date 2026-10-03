@@ -1,6 +1,7 @@
 package com.promptsaz.app.data.export
 
 import com.promptsaz.app.data.db.toDomain
+import com.promptsaz.app.data.db.toEntity
 import com.promptsaz.app.domain.model.ArchivedPrompt
 import com.promptsaz.app.domain.model.DetailLevel
 import com.promptsaz.app.domain.model.OutputLanguage
@@ -68,12 +69,10 @@ class ArchiveDtoTest {
 
     @Test
     fun `api key material is not part of the export format`() {
-        val fields = PromptExportDto.serializer()
-            .descriptor
-            .elementNames
-            .toList()
-        val suspicious = fields.filter {
-            it.contains("key", ignoreCase = true) || it.contains("token", ignoreCase = true)
+        val descriptor = PromptExportDto.serializer().descriptor
+        val fields = (0 until descriptor.elementsCount).map { index -> descriptor.getElementName(index) }
+        val suspicious = fields.filter { field ->
+            field.contains("key", ignoreCase = true) || field.contains("token", ignoreCase = true)
         }
         assertEquals(emptyList<String>(), suspicious)
     }
