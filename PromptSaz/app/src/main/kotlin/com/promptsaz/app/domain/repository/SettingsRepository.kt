@@ -1,5 +1,6 @@
 package com.promptsaz.app.domain.repository
 
+import com.promptsaz.app.domain.model.AiService
 import com.promptsaz.app.domain.model.AppSettings
 import com.promptsaz.app.domain.model.DetailLevel
 import com.promptsaz.app.domain.model.OutputLanguage
@@ -23,9 +24,14 @@ interface SettingsRepository {
     suspend fun setAiImageModel(model: String)
 
     // multi-service management
-    /** Adds a service (becomes active) and returns its id. */
-    suspend fun addService(name: String, baseUrl: String): String
-    suspend fun updateService(id: String, name: String, baseUrl: String)
+    /** Adds a service (becomes active) and returns its id. [type] is an AiService.TYPE_*. */
+    suspend fun addService(name: String, baseUrl: String, type: String = AiService.TYPE_OPENAI_COMPATIBLE): String
+    suspend fun updateService(
+        id: String,
+        name: String,
+        baseUrl: String,
+        type: String = AiService.TYPE_OPENAI_COMPATIBLE,
+    )
     suspend fun removeService(id: String)
     suspend fun setActiveService(id: String)
 }

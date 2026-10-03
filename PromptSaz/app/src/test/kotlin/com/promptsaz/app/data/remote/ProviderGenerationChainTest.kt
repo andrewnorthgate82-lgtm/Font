@@ -52,8 +52,8 @@ class ProviderGenerationChainTest {
         override suspend fun setAiBaseUrl(url: String) { updateActiveService { it.copy(baseUrl = url) } }
         override suspend fun setAiModel(model: String) { updateActiveService { it.copy(model = model) } }
         override suspend fun setAiImageModel(model: String) { updateActiveService { it.copy(imageModel = model) } }
-        override suspend fun addService(name: String, baseUrl: String): String = "svc-new"
-        override suspend fun updateService(id: String, name: String, baseUrl: String) {}
+        override suspend fun addService(name: String, baseUrl: String, type: String): String = "svc-new"
+        override suspend fun updateService(id: String, name: String, baseUrl: String, type: String) {}
         override suspend fun removeService(id: String) {}
         override suspend fun setActiveService(id: String) { flow.value = flow.value.copy(activeServiceId = id) }
 

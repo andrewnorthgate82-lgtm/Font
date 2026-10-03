@@ -6,6 +6,7 @@ import com.promptsaz.app.domain.model.DomainKnowledge
 import com.promptsaz.app.domain.model.OutputLanguage
 import com.promptsaz.app.domain.model.PromptMode
 import com.promptsaz.app.domain.model.PromptSpec
+import com.promptsaz.app.domain.model.AiService
 import com.promptsaz.app.domain.model.ChatTurn
 import com.promptsaz.app.domain.model.GeneratedImage
 import com.promptsaz.app.domain.provider.AiModePrompts
@@ -70,9 +71,14 @@ class OpenAiCompatibleProvider @Inject constructor(
         // just saved the key and wants to pick a model must be able to test.
         val config = readConnectionConfig()
             ?: return@withContext ProviderHealth.Failed(configGapFa(requireModel = false))
-        when (val response = httpCall("GET", config.modelsUrl, config.key, body = null)) {
+        val modelsUrl = if (config.isGemini) GeminiWire.modelsUrl(config.baseUrl) else config.modelsUrl
+        when (val response = httpCall("GET", modelsUrl, config, body = null)) {
             is HttpOutcome.Success -> {
-                val models = parseModels(response.body)
+                val models = if (config.isGemini) {
+                    GeminiWire.parseModelNames(response.body, json)
+                } else {
+                    parseModels(response.body)
+                }
                 if (response.code in 200..299) {
                     ProviderHealth.Ok(models)
                 } else {
@@ -86,10 +92,16 @@ class OpenAiCompatibleProvider @Inject constructor(
     override suspend fun listModels(): Result<List<String>> = withContext(ioDispatcher) {
         val config = readConnectionConfig()
             ?: return@withContext Result.failure(IllegalStateException(configGapFa(requireModel = false)))
-        when (val response = httpCall("GET", config.modelsUrl, config.key, body = null)) {
+        val modelsUrl = if (config.isGemini) GeminiWire.modelsUrl(config.baseUrl) else config.modelsUrl
+        when (val response = httpCall("GET", modelsUrl, config, body = null)) {
             is HttpOutcome.Success -> {
                 if (response.code in 200..299) {
-                    Result.success(parseModels(response.body))
+                    val models = if (config.isGemini) {
+                        GeminiWire.parseModelNames(response.body, json)
+                    } else {
+                        parseModels(response.body)
+                    }
+                    Result.success(models)
                 } else {
                     Result.failure(IllegalStateException(persianHttpError(response.code, response.body)))
                 }
@@ -104,6 +116,16 @@ class OpenAiCompatibleProvider @Inject constructor(
     ): Result<ProviderGeneration> = withContext(ioDispatcher) {
         val config = readGenerationConfig()
             ?: return@withContext Result.failure(IllegalStateException(configGapFa(requireModel = true)))
+        if (config.isGemini) {
+            return@withContext geminiCall(
+                config,
+                model = config.model,
+                turns = listOf(
+                    ChatTurn(role = "system", text = AiModePrompts.SYSTEM_PROMPT),
+                    ChatTurn(role = "user", text = buildUserPrompt(spec, kb)),
+                ),
+            ) { content -> parseGeneration(content) }
+        }
         val request = ChatCompletionRequestDto(
             model = config.model,
             messages = listOf(
@@ -150,6 +172,9 @@ class OpenAiCompatibleProvider @Inject constructor(
         if (selectedModel.isBlank()) {
             return@withContext Result.failure(IllegalStateException(NO_MODEL_FA))
         }
+        if (config.isGemini) {
+            return@withContext geminiCall(config, model = selectedModel, turns = turns) { it }
+        }
         val request = ChatCompletionChatRequestDto(
             model = selectedModel,
             messages = turns.map { turn -> turn.toContentMessage() },
@@ -187,9 +212,16 @@ class OpenAiCompatibleProvider @Inject constructor(
             if (selectedModel.isBlank()) {
                 return@withContext Result.failure(IllegalStateException(NO_MODEL_FA))
             }
+            if (config.isGemini) {
+                // Gemini has no OpenAI-style images endpoint; the تصویر tab's
+                // image-prompt fallback covers image needs.
+                return@withContext Result.failure(
+                    ImageGenerationUnsupportedException(IMAGES_UNSUPPORTED_FA),
+                )
+            }
             val request = ImageGenerationRequestDto(model = selectedModel, prompt = prompt, size = size)
             val body = json.encodeToString(ImageGenerationRequestDto.serializer(), request)
-            when (val response = httpCall("POST", config.imagesUrl, config.key, body)) {
+            when (val response = httpCall("POST", config.imagesUrl, config, body)) {
                 is HttpOutcome.Success -> {
                     if (response.code == 404) {
                         // The service has no images endpoint at all (text-only
@@ -302,7 +334,13 @@ class OpenAiCompatibleProvider @Inject constructor(
         data class Failure(val messageFa: String) : HttpOutcome
     }
 
-    private data class ProviderConfig(val key: String, val model: String, val baseUrl: String) {
+    private data class ProviderConfig(
+        val key: String,
+        val model: String,
+        val baseUrl: String,
+        val protocol: String = AiService.TYPE_OPENAI_COMPATIBLE,
+    ) {
+        val isGemini: Boolean get() = protocol == AiService.TYPE_GEMINI
         val chatUrl: String get() = baseUrl + CHAT_COMPLETIONS_PATH
         val modelsUrl: String get() = baseUrl + MODELS_PATH
         val imagesUrl: String get() = baseUrl + IMAGES_PATH
@@ -315,7 +353,37 @@ class OpenAiCompatibleProvider @Inject constructor(
         val key = secureKeyStore.getApiKey(service.id)
         val base = service.baseUrl.trim().trimEnd('/')
         if (key.isNullOrBlank() || base.isBlank()) return null
-        return ProviderConfig(key = key, model = "", baseUrl = base)
+        return ProviderConfig(key = key, model = "", baseUrl = base, protocol = service.type)
+    }
+
+    /**
+     * One native Gemini round-trip (POST {base}/models/{model}:generateContent,
+     * X-goog-api-key): system turns become systemInstruction, images become
+     * inlineData parts; [map] turns the reply text into the caller's result.
+     */
+    private suspend fun <T> geminiCall(
+        config: ProviderConfig,
+        model: String,
+        turns: List<ChatTurn>,
+        map: (String) -> T,
+    ): Result<T> = withContext(ioDispatcher) {
+        val url = GeminiWire.generateContentUrl(config.baseUrl, model)
+        val request = GeminiWire.fromTurns(turns, maxOutputTokens = DEFAULT_MAX_TOKENS)
+        val body = json.encodeToString(GeminiWire.GeminiGenerateRequest.serializer(), request)
+        when (val response = httpCall("POST", url, config, body)) {
+            is HttpOutcome.Success -> {
+                if (response.code !in 200..299) {
+                    Result.failure(IllegalStateException(persianHttpError(response.code, response.body)))
+                } else {
+                    runCatching {
+                        val content = GeminiWire.replyText(response.body, json)
+                            ?: throw IOException(BAD_REPLY_FA)
+                        map(content)
+                    }
+                }
+            }
+            is HttpOutcome.Failure -> Result.failure(IllegalStateException(response.messageFa))
+        }
     }
 
     /** Key + base URL + model — required only for generation. */
@@ -357,7 +425,7 @@ class OpenAiCompatibleProvider @Inject constructor(
         serializer: KSerializer<T>,
         withMaxTokens: (T, Int?) -> T,
     ): HttpOutcome {
-        var response = httpCall("POST", config.chatUrl, config.key, encodeChatBody(request, serializer))
+        var response = httpCall("POST", config.chatUrl, config, encodeChatBody(request, serializer))
         if (response is HttpOutcome.Success && response.code == 402) {
             val affordable = AFFORD_REGEX.find(response.body)?.groupValues?.get(1)?.toIntOrNull()
             if (affordable != null && affordable >= MIN_AFFORDABLE_TOKENS) {
@@ -365,12 +433,12 @@ class OpenAiCompatibleProvider @Inject constructor(
                     request,
                     (affordable * 9 / 10).coerceIn(MIN_AFFORDABLE_TOKENS, DEFAULT_MAX_TOKENS),
                 )
-                response = httpCall("POST", config.chatUrl, config.key, encodeChatBody(retry, serializer))
+                response = httpCall("POST", config.chatUrl, config, encodeChatBody(retry, serializer))
             }
         }
         if (response is HttpOutcome.Success && response.code == 400 && response.body.contains("max_tokens")) {
             val retry = withMaxTokens(request, null)
-            response = httpCall("POST", config.chatUrl, config.key, encodeChatBody(retry, serializer))
+            response = httpCall("POST", config.chatUrl, config, encodeChatBody(retry, serializer))
         }
         return response
     }
@@ -386,14 +454,18 @@ class OpenAiCompatibleProvider @Inject constructor(
         }
     }
 
-    private fun httpCall(method: String, url: String, key: String, body: String?): HttpOutcome {
+    private fun httpCall(method: String, url: String, config: ProviderConfig, body: String?): HttpOutcome {
         var connection: HttpURLConnection? = null
         return try {
             connection = (URL(url).openConnection() as HttpURLConnection).apply {
                 requestMethod = method
                 connectTimeout = CONNECT_TIMEOUT_MS
                 readTimeout = READ_TIMEOUT_MS
-                setRequestProperty(AUTH_HEADER, AUTH_PREFIX + key)
+                if (config.isGemini) {
+                    setRequestProperty(GeminiWire.API_KEY_HEADER, config.key)
+                } else {
+                    setRequestProperty(AUTH_HEADER, AUTH_PREFIX + config.key)
+                }
                 setRequestProperty("Content-Type", "application/json")
                 setRequestProperty("Accept", "application/json")
                 if (body != null) {

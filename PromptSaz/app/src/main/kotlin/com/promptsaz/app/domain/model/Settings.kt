@@ -31,14 +31,24 @@ data class AiService(
     val id: String,
     val name: String,
     val baseUrl: String,
+    /** Wire protocol: [TYPE_OPENAI_COMPATIBLE] (default) or [TYPE_GEMINI]. */
+    val type: String = TYPE_OPENAI_COMPATIBLE,
     /** Chat/prompt model of THIS service. */
     val model: String = "",
     /** Image model of THIS service (falls back to [model]). */
     val imageModel: String = "",
 ) {
+    val isGemini: Boolean get() = type == TYPE_GEMINI
+
     companion object {
         /** Id of the service auto-created from the v1 single-service settings. */
         const val LEGACY_DEFAULT_ID = "default"
+
+        /** OpenAI-compatible wire format ({base}/chat/completions, Bearer auth). */
+        const val TYPE_OPENAI_COMPATIBLE = "openai_compatible"
+
+        /** Google Gemini native format ({base}/models/{model}:generateContent, X-goog-api-key). */
+        const val TYPE_GEMINI = "gemini"
     }
 }
 

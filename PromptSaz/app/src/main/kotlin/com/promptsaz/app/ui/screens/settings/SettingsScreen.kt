@@ -1,6 +1,7 @@
 package com.promptsaz.app.ui.screens.settings
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -58,6 +59,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.promptsaz.app.domain.model.AiService
+import com.promptsaz.app.domain.model.AiServicePresets
 import com.promptsaz.app.domain.model.DetailLevel
 import com.promptsaz.app.domain.model.OutputLanguage
 import com.promptsaz.app.domain.model.TargetAi
@@ -229,7 +231,7 @@ fun SettingsScreen(
                             value = keyInput,
                             onValueChange = { keyInput = it },
                             label = { Text("کلید API این سرویس") },
-                            placeholder = { Text("cc_… یا sk-…") },
+                            placeholder = { Text("AIza… / cc_… / sk-…") },
                             singleLine = true,
                             visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
                             trailingIcon = {
@@ -386,12 +388,12 @@ fun SettingsScreen(
         ServiceEditorDialog(
             initial = editorTarget,
             onDismiss = { editorOpen = false },
-            onSave = { name, baseUrl ->
+            onSave = { name, baseUrl, type ->
                 val target = editorTarget
                 if (target == null) {
-                    viewModel.addService(name, baseUrl)
+                    viewModel.addService(name, baseUrl, type)
                 } else {
-                    viewModel.updateService(target.id, name, baseUrl)
+                    viewModel.updateService(target.id, name, baseUrl, type)
                 }
                 editorOpen = false
             },
@@ -469,15 +471,25 @@ private fun ServiceRow(
     }
 }
 
-/** Add/edit dialog for a service — local state, saved with one explicit button. */
+/**
+ * Add/edit dialog for a service — pick a ready preset (Gemini, CodeCraft,
+ * OpenAI, …) and only paste the key later; everything else auto-fills.
+ * Local state, saved with one explicit button.
+ */
 @Composable
 private fun ServiceEditorDialog(
     initial: AiService?,
     onDismiss: () -> Unit,
-    onSave: (name: String, baseUrl: String) -> Unit,
+    onSave: (name: String, baseUrl: String, type: String) -> Unit,
 ) {
+    // start from the preset matching the edited service (custom when unknown)
+    var presetId by rememberSaveable {
+        mutableStateOf(initial?.let { AiServicePresets.matchOf(it)?.id } ?: "")
+    }
     var name by rememberSaveable { mutableStateOf(initial?.name ?: "") }
     var baseUrl by rememberSaveable { mutableStateOf(initial?.baseUrl ?: "") }
+    val preset = AiServicePresets.ALL.firstOrNull { it.id == presetId }
+    val type = preset?.type ?: initial?.type ?: AiService.TYPE_OPENAI_COMPATIBLE
     val urlValid = baseUrl.trim().startsWith("http") || baseUrl.trim().contains('.')
 
     AlertDialog(
@@ -485,11 +497,35 @@ private fun ServiceEditorDialog(
         title = { Text(if (initial == null) "افزودن سرویس جدید" else "ویرایش سرویس") },
         text = {
             Column {
+                Text(
+                    text = "سرویس‌ات را انتخاب کن؛ نشانی و تنظیمات خودکار پر می‌شود:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                ) {
+                    AiServicePresets.ALL.forEach { candidate ->
+                        FilterChip(
+                            selected = candidate.id == presetId,
+                            onClick = {
+                                presetId = candidate.id
+                                name = candidate.nameFa
+                                baseUrl = candidate.baseUrl
+                            },
+                            label = { Text(candidate.nameFa, maxLines = 1) },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("نام سرویس") },
-                    placeholder = { Text("مثلاً: CodeCraft یا OpenAI") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -498,21 +534,35 @@ private fun ServiceEditorDialog(
                     value = baseUrl,
                     onValueChange = { baseUrl = it },
                     label = { Text("نشانی سرور (Base URL)") },
-                    placeholder = { Text("https://codecraftapi.com/v1") },
+                    placeholder = { Text("https://…") },
                     singleLine = true,
                     supportingText = {
                         Text(
-                            text = "نشانی باید با /v1 تمام شود. مثال‌ها: api.openai.com/v1 — openrouter.ai/api/v1",
+                            text = when {
+                                preset == null ->
+                                    "سرویس‌های سازگار با OpenAI معمولاً با /v1 تمام می‌شوند."
+                                preset.id == "gemini" ->
+                                    "همین نشانی پیش‌فرض گوگل را نگه دار؛ کلید را بعد از ذخیره در کادر «کلید API این سرویس» وارد کن."
+                                else -> preset.keyHintFa
+                            },
                             style = MaterialTheme.typography.bodySmall,
                         )
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
+                if (preset != null && preset.id != AiServicePresets.CUSTOM_ID) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = preset.keyHintFa,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
         },
         confirmButton = {
             Button(
-                onClick = { onSave(name, baseUrl) },
+                onClick = { onSave(name, baseUrl, type) },
                 enabled = name.isNotBlank() && urlValid,
             ) { Text("ذخیره") }
         },

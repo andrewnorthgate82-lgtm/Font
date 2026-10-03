@@ -92,12 +92,12 @@ class SettingsViewModel @Inject constructor(
 
     fun setActiveService(id: String) = launchSetting { settingsRepository.setActiveService(id) }
 
-    fun addService(name: String, baseUrl: String) = launchSetting {
-        settingsRepository.addService(name, normalizeUrl(baseUrl))
+    fun addService(name: String, baseUrl: String, type: String) = launchSetting {
+        settingsRepository.addService(name, normalizeUrl(baseUrl), type)
     }
 
-    fun updateService(id: String, name: String, baseUrl: String) = launchSetting {
-        settingsRepository.updateService(id, name, normalizeUrl(baseUrl))
+    fun updateService(id: String, name: String, baseUrl: String, type: String) = launchSetting {
+        settingsRepository.updateService(id, name, normalizeUrl(baseUrl), type)
     }
 
     fun removeService(id: String) = launchSetting {

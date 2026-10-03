@@ -86,7 +86,7 @@ class SettingsStore(private val context: Context) {
     // --- multi-service CRUD ----------------------------------------------------------
 
     /** Adds a new service, makes it the active one and returns its id. */
-    suspend fun addService(name: String, baseUrl: String): String {
+    suspend fun addService(name: String, baseUrl: String, type: String): String {
         var newId = ""
         context.settingsDataStore.edit { prefs ->
             val services = servicesOf(prefs).toMutableList()
@@ -96,6 +96,7 @@ class SettingsStore(private val context: Context) {
                 id = id,
                 name = name.trim().ifBlank { AiServiceCodec.hostOf(normalizedUrl) ?: "سرویس جدید" },
                 baseUrl = normalizedUrl,
+                type = type,
             )
             newId = id
             prefs[Keys.AI_SERVICES] = AiServiceCodec.encode(services)
@@ -104,7 +105,7 @@ class SettingsStore(private val context: Context) {
         return newId
     }
 
-    suspend fun updateService(id: String, name: String, baseUrl: String) {
+    suspend fun updateService(id: String, name: String, baseUrl: String, type: String) {
         context.settingsDataStore.edit { prefs ->
             val services = servicesOf(prefs).toMutableList()
             val index = services.indexOfFirst { it.id == id }
@@ -112,6 +113,7 @@ class SettingsStore(private val context: Context) {
                 services[index] = services[index].copy(
                     name = name.trim().ifBlank { services[index].name },
                     baseUrl = baseUrl.trim().trimEnd('/'),
+                    type = type,
                 )
                 prefs[Keys.AI_SERVICES] = AiServiceCodec.encode(services)
             }
