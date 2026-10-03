@@ -210,7 +210,7 @@ fun ImageStudioScreen(
                         tint = MaterialTheme.colorScheme.onErrorContainer,
                         modifier = Modifier
                             .size(18.dp)
-                            .clickable(viewModel::dismissError),
+                            .clickable { viewModel.dismissError() },
                     )
                 }
             }

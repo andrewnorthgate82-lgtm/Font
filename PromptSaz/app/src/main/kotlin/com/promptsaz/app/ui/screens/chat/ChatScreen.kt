@@ -36,7 +36,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalDrawerValue
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -81,7 +81,7 @@ fun ChatScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val drawerState = rememberDrawerState(ModalDrawerValue.Closed)
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
 
     var input by remember { mutableStateOf("") }
     var pendingImage by remember { mutableStateOf<Pair<ByteArray, String>?>(null) }
@@ -226,7 +226,7 @@ fun ChatScreen(
                             tint = MaterialTheme.colorScheme.onErrorContainer,
                             modifier = Modifier
                                 .size(18.dp)
-                                .clickable(viewModel::dismissError),
+                                .clickable { viewModel.dismissError() },
                         )
                     }
                 }
@@ -364,7 +364,7 @@ fun ChatScreen(
                             Box(
                                 modifier = Modifier
                                     .background(if (canSend) BrandGradient else MaterialTheme.colorScheme.surfaceVariant)
-                                    .size(width = 52.dp, height = 52.dp),
+                                    .size(52.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Icon(
