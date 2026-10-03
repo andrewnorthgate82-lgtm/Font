@@ -20,7 +20,14 @@ plugins {
 
 android {
     namespace = "com.promptsaz.app"
-    compileSdk = 36
+
+    // Compose 1.12 / Navigation 2.10 artifacts require compiling against
+    // Android 16 QPR2 (API 36.1) — official minor-SDK DSL.
+    compileSdk {
+        version = release(36) {
+            minorApiLevel = 1
+        }
+    }
 
     defaultConfig {
         applicationId = "com.promptsaz.app"
@@ -69,6 +76,12 @@ kotlin {
 room {
     // Exported schemas enable auto-migrations and are committed to version control.
     schemaDirectory("$projectDir/schemas")
+}
+
+hilt {
+    // KSP2-safe aggregation: the ASM aggregating task cannot resolve
+    // annotations in the same module under built-in Kotlin + KSP 2.3.x.
+    enableAggregatingTask = false
 }
 
 ksp {
