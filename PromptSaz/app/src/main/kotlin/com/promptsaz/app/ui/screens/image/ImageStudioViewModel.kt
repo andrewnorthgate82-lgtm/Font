@@ -71,7 +71,7 @@ class ImageStudioViewModel @Inject constructor(
             imageRepository.history().collect { history ->
                 _uiState.update { state ->
                     val current = state.current ?: history.firstOrNull()
-                    it.copy(history = history, current = current)
+                    state.copy(history = history, current = current)
                 }
             }
         }

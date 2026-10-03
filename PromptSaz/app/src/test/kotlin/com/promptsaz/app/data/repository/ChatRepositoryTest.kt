@@ -89,7 +89,7 @@ class ChatRepositoryTest {
         var lastTurns: List<ChatTurn> = emptyList()
         var reply: String = "پاسخ دستیار برای تست."
 
-        override suspend fun chat(model: String, turns: List<ChatTurn>): Result<String> {
+        open suspend fun chat(model: String, turns: List<ChatTurn>): Result<String> {
             lastModel = model
             lastTurns = turns
             return Result.success(reply)
