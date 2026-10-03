@@ -1,8 +1,6 @@
 name: Build APK
 
 # PromptSaz lives in the PromptSaz/ subfolder of this repository.
-# (A standalone copy of this workflow for a future promptsaz-android repo,
-# with root-relative paths, ships at PromptSaz/.github/workflows/build-apk.yml.)
 on:
   push:
     branches: [main, "arena/01a0fc10-font"]
@@ -21,6 +19,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
@@ -38,13 +38,7 @@ jobs:
         run: |
           set -o pipefail
           ./gradlew :app:testDebugUnitTest --stacktrace > /tmp/gradle.log 2>&1 || {
-            {
-              echo "### Gradle unit-test failure"
-              echo '```'
-              tail -n 150 /tmp/gradle.log
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
-            grep -E "error:|^e: |Caused by|What went wrong|Could not|Unsupported|requires|incompatible|compile against" /tmp/gradle.log | head -25 | sed 's/^/::error::/' || true
+            grep -E "error:|^e: |^w: |Caused by|What went wrong|Could not|Unsupported|requires|incompatible|compile against|classpath" /tmp/gradle.log | head -45 | sed 's/^/::error::/' || true
             exit 1
           }
 
@@ -52,13 +46,7 @@ jobs:
         run: |
           set -o pipefail
           ./gradlew :app:assembleDebug --stacktrace > /tmp/gradle-build.log 2>&1 || {
-            {
-              echo "### Gradle build failure"
-              echo '```'
-              tail -n 150 /tmp/gradle-build.log
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
-            grep -E "error:|^e: |Caused by|What went wrong|Could not|Unsupported|requires|incompatible|compile against" /tmp/gradle-build.log | head -25 | sed 's/^/::error::/' || true
+            grep -E "error:|^e: |^w: |Caused by|What went wrong|Could not|Unsupported|requires|incompatible|compile against|classpath" /tmp/gradle-build.log | head -45 | sed 's/^/::error::/' || true
             exit 1
           }
 
@@ -82,3 +70,19 @@ jobs:
             --notes "خودکار از آخرین کد ساخته شد.
           دانلود: PromptSaz.apk — روی گوشی باز کنید و اجازه نصب بدهید." \
             --latest
+
+      - name: Push failure logs to branch (diagnostics)
+        if: failure()
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout "$GITHUB_REF_NAME" 2>/dev/null || true
+          mkdir -p ci-logs
+          cp /tmp/gradle.log "ci-logs/run-${GITHUB_RUN_NUMBER}-test.log" 2>/dev/null || true
+          cp /tmp/gradle-build.log "ci-logs/run-${GITHUB_RUN_NUMBER}-build.log" 2>/dev/null || true
+          git add ci-logs || true
+          git commit -m "CI failure logs (run ${GITHUB_RUN_NUMBER}) [skip ci]" || true
+          git push origin "HEAD:${GITHUB_REF_NAME}" || true
