@@ -38,9 +38,13 @@ class GeminiWireTest {
             maxOutputTokens = null,
         )
 
-        val part = request.contents.single().parts.single()
-        assertEquals("image/jpeg", part.inlineData?.mimeType)
-        assertEquals("QUJDRA==", part.inlineData?.data)
+        // text + image together → two parts in one content
+        val parts = request.contents.single().parts
+        assertEquals(2, parts.size)
+        assertEquals("ببین", parts.first { it.text != null }.text)
+        val image = parts.first { it.inlineData != null }.inlineData
+        assertEquals("image/jpeg", image?.mimeType)
+        assertEquals("QUJDRA==", image?.data)
     }
 
     @Test
