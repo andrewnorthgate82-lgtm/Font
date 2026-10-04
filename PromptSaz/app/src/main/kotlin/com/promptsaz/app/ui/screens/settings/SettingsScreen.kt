@@ -80,6 +80,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -224,7 +225,7 @@ fun SettingsScreen(
                 .fillMaxWidth(),
             transitionSpec = {
                 val direction = if (targetState > initialState) 1 else -1
-                val pageSpring = spring(
+                val pageSpring = spring<IntOffset>(
                     dampingRatio = Spring.DampingRatioNoBouncy,
                     stiffness = Spring.StiffnessMediumLow,
                 )
