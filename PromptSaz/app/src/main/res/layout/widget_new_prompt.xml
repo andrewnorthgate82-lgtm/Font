@@ -16,7 +16,7 @@
         android:layout_height="20dp"
         android:adjustViewBounds="true"
         android:contentDescription="@string/shortcut_new_prompt"
-        android:src="@drawable/widget_spark" />
+        android:src="@drawable/ic_launcher_foreground" />
 
     <Space
         android:layout_width="8dp"

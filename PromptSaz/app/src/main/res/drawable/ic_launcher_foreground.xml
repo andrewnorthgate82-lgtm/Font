@@ -1,21 +1,21 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Adaptive-icon foreground: the prompt spark + amber accent, inside the
-     66dp safe zone of the 108dp canvas. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- main 4-point spark -->
     <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M54,26 L58.8,43.2 L76,48 L58.8,52.8 L54,70 L49.2,52.8 L32,48 L49.2,43.2 Z" />
-    <!-- amber accent dot -->
+        android:pathData="M72.71,36.53 A22.80,22.80 0 1,0 72.71,71.47"
+        android:fillColor="#00000000"
+        android:strokeColor="#1FB5A8"
+        android:strokeWidth="9.00"
+        android:strokeLineCap="round" />
     <path
-        android:fillColor="#FFF59E0B"
-        android:pathData="M72,66 m-4.5,0 a4.5,4.5 0 1 0 9,0 a4.5,4.5 0 1 0 -9,0" />
-    <!-- soft white dot -->
+        android:pathData="M52.35,46.20 a5.10,5.10 0 1,0 10.20,0 a5.10,5.10 0 1,0 -10.20,0 z"
+        android:fillColor="#F5B83D" />
     <path
-        android:fillColor="#B3FFFFFF"
-        android:pathData="M38,72 m-3.2,0 a3.2,3.2 0 1 0 6.4,0 a3.2,3.2 0 1 0 -6.4,0" />
+        android:pathData="M46.05,58.80 a5.10,5.10 0 1,0 10.20,0 a5.10,5.10 0 1,0 -10.20,0 z"
+        android:fillColor="#FF7A8A" />
+    <path
+        android:pathData="M58.65,58.80 a5.10,5.10 0 1,0 10.20,0 a5.10,5.10 0 1,0 -10.20,0 z"
+        android:fillColor="#FFFFFF" />
 </vector>
