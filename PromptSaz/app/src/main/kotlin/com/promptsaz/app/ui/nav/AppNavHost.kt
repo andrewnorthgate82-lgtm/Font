@@ -1,5 +1,10 @@
 package com.promptsaz.app.ui.nav
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.EditNote
@@ -104,10 +109,42 @@ fun AppNavHost() {
             }
         },
     ) { padding ->
+        // RTL-aware motion: pushed screens slide in from the left edge,
+        // tab switches just cross-fade — hierarchy vs siblings.
+        val tabRoutes = setOf(Routes.CHAT, Routes.HOME, Routes.IMAGE)
+        fun isTabSwitch(
+            initial: androidx.navigation.NavBackStackEntry?,
+            target: androidx.navigation.NavBackStackEntry?,
+        ): Boolean {
+            val from = initial?.destination?.route
+            val to = target?.destination?.route
+            return from in tabRoutes && to in tabRoutes
+        }
+
         NavHost(
             navController = navController,
             startDestination = Routes.CHAT,
             modifier = Modifier.padding(padding),
+            enterTransition = {
+                if (isTabSwitch(initialState, targetState)) {
+                    fadeIn(tween(220))
+                } else {
+                    slideInHorizontally(tween(340)) { -it / 3 } + fadeIn(tween(340))
+                }
+            },
+            exitTransition = {
+                if (isTabSwitch(initialState, targetState)) {
+                    fadeOut(tween(160))
+                } else {
+                    slideOutHorizontally(tween(340)) { it / 4 } + fadeOut(tween(340))
+                }
+            },
+            popEnterTransition = {
+                slideInHorizontally(tween(340)) { it / 4 } + fadeIn(tween(340))
+            },
+            popExitTransition = {
+                slideOutHorizontally(tween(340)) { -it / 3 } + fadeOut(tween(340))
+            },
         ) {
             composable(Routes.CHAT) {
                 ChatScreen(

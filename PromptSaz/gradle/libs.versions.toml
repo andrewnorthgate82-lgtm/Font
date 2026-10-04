@@ -19,6 +19,7 @@ ksp = "2.3.12"
 hilt = "2.60.1"
 androidxHiltLifecycleViewmodel = "1.4.0"
 androidxCore = "1.19.0"
+androidxCoreSplashscreen = "1.0.1"
 androidxActivityCompose = "1.13.0"
 androidxComposeBom = "2026.02.01"
 androidxLifecycle = "2.11.0"
@@ -33,6 +34,7 @@ junit = "4.13.2"
 [libraries]
 # AndroidX core
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "androidxCore" }
+androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "androidxCoreSplashscreen" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "androidxActivityCompose" }
 
 # Compose (versions resolved by the BOM)

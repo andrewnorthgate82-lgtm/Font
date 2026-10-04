@@ -252,11 +252,9 @@ class OpenAiCompatibleProvider @Inject constructor(
                 return@withContext pixazoGenerate(config, prompt, size)
             }
             if (config.isGemini) {
-                // Gemini has no OpenAI-style images endpoint; the تصویر tab's
-                // image-prompt fallback covers image needs.
-                return@withContext Result.failure(
-                    ImageGenerationUnsupportedException(IMAGES_UNSUPPORTED_FA),
-                )
+                // Native Gemini image generation (nano-banana / gemini-*-image):
+                // generateContent with TEXT+IMAGE modalities → inlineData part.
+                return@withContext geminiGenerateImage(config, selectedModel, prompt)
             }
             val request = ImageGenerationRequestDto(model = selectedModel, prompt = prompt, size = size)
             val body = json.encodeToString(ImageGenerationRequestDto.serializer(), request)
@@ -288,6 +286,37 @@ class OpenAiCompatibleProvider @Inject constructor(
                 is HttpOutcome.Failure -> Result.failure(IllegalStateException(response.messageFa))
             }
         }
+
+    /**
+     * Native Gemini image generation (e.g. gemini-2.5-flash-image «نانو‌بنانا»):
+     * POST {base}/models/{model}:generateContent asking for TEXT+IMAGE output;
+     * the first inlineData part carries the image bytes as base64. A text-only
+     * reply means the model is not an image model → the تصویر tab's
+     * image-prompt fallback kicks in with a precise Persian message.
+     */
+    private suspend fun geminiGenerateImage(
+        config: ProviderConfig,
+        model: String,
+        prompt: String,
+    ): Result<GeneratedImage> = withContext(ioDispatcher) {
+        val request = GeminiWire.imageRequest(prompt)
+        val body = json.encodeToString(GeminiWire.GeminiGenerateRequest.serializer(), request)
+        when (val response = httpCall("POST", GeminiWire.generateContentUrl(config.baseUrl, model), config, body)) {
+            is HttpOutcome.Success -> {
+                if (response.code !in 200..299) {
+                    return@withContext Result.failure(
+                        IllegalStateException(persianHttpError(response.code, response.body)),
+                    )
+                }
+                runCatching {
+                    val base64 = GeminiWire.imageBase64(response.body, json)
+                        ?: throw ImageGenerationUnsupportedException(GEMINI_NO_IMAGE_FA)
+                    GeneratedImage.FromBase64(base64)
+                }
+            }
+            is HttpOutcome.Failure -> Result.failure(IllegalStateException(response.messageFa))
+        }
+    }
 
     /** Downloads a generated image from its (pre-signed) URL. */
     override suspend fun fetchImageBytes(url: String): Result<ByteArray> = withContext(ioDispatcher) {
@@ -751,6 +780,10 @@ class OpenAiCompatibleProvider @Inject constructor(
         const val IMAGES_UNSUPPORTED_FA =
             "ساخت تصویر با این سرویس یا این مدل ممکن نیست (کد HTTP: ۴۰۴). " +
                 "به احتمال زیاد سرویس شما صفحهٔ ساخت عکس ندارد یا مدل انتخاب‌شده فقط متن تولید می‌کند."
+
+        const val GEMINI_NO_IMAGE_FA =
+            "این مدل گوگل در پاسخ، تصویر برنگرداند؛ احتمالاً متن‌ساز است. " +
+                "در انتخاب مدل، یک مدل تصویری (مثل gemini-2.5-flash-image) را انتخاب کن."
 
         const val FALLBACK_TITLE_FA = "پرامپت ساخته‌شده با هوش مصنوعی"
     }

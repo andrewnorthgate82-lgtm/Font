@@ -30,6 +30,8 @@ object GeminiWire {
     data class GeminiGenerationConfig(
         val temperature: Double = 0.7,
         @SerialName("maxOutputTokens") val maxOutputTokens: Int? = null,
+        /** ["TEXT","IMAGE"] unlocks the image-output models (nano-banana). */
+        val responseModalities: List<String>? = null,
     )
 
     @Serializable
@@ -121,6 +123,24 @@ object GeminiWire {
         if (mime.isBlank() || data.isBlank()) return null
         return mime to data
     }
+
+    /** Image-generation request (nano-banana): one text part + IMAGE modality. */
+    fun imageRequest(prompt: String): GeminiGenerateRequest =
+        GeminiGenerateRequest(
+            contents = listOf(
+                GeminiContent(role = "user", parts = listOf(GeminiPart(text = prompt))),
+            ),
+            generationConfig = GeminiGenerationConfig(responseModalities = listOf("TEXT", "IMAGE")),
+        )
+
+    /** Base64 of the first inlineData part; null when the reply is text-only. */
+    fun imageBase64(body: String, json: Json): String? = runCatching {
+        val parsed = json.decodeFromString(GeminiGenerateResponse.serializer(), body)
+        parsed.candidates.firstOrNull()
+            ?.content?.parts
+            ?.firstNotNullOfOrNull { part -> part.inlineData }
+            ?.data
+    }.getOrNull()
 
     /** First text of the first candidate; null when the reply carries no text. */
     fun replyText(body: String, json: Json): String? = runCatching {

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Boot window background — matches the light theme surface (#F4F4FB). -->
-    <color name="starting_background">#F4F4FB</color>
+    <color name="starting_background">#F5F5F7</color>
 </resources>
