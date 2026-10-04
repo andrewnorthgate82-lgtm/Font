@@ -21,6 +21,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -123,7 +124,7 @@ fun ClarifyScreen(
                         label = "سؤال‌های پاسخ‌داده‌شده",
                     )
                     Text(
-                        text = "هرچه دقیق‌تر جواب بدهی، پرامپت قوی‌تر می‌شود.",
+                        text = "دقیق‌تر جواب بدهی، پرامپت قوی‌تر می‌شود.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -133,7 +134,11 @@ fun ClarifyScreen(
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surface,
                             ),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                         ) {
                             Column(
                                 modifier = Modifier.padding(18.dp),
@@ -187,10 +192,8 @@ fun ClarifyScreen(
                     Spacer(Modifier.height(84.dp))
                 }
 
-                Surface(
-                    color = MaterialTheme.colorScheme.surface,
-                    shadowElevation = 12.dp,
-                ) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                Surface(color = MaterialTheme.colorScheme.surface) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()

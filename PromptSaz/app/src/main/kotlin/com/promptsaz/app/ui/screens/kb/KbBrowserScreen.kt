@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -94,11 +93,17 @@ private fun DomainCard(domain: KbDomainEntry, enabled: Boolean, onClick: () -> U
     Card(
         colors = CardDefaults.cardColors(
             containerColor = if (enabled) {
-                MaterialTheme.colorScheme.surfaceVariant
-            } else {
                 MaterialTheme.colorScheme.surface
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
             },
         ),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier
             .fillMaxWidth()
             .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier),

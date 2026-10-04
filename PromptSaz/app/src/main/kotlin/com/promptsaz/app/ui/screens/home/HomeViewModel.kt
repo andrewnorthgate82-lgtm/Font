@@ -186,6 +186,10 @@ class HomeViewModel @Inject constructor(
     }
 
     companion object {
+        /** ids of the segmented control on the prompt tab */
+        const val MODE_NEW = "new"
+        const val MODE_IMPROVE = "improve"
+
         const val MAX_IDEA_CHARS = 4000
         const val MIN_IDEA_CHARS = 3
     }

@@ -42,6 +42,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
@@ -104,8 +105,8 @@ fun ImageStudioScreen(
                 .fillMaxSize()
                 .imePadding(),
         ) {
-            // --- top bar (like the گفتگو tab) --------------------------------
-            Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
+            // --- top bar -------------------------------------------------------
+            Surface(color = MaterialTheme.colorScheme.surface) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -146,6 +147,7 @@ fun ImageStudioScreen(
                     )
                 }
             }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
             // --- setup banner (like the گفتگو tab) ---------------------------
             if (state.needsSetup) {
@@ -160,9 +162,9 @@ fun ImageStudioScreen(
                     ) {
                         Text(
                             text = if (!state.hasKey) {
-                                "برای ساخت تصویر، کلید API را در تنظیمات وارد کن."
+                                "کلید API را در تنظیمات وارد کن."
                             } else {
-                                "یک مدل برای ساخت تصویر انتخاب کن."
+                                "یک مدل انتخاب کن."
                             },
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),
@@ -244,14 +246,13 @@ fun ImageStudioScreen(
                             ) {
                                 Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
                                     Text(
-                                        text = "این سرویس یا مدل، عکس نمی‌سازد",
+                                        text = "این سرویس عکس نمی‌سازد",
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold,
                                     )
                                     Spacer(Modifier.height(4.dp))
                                     Text(
-                                        text = "به‌جای عکس، می‌توانی از همین توصیف یک «پرامپت تصویر» حرفه‌ای (انگلیسی) بسازی " +
-                                            "و آن را در Midjourney، DALL·E یا هر ابزار ساخت عکس دیگری پیست کنی.",
+                                        text = "از همین توصیف، پرامپت تصویر حرفه‌ای (انگلیسی) برای Midjourney و DALL·E می‌سازم.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -297,7 +298,7 @@ fun ImageStudioScreen(
                                 Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                            text = "پرامپت تصویر (برای Midjourney و DALL·E)",
+                                            text = "پرامپت تصویر",
                                             style = MaterialTheme.typography.titleSmall,
                                             fontWeight = FontWeight.Bold,
                                             modifier = Modifier.weight(1f),
@@ -382,8 +383,9 @@ fun ImageStudioScreen(
                 }
             }
 
-            // --- bottom input bar (like the گفتگو tab) ------------------------
-            Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 8.dp) {
+            // --- bottom input bar ----------------------------------------------
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            Surface(color = MaterialTheme.colorScheme.surface) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     // size selector — compact pills above the input
                     Row(
@@ -516,7 +518,7 @@ private fun EmptyStudio(onSuggestion: (String) -> Unit, modifier: Modifier = Mod
             fontWeight = FontWeight.Bold,
         )
         Text(
-            text = "توصیف تصویر دلخواهت را بنویس؛ اگر سرویس‌ات عکس نسازد، پرامپت حرفه‌ای‌اش را می‌گیریم.",
+            text = "توصیف کن تا تصویرش را بسازم.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,

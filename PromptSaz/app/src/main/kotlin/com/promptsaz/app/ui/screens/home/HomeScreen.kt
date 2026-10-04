@@ -1,9 +1,7 @@
 package com.promptsaz.app.ui.screens.home
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +31,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -45,7 +44,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
@@ -58,6 +56,7 @@ import com.promptsaz.app.domain.model.OutputLanguage
 import com.promptsaz.app.domain.model.TargetAi
 import com.promptsaz.app.ui.components.ModelPickerSheet
 import com.promptsaz.app.ui.components.SectionLabel
+import com.promptsaz.app.ui.components.SegmentedControl
 import com.promptsaz.app.ui.components.SelectChipRow
 import com.promptsaz.app.ui.components.SoftIconButton
 import com.promptsaz.app.ui.theme.BrandGradient
@@ -89,7 +88,7 @@ fun HomeScreen(
             .imePadding(),
     ) {
         // --- top bar: one menu + title + model pill — nothing else ------------
-        Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
+        Surface(color = MaterialTheme.colorScheme.surface) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -168,6 +167,7 @@ fun HomeScreen(
                 }
             }
         }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
         // --- middle: mode + prompt settings ----------------------------------
         Column(
@@ -179,7 +179,7 @@ fun HomeScreen(
         ) {
             Text(
                 text = if (state.improveMode) {
-                    "پرامپت فعلی‌ات را همین‌جا بچسبان تا حرفه‌ای بازنویسی شود"
+                    "پرامپت فعلی‌ات را بچسبان تا حرفه‌ای بازنویسی شود"
                 } else {
                     "بگو چه می‌خواهی؛ پرامپت حرفه‌ایش را می‌سازم"
                 },
@@ -188,13 +188,14 @@ fun HomeScreen(
                 modifier = Modifier.padding(top = 20.dp, bottom = 12.dp),
             )
 
-            // mode switch — full width, two short labels
-            ModeSegment(
-                firstLabel = "پرامپت جدید",
-                secondLabel = "بهبود پرامپت",
-                secondSelected = state.improveMode,
-                onFirst = { viewModel.setImproveMode(false) },
-                onSecond = { viewModel.setImproveMode(true) },
+            // mode switch — the app's one segmented control
+            SegmentedControl(
+                options = listOf(
+                    HomeViewModel.MODE_NEW to "پرامپت جدید",
+                    HomeViewModel.MODE_IMPROVE to "بهبود پرامپت",
+                ),
+                selectedId = if (state.improveMode) HomeViewModel.MODE_IMPROVE else HomeViewModel.MODE_NEW,
+                onSelect = { id -> viewModel.setImproveMode(id == HomeViewModel.MODE_IMPROVE) },
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -237,14 +238,14 @@ fun HomeScreen(
             }
 
             AnimatedVisibility(visible = optionsExpanded) {
-                Column(modifier = Modifier.animateContentSize()) {
+                Column {
                     SectionLabel("حوزه")
                     SelectChipRow(
                         options = state.domains.map { it.id to it.nameFa },
                         selectedId = state.domainId,
                         onSelect = viewModel::setDomain,
                     )
-                    SectionLabel("هدفت کدام مدل است؟")
+                    SectionLabel("مدل هدف")
                     SelectChipRow(
                         options = TargetAi.entries.map { it.id to it.labelFa },
                         selectedId = state.targetAi.id,
@@ -281,15 +282,16 @@ fun HomeScreen(
                     modifier = Modifier.size(16.dp),
                 )
                 Text(
-                    text = "چند سؤال کوتاه بعدی، پرامپت را دقیق‌تر می‌کند.",
+                    text = "چند سؤال کوتاه، پرامپت را دقیق‌تر می‌کند",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
 
-        // --- bottom input bar (like the گفتگو tab) ----------------------------
-        Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 8.dp) {
+        // --- bottom input bar ------------------------------------------------
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        Surface(color = MaterialTheme.colorScheme.surface) {
             Row(
                 verticalAlignment = Alignment.Bottom,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -380,78 +382,4 @@ fun HomeScreen(
         selectedServiceId = state.serviceId,
         onSelectService = viewModel::selectService,
     )
-}
-
-/** Two-option segmented switch — the app's single mode control. */
-@Composable
-private fun ModeSegment(
-    firstLabel: String,
-    secondLabel: String,
-    secondSelected: Boolean,
-    onFirst: () -> Unit,
-    onSecond: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        shape = RoundedCornerShape(50),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = modifier,
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(5.dp),
-        ) {
-            SegmentOption(
-                label = firstLabel,
-                selected = !secondSelected,
-                onClick = onFirst,
-                modifier = Modifier.weight(1f),
-            )
-            SegmentOption(
-                label = secondLabel,
-                selected = secondSelected,
-                onClick = onSecond,
-                modifier = Modifier.weight(1f),
-            )
-        }
-    }
-}
-
-@Composable
-private fun SegmentOption(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val background = if (selected) BrandGradient else null
-    val textColor = if (selected) {
-        Color.White
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(40.dp)
-            .clip(RoundedCornerShape(50))
-            .then(
-                if (background != null) {
-                    Modifier.background(background)
-                } else {
-                    Modifier
-                },
-            )
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-            color = textColor,
-            maxLines = 1,
-        )
-    }
 }

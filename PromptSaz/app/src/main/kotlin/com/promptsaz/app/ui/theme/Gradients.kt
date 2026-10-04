@@ -4,17 +4,16 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
 /**
- * Brand gradients — the single visual signature of the app. Used sparingly:
- * the logo tile, primary call-to-action, progress fill, score accents and
- * section markers. Everything else stays calm and neutral.
+ * The brand's only gradients — used sparingly (primary action, hero tile,
+ * progress fill). Everything else stays flat and neutral.
  */
 
-/** Indigo → violet: the primary brand gradient. */
+/** Indigo → violet: the signature. */
 val BrandGradient = Brush.linearGradient(
     listOf(Color(0xFF4F46E5), Color(0xFF8B5CF6)),
 )
 
-/** Indigo → violet → amber: used only for the big hero moments. */
+/** Indigo → violet → amber: hero moments only. */
 val BrandGradientWarm = Brush.linearGradient(
     listOf(Color(0xFF4F46E5), Color(0xFF8B5CF6), Color(0xFFF59E0B)),
 )
@@ -22,17 +21,17 @@ val BrandGradientWarm = Brush.linearGradient(
 /** Soft diagonal wash for hero cards; pass the page background color. */
 fun brandWash(base: Color): Brush = Brush.linearGradient(
     listOf(
-        Color(0xFF4F46E5).copy(alpha = 0.10f),
-        Color(0xFF8B5CF6).copy(alpha = 0.04f),
+        Color(0xFF4F46E5).copy(alpha = 0.08f),
+        Color(0xFF8B5CF6).copy(alpha = 0.03f),
         base,
     ),
 )
 
-/** Gentle glow border for cards that should feel alive. */
+/** Hairline gradient border for cards that should feel alive. */
 fun brandGlowBorder(): Brush = Brush.linearGradient(
     listOf(
-        Color(0xFF4F46E5).copy(alpha = 0.45f),
-        Color(0xFF8B5CF6).copy(alpha = 0.20f),
+        Color(0xFF4F46E5).copy(alpha = 0.35f),
+        Color(0xFF8B5CF6).copy(alpha = 0.15f),
         Color(0x00FFFFFF),
     ),
 )

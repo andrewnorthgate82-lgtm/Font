@@ -3,6 +3,7 @@ package com.promptsaz.app.ui.components
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -16,12 +17,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.KeyboardArrowLeft
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -46,14 +47,15 @@ import com.promptsaz.app.ui.theme.BrandGradient
 import com.promptsaz.app.util.toPersianDigits
 
 /**
- * The PromptSaz component kit: every screen is assembled from these pieces so
- * the whole app shares one visual language — pill chips, soft cards, one
- * signature gradient, and generous touch targets.
+ * The PromptSaz component kit (2026 edition): every screen is assembled from
+ * these pieces so the whole app shares one flat, minimal, Apple-flavored
+ * language — pill controls, hairline borders instead of shadows, one accent
+ * family, and generous touch targets.
  */
 
 // ---------------------------------------------------------------- headers ----
 
-/** Screen header: soft back button, gradient title, optional actions. */
+/** Screen header: tinted round back button, plain bold title, actions. */
 @Composable
 fun AppHeader(
     title: String,
@@ -61,46 +63,36 @@ fun AppHeader(
     onBack: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            if (onBack != null) {
-                Surface(
-                    onClick = onBack,
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                        contentDescription = "بازگشت",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(9.dp),
-                    )
-                }
-            }
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontWeight = FontWeight.ExtraBold,
-                    brush = BrandGradient,
-                ),
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 6.dp),
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        if (onBack != null) {
+            SoftIconButton(
+                icon = Icons.AutoMirrored.Rounded.ArrowBack,
+                contentDescription = "بازگشت",
+                onClick = onBack,
             )
-            actions()
         }
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.ExtraBold,
+            maxLines = 1,
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 6.dp),
+        )
+        actions()
     }
 }
 
 // ------------------------------------------------------------------ chips ----
 
-/** The one chip of the app: animated pill, brand color when selected. */
+/** The one chip of the app: flat pill, solid accent when selected. */
 @Composable
 fun PillChip(
     label: String,
@@ -113,7 +105,7 @@ fun PillChip(
         targetValue = if (selected) {
             MaterialTheme.colorScheme.primary
         } else {
-            MaterialTheme.colorScheme.surfaceVariant
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
         },
         animationSpec = tween(200),
         label = "chipBackground",
@@ -133,14 +125,9 @@ fun PillChip(
         shape = RoundedCornerShape(50),
         color = background,
         contentColor = contentColor,
-        shadowElevation = if (selected) 2.dp else 0.dp,
-        border = androidx.compose.foundation.BorderStroke(
+        border = if (selected) null else BorderStroke(
             width = 1.dp,
-            color = if (selected) {
-                Color.Transparent
-            } else {
-                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
-            },
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
         ),
         modifier = modifier,
     ) {
@@ -148,7 +135,7 @@ fun PillChip(
             text = label,
             style = MaterialTheme.typography.labelLarge,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
         )
     }
 }
@@ -174,12 +161,65 @@ fun SelectChipRow(
     }
 }
 
-// --------------------------------------------------------------- buttons ----
+// --------------------------------------------------------------- controls ----
 
 /**
- * The primary call-to-action: the brand gradient, pill-shaped, glowing.
- * Use once per screen, for the main action.
+ * iOS-style segmented control with an animated thumb — the app's only
+ * two/multi-mode switch.
  */
+@Composable
+fun SegmentedControl(
+    options: List<Pair<String, String>>,
+    selectedId: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            options.forEach { (id, label) ->
+                val selected = id == selectedId
+                val thumb by animateColorAsState(
+                    targetValue = if (selected) {
+                        MaterialTheme.colorScheme.surface
+                    } else {
+                        Color.Transparent
+                    },
+                    animationSpec = tween(220),
+                    label = "segmentThumb",
+                )
+                Surface(
+                    onClick = { onSelect(id) },
+                    shape = RoundedCornerShape(50),
+                    color = thumb,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        maxLines = 1,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(vertical = 9.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** The primary call-to-action: brand gradient, pill, one soft shadow. */
 @Composable
 fun GradientButton(
     text: String,
@@ -191,22 +231,22 @@ fun GradientButton(
     val shape = RoundedCornerShape(50)
     val disabledBrush = Brush.linearGradient(
         listOf(
-            MaterialTheme.colorScheme.outline.copy(alpha = 0.7f),
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f),
+            MaterialTheme.colorScheme.outline.copy(alpha = 0.55f),
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
         ),
     )
     Box(
         modifier = modifier
             .shadow(
-                elevation = if (enabled) 10.dp else 0.dp,
+                elevation = if (enabled) 6.dp else 0.dp,
                 shape = shape,
-                ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.30f),
-                spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.40f),
+                ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+                spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
             )
             .clip(shape)
             .background(if (enabled) BrandGradient else disabledBrush)
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 24.dp, vertical = 16.dp),
+            .padding(horizontal = 24.dp, vertical = 14.dp),
         contentAlignment = Alignment.Center,
     ) {
         Row(
@@ -242,41 +282,125 @@ fun SoftIconButton(
     Surface(
         onClick = onClick,
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
         modifier = modifier,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = tint,
-            modifier = Modifier.padding(9.dp),
+            modifier = Modifier.padding(8.dp),
         )
     }
 }
 
 // ------------------------------------------------------------ structure ----
 
-/** Section label with the brand accent bar — the app's rhythm marker. */
+/** Small, quiet section label — the app's rhythm marker. */
 @Composable
 fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     Row(
-        modifier = modifier.padding(top = 20.dp, bottom = 6.dp),
+        modifier = modifier.padding(top = 22.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Box(
             modifier = Modifier
-                .width(4.dp)
-                .height(18.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(BrandGradient),
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary),
         )
         Text(
             text = text,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.ExtraBold,
-            color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+/**
+ * A grouped inset list (Apple-settings style): one white rounded card with a
+ * hairline border; [content] is usually a column of [SettingsRow]s with
+ * [HorizontalDivider]s between them.
+ */
+@Composable
+fun ListGroup(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+        ),
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Box(modifier = Modifier.padding(4.dp)) { content() }
+    }
+}
+
+/**
+ * One settings row: rounded-square tinted icon, title, optional subtitle and
+ * optional trailing content (chevron, switch, …).
+ */
+@Composable
+fun SettingsRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String? = null,
+    modifier: Modifier = Modifier,
+    tint: Color = MaterialTheme.colorScheme.primary,
+    onClick: (() -> Unit)? = null,
+    trailing: @Composable () -> Unit = {},
+) {
+    val row: @Composable () -> Unit = {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+        ) {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = tint.copy(alpha = 0.14f),
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.padding(7.dp),
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                if (!subtitle.isNullOrBlank()) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            trailing()
+        }
+    }
+    if (onClick != null) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = Color.Transparent,
+            onClick = onClick,
+            modifier = modifier.fillMaxWidth(),
+        ) { row() }
+    } else {
+        Box(modifier = modifier.fillMaxWidth()) { row() }
     }
 }
 
@@ -287,22 +411,19 @@ fun NumberBadge(number: String, modifier: Modifier = Modifier) {
         modifier = modifier
             .size(34.dp)
             .clip(CircleShape)
-            .background(BrandGradient),
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = number,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.primary,
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Bold,
         )
     }
 }
 
-/**
- * Rounded progress bar with a gradient fill — used for multi-step flows.
- * Always shows the numbers too, never color-only.
- */
+/** Slim gradient progress bar with the numbers spelled out, never color-only. */
 @Composable
 fun StepProgress(
     current: Int,
@@ -337,7 +458,7 @@ fun StepProgress(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(10.dp)
+                .height(8.dp)
                 .clip(RoundedCornerShape(50))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
@@ -370,16 +491,16 @@ fun EmptyState(
     ) {
         Box(
             modifier = Modifier
-                .size(76.dp)
-                .clip(RoundedCornerShape(26.dp))
-                .background(BrandGradient),
+                .size(72.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(38.dp),
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(34.dp),
             )
         }
         Text(
@@ -471,4 +592,14 @@ fun ScoreBadge(score: Int, modifier: Modifier = Modifier) {
             )
         }
     }
+}
+
+/** Quiet chevron for row navigation (points "forward" in RTL). */
+@Composable
+fun RowChevron() {
+    Icon(
+        imageVector = Icons.Rounded.KeyboardArrowLeft,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.outline,
+    )
 }

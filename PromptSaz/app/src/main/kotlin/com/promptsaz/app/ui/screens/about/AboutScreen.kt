@@ -36,6 +36,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.promptsaz.app.ui.components.AppHeader
+import com.promptsaz.app.BuildConfig
 import com.promptsaz.app.ui.theme.BrandGradient
 import com.promptsaz.app.util.PlatformUtils
 
@@ -81,7 +82,7 @@ fun AboutScreen(onBack: () -> Unit) {
                 fontWeight = FontWeight.ExtraBold,
             )
             Text(
-                text = "نسخهٔ ۱.۰.۰",
+                text = "نسخهٔ ${BuildConfig.VERSION_NAME}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

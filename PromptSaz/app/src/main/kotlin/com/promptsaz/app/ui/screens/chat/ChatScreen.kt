@@ -39,6 +39,7 @@ import androidx.compose.material.icons.rounded.ThumbUp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ModalNavigationDrawer
@@ -125,10 +126,10 @@ fun ChatScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                                .imePadding(),
+                .imePadding(),
         ) {
             // --- top bar -----------------------------------------------------
-            Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp) {
+            Surface(color = MaterialTheme.colorScheme.surface) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -169,6 +170,7 @@ fun ChatScreen(
                     )
                 }
             }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
             // --- setup banner ------------------------------------------------
             if (state.needsSetup) {
@@ -183,9 +185,9 @@ fun ChatScreen(
                     ) {
                         Text(
                             text = if (!state.hasKey) {
-                                "برای شروع گفتگو، کلید API را در تنظیمات وارد کن."
+                                "کلید API را در تنظیمات وارد کن."
                             } else {
-                                "یک مدل انتخاب کن تا گفتگو شروع شود."
+                                "یک مدل انتخاب کن."
                             },
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),
@@ -289,7 +291,8 @@ fun ChatScreen(
             }
 
             // --- input bar ---------------------------------------------------
-            Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 8.dp) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            Surface(color = MaterialTheme.colorScheme.surface) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     pendingImage?.let { (bytes, extension) ->
                         Row(
@@ -428,7 +431,7 @@ private fun EmptyChat(onSuggestion: (String) -> Unit, modifier: Modifier = Modif
             fontWeight = FontWeight.Bold,
         )
         Text(
-            text = "هر سوالی داری بپرس؛ تصویر هم می‌توانی پیوست کنی تا تحلیل شود.",
+            text = "بپرس؛ تصویر هم می‌توانی پیوست کنی.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -469,11 +472,16 @@ private fun MessageBubble(
     ) {
         Column(horizontalAlignment = if (fromUser) Alignment.Start else Alignment.End) {
             Surface(
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(20.dp),
                 color = if (fromUser) {
-                    MaterialTheme.colorScheme.surfaceVariant
+                    MaterialTheme.colorScheme.primary
                 } else {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                },
+                contentColor = if (fromUser) {
+                    MaterialTheme.colorScheme.onPrimary
+                } else {
+                    MaterialTheme.colorScheme.onSurface
                 },
                 modifier = Modifier.widthIn(max = 300.dp),
             ) {

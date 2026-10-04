@@ -1,5 +1,6 @@
 package com.promptsaz.app.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -104,31 +106,32 @@ fun ModelPickerSheet(
                 ) {
                     services.forEach { service ->
                         val selectedService = service.id == selectedServiceId
-                        androidx.compose.material3.Surface(
+                        Surface(
                             shape = RoundedCornerShape(50),
                             color = if (selectedService) {
                                 MaterialTheme.colorScheme.primary
                             } else {
-                                MaterialTheme.colorScheme.surfaceVariant
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
+                            },
+                            contentColor = if (selectedService) {
+                                MaterialTheme.colorScheme.onPrimary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
                             },
                             onClick = { onSelectService(service.id) },
                         ) {
                             Text(
                                 text = service.name,
-                                color = if (selectedService) {
-                                    androidx.compose.ui.graphics.Color.White
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                                style = MaterialTheme.typography.labelMedium,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = if (selectedService) FontWeight.Bold else FontWeight.Medium,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                             )
                         }
                     }
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "سرویس این بخش — با لمس عوض می‌شود",
+                    text = "سرویس این بخش",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -142,7 +145,7 @@ fun ModelPickerSheet(
                 placeholder = { Text("جستجوی مدل…") },
                 leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
                 singleLine = true,
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -198,17 +201,26 @@ fun ModelPickerSheet(
                         LazyColumn(modifier = Modifier.height(360.dp)) {
                             items(filtered, key = { it }) { model ->
                                 val selected = model == selectedModel
+                                val rowBackground by androidx.compose.animation.animateColorAsState(
+                                    targetValue = if (selected) {
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                                    } else {
+                                        androidx.compose.ui.graphics.Color.Transparent
+                                    },
+                                    label = "modelRowTint",
+                                )
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(14.dp))
+                                        .background(rowBackground)
                                         .clickable {
                                             onSelect(model)
                                             onDismiss()
                                         }
-                                        .padding(horizontal = 6.dp, vertical = 10.dp),
+                                        .padding(horizontal = 10.dp, vertical = 10.dp),
                                 ) {
                                     Text(
                                         text = model,

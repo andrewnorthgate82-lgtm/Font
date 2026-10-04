@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
@@ -23,15 +25,19 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.EditNote
+import androidx.compose.material.icons.rounded.Forum
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -58,8 +64,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.promptsaz.app.domain.model.AiService
@@ -70,13 +74,17 @@ import com.promptsaz.app.domain.model.OutputLanguage
 import com.promptsaz.app.domain.model.TargetAi
 import com.promptsaz.app.domain.model.ThemeMode
 import com.promptsaz.app.ui.components.AppHeader
+import com.promptsaz.app.ui.components.ListGroup
+import com.promptsaz.app.ui.components.RowChevron
 import com.promptsaz.app.ui.components.SectionLabel
+import com.promptsaz.app.ui.components.SegmentedControl
 import com.promptsaz.app.ui.components.SelectChipRow
+import com.promptsaz.app.ui.components.SettingsRow
 
 /**
- * Settings — categorized per section: هر بخش (گفتگو / تولید پرامپت / تولید
- * تصویر) سرویس و مدل و کلید خودش را دارد. Below that: services management,
- * and about. Minimal, calm, Persian-first.
+ * Settings — grouped inset lists (Apple style). Each section (گفتگو / تولید
+ * پرامپت / تولید تصویر) binds its own AI service, key and model; services
+ * management and about live below. Persian-first, minimal, no filler text.
  */
 @Composable
 fun SettingsScreen(
@@ -87,14 +95,13 @@ fun SettingsScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
-    val context = LocalContext.current
 
     var editorTarget by remember { mutableStateOf<AiService?>(null) }
     var editorOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.keySavedNotice) {
         if (uiState.keySavedNotice) {
-            snackbar.showSnackbar("کلید API ذخیره شد ✓ (فقط روی همین گوشی و رمزنگاری‌شده)")
+            snackbar.showSnackbar("کلید ذخیره شد ✓")
             viewModel.consumeKeyNotice()
         }
     }
@@ -108,17 +115,34 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
         ) {
+            // --- ظاهر --------------------------------------------------------------
             SectionLabel("ظاهر")
-            SelectChipRow(
-                options = ThemeMode.entries.map { it.id to it.labelFa },
-                selectedId = settings.themeMode.id,
-                onSelect = { id -> viewModel.setThemeMode(ThemeMode.fromId(id)) },
-            )
+            ListGroup {
+                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Rounded.Palette,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(Modifier.size(10.dp))
+                        Text("زمینهٔ برنامه", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    SegmentedControl(
+                        options = ThemeMode.entries.map { it.id to it.labelFa },
+                        selectedId = settings.themeMode.id,
+                        onSelect = { id -> viewModel.setThemeMode(ThemeMode.fromId(id)) },
+                    )
+                }
+            }
 
-            // --- per-section AI -------------------------------------------------------
+            // --- هر بخش: سرویس و مدل خودش -------------------------------------------
             SectionLabel("گفتگو")
             SectionAiBlock(
                 modeId = AppSettings.MODE_CHAT,
+                icon = Icons.Rounded.Forum,
                 settings = settings,
                 viewModel = viewModel,
                 isImage = false,
@@ -127,134 +151,133 @@ fun SettingsScreen(
             SectionLabel("تولید پرامپت")
             SectionAiBlock(
                 modeId = AppSettings.MODE_PROMPT,
+                icon = Icons.Rounded.EditNote,
                 settings = settings,
                 viewModel = viewModel,
                 isImage = false,
-                extra = {
+                header = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "ساخت پرامپت با هوش مصنوعی",
-                                style = MaterialTheme.typography.bodyMedium,
+                                text = "ساخت با هوش مصنوعی",
+                                style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                text = "خاموش = کاملاً آفلاین و بدون کلید",
+                                text = "خاموش = آفلاین",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         Switch(checked = settings.aiEnabled, onCheckedChange = viewModel::setAiEnabled)
                     }
-                    Text("حوزه", style = MaterialTheme.typography.labelMedium)
-                    SelectChipRow(
-                        options = uiState.domains.map { it.id to it.nameFa },
-                        selectedId = settings.defaultDomainId,
-                        onSelect = viewModel::setDefaultDomain,
-                    )
-                    Text("مدل هدف", style = MaterialTheme.typography.labelMedium)
-                    SelectChipRow(
-                        options = TargetAi.entries.map { it.id to it.labelFa },
-                        selectedId = settings.defaultTargetAi.id,
-                        onSelect = { id -> viewModel.setDefaultTarget(TargetAi.fromId(id)) },
-                    )
-                    Text("زبان پرامپت", style = MaterialTheme.typography.labelMedium)
-                    SelectChipRow(
-                        options = OutputLanguage.entries.map { it.id to it.labelFa },
-                        selectedId = settings.defaultOutputLanguage.id,
-                        onSelect = { id -> viewModel.setDefaultLanguage(OutputLanguage.fromId(id)) },
-                    )
-                    Text("سطح جزئیات", style = MaterialTheme.typography.labelMedium)
-                    SelectChipRow(
-                        options = DetailLevel.entries.map { it.id to it.labelFa },
-                        selectedId = settings.defaultDetailLevel.id,
-                        onSelect = { id -> viewModel.setDefaultDetail(DetailLevel.fromId(id)) },
-                    )
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 },
             )
 
             SectionLabel("تولید تصویر")
             SectionAiBlock(
                 modeId = AppSettings.MODE_IMAGE,
+                icon = Icons.Rounded.Image,
                 settings = settings,
                 viewModel = viewModel,
                 isImage = true,
             )
 
-            // --- services management --------------------------------------------------
-            SectionLabel("سرویس‌ها و کلیدها")
+            // --- پیش‌فرض‌های پرامپت ---------------------------------------------------
+            SectionLabel("پیش‌فرض‌های پرامپت")
+            ListGroup {
+                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                    PromptDefaultRow("حوزه", uiState.domains.map { it.id to it.nameFa }, settings.defaultDomainId, viewModel::setDefaultDomain)
+                    PromptDefaultRow("مدل هدف", TargetAi.entries.map { it.id to it.labelFa }, settings.defaultTargetAi.id) { id ->
+                        viewModel.setDefaultTarget(TargetAi.fromId(id))
+                    }
+                    PromptDefaultRow("زبان", OutputLanguage.entries.map { it.id to it.labelFa }, settings.defaultOutputLanguage.id) { id ->
+                        viewModel.setDefaultLanguage(OutputLanguage.fromId(id))
+                    }
+                    PromptDefaultRow(
+                        "سطح جزئیات",
+                        DetailLevel.entries.map { it.id to it.labelFa },
+                        settings.defaultDetailLevel.id,
+                    ) { id -> viewModel.setDefaultDetail(DetailLevel.fromId(id)) }
+                }
+            }
+
+            // --- سرویس‌ها -------------------------------------------------------------
+            SectionLabel("سرویس‌ها")
             Text(
-                text = "سرویس‌های همزمان نگه دار و هر بخش را در همان بخش به سرویس دلخواه ببند. سرویس پیش‌فرض برای سرویس‌های تازه است.",
+                text = "سرویس پیش‌فرض برای بخش‌های بدون انتخاب است.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            settings.aiServices.forEach { service ->
-                ServiceRow(
-                    service = service,
-                    active = service.id == settings.activeService?.id,
-                    onActivate = { viewModel.setActiveService(service.id) },
-                    onEdit = {
-                        editorTarget = service
-                        editorOpen = true
-                    },
-                    onDelete = { viewModel.removeService(service.id) },
-                )
+            if (settings.aiServices.isEmpty()) {
+                ListGroup {
+                    Text(
+                        text = "هنوز سرویسی اضافه نشده.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
+            } else {
+                ListGroup {
+                    Column {
+                        settings.aiServices.forEachIndexed { index, service ->
+                            ServiceRow(
+                                service = service,
+                                active = service.id == settings.activeService?.id,
+                                onActivate = { viewModel.setActiveService(service.id) },
+                                onEdit = {
+                                    editorTarget = service
+                                    editorOpen = true
+                                },
+                                onDelete = { viewModel.removeService(service.id) },
+                            )
+                            if (index != settings.aiServices.lastIndex) {
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                            }
+                        }
+                    }
+                }
             }
-            OutlinedButton(
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surface,
+                border = androidx.compose.foundation.BorderStroke(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+                ),
                 onClick = {
                     editorTarget = null
                     editorOpen = true
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp),
-            ) {
-                Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.size(4.dp))
-                Text("افزودن سرویس جدید")
-            }
-
-            // --- about -----------------------------------------------------------------
-            SectionLabel("درباره")
-            Surface(
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                onClick = onNavigateToAbout,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 32.dp),
+                    .padding(top = 8.dp),
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                 ) {
-                    Icon(
-                        Icons.Rounded.Cloud,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "درباره پرامپت‌ساز",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Text(
-                            text = "طراحی و اجرا: محسن ابوطالبیان",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Icon(
-                        Icons.Rounded.OpenInNew,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp),
-                    )
+                    Icon(Icons.Rounded.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                    Text("افزودن سرویس", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 }
             }
+
+            // --- درباره ----------------------------------------------------------------
+            SectionLabel("درباره")
+            ListGroup {
+                SettingsRow(
+                    icon = Icons.Rounded.Info,
+                    title = "درباره پرامپت‌ساز",
+                    subtitle = "طراحی و اجرا: محسن ابوطالبیان",
+                    onClick = onNavigateToAbout,
+                    trailing = { RowChevron() },
+                )
+            }
+
+            Spacer(Modifier.height(32.dp))
         }
 
         SnackbarHost(hostState = snackbar)
@@ -277,17 +300,37 @@ fun SettingsScreen(
     }
 }
 
+/** One labeled chip row inside the پیش‌فرض‌ها group. */
+@Composable
+private fun PromptDefaultRow(
+    label: String,
+    options: List<Pair<String, String>>,
+    selectedId: String,
+    onSelect: (String) -> Unit,
+) {
+    Column(modifier = Modifier.padding(vertical = 6.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        SelectChipRow(options = options, selectedId = selectedId, onSelect = onSelect)
+    }
+}
+
 /**
- * One section's AI block: service binding (chips), that service's key, its
- * model (field + fetch + chips) and a connection test — all scoped to the mode.
+ * One section's AI block: service chips, the service's key, its model and a
+ * connection test — everything scoped to this mode.
  */
 @Composable
 private fun SectionAiBlock(
     modeId: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     settings: AppSettings,
     viewModel: SettingsViewModel,
     isImage: Boolean,
-    extra: @Composable () -> Unit = {},
+    header: (@Composable () -> Unit)? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -296,22 +339,39 @@ private fun SectionAiBlock(
     val loading = uiState.loadingByMode[modeId] == true
     val testResult = uiState.testByMode[modeId]
 
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            // --- service binding -----------------------------------------------
-            Text(
-                text = "سرویس این بخش",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+    ListGroup {
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+            header?.invoke()
+
+            // --- service binding ---------------------------------------------
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.size(10.dp))
+                Text(
+                    text = "سرویس " + if (isImage) "تصویر" else if (modeId == AppSettings.MODE_CHAT) "گفتگو" else "پرامپت",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                )
+                service?.let {
+                    Text(
+                        text = it.name,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 6.dp)
+                    .padding(top = 8.dp)
                     .horizontalScroll(rememberScrollState()),
             ) {
                 settings.aiServices.forEach { candidate ->
@@ -332,7 +392,7 @@ private fun SectionAiBlock(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { openInBrowser(context, consoleUrl) }
-                            .padding(vertical = 6.dp),
+                            .padding(vertical = 8.dp),
                     ) {
                         Icon(
                             Icons.Rounded.OpenInNew,
@@ -348,13 +408,13 @@ private fun SectionAiBlock(
                     }
                 }
 
-                // --- key ------------------------------------------------------------
+                // --- key -------------------------------------------------------
                 var keyInput by rememberSaveable(service.id) { mutableStateOf("") }
                 var keyVisible by rememberSaveable { mutableStateOf(false) }
                 OutlinedTextField(
                     value = keyInput,
                     onValueChange = { keyInput = it },
-                    label = { Text("کلید API این سرویس") },
+                    label = { Text("کلید API") },
                     placeholder = { Text("AIza… / cc_… / sk-…") },
                     singleLine = true,
                     visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -362,7 +422,7 @@ private fun SectionAiBlock(
                         androidx.compose.material3.IconButton(onClick = { keyVisible = !keyVisible }) {
                             Icon(
                                 imageVector = if (keyVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                                contentDescription = if (keyVisible) "پنهان کردن کلید" else "نمایش کلید",
+                                contentDescription = if (keyVisible) "پنهان" else "نمایش",
                             )
                         }
                     },
@@ -370,7 +430,7 @@ private fun SectionAiBlock(
                 )
                 if (uiState.hasKey(service.id)) {
                     Text(
-                        text = "کلید ذخیره‌شده: ${uiState.maskedKey(service.id) ?: ""}",
+                        text = "ذخیره‌شده: ${uiState.maskedKey(service.id) ?: ""}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(top = 2.dp),
@@ -387,29 +447,23 @@ private fun SectionAiBlock(
                         enabled = keyInput.isNotBlank(),
                     ) { Text("ذخیره کلید") }
                     if (uiState.hasKey(service.id)) {
-                        OutlinedButton(onClick = { viewModel.clearApiKey(service.id) }) { Text("حذف کلید") }
+                        OutlinedButton(onClick = { viewModel.clearApiKey(service.id) }) { Text("حذف") }
                     }
                 }
 
-                // --- model ------------------------------------------------------------
+                // --- model --------------------------------------------------------
                 var modelInput by rememberSaveable(service.id, if (isImage) service.imageModel else service.model) {
                     mutableStateOf(if (isImage) service.imageModel else service.model)
                 }
                 OutlinedTextField(
                     value = modelInput,
                     onValueChange = { modelInput = it },
-                    label = { Text(if (isImage) "مدل تصویر این سرویس" else "مدل این سرویس") },
+                    label = { Text(if (isImage) "مدل تصویر" else "مدل") },
                     placeholder = { Text("مثلاً gemini-flash-latest") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(
-                        onDone = {
-                            viewModel.setServiceModel(
-                                service.id,
-                                modelInput.trim(),
-                                imageModel = isImage,
-                            )
-                        },
+                        onDone = { viewModel.setServiceModel(service.id, modelInput.trim(), imageModel = isImage) },
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -429,14 +483,17 @@ private fun SectionAiBlock(
                         .padding(top = 8.dp),
                 ) {
                     OutlinedButton(onClick = { viewModel.loadModels(modeId) }, enabled = !loading) {
-                        Text("دریافت فهرست مدل‌ها")
+                        Text("مدل‌ها")
                     }
                     OutlinedButton(onClick = { viewModel.testConnection(modeId) }, enabled = !loading) {
                         Text("تست اتصال")
                     }
                     if (loading) {
                         CircularProgressIndicator(
-                            modifier = Modifier.height(20.dp).padding(start = 4.dp),
+                            modifier = Modifier
+                                .padding(start = 4.dp)
+                                .height(18.dp)
+                                .size(18.dp),
                             strokeWidth = 2.dp,
                         )
                     }
@@ -473,19 +530,17 @@ private fun SectionAiBlock(
                 }
             } else {
                 Text(
-                    text = "اول یک سرویس بساز یا اضافه کن.",
+                    text = "اول یک سرویس اضافه کن.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp),
                 )
             }
-
-            extra()
         }
     }
 }
 
-/** One row of the services list: tap = make default, edit / delete on the side. */
+/** One service in the services group: tap = default, edit / delete aside. */
 @Composable
 private fun ServiceRow(
     service: AiService,
@@ -494,70 +549,59 @@ private fun ServiceRow(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = if (active) {
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
-        } else {
-            MaterialTheme.colorScheme.surface
-        },
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 6.dp),
+            .clickable(onClick = onActivate)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier
-                .clickable(onClick = onActivate)
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-        ) {
-            Icon(
-                imageVector = if (active) Icons.Rounded.CheckCircle else Icons.Rounded.Cloud,
-                contentDescription = null,
-                tint = if (active) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                modifier = Modifier.size(20.dp),
+        Icon(
+            imageVector = if (active) Icons.Rounded.CheckCircle else Icons.Rounded.Cloud,
+            contentDescription = null,
+            tint = if (active) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            modifier = Modifier.size(20.dp),
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = if (active) "${service.name} (پیش‌فرض)" else service.name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold,
             )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = service.name + if (active) "  (پیش‌فرض)" else "",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = service.baseUrl,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                )
-            }
-            Icon(
-                Icons.Rounded.Edit,
-                contentDescription = "ویرایش سرویس",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .size(20.dp)
-                    .clickable(onClick = onEdit),
-            )
-            Icon(
-                Icons.Rounded.Delete,
-                contentDescription = "حذف سرویس",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .size(20.dp)
-                    .clickable(onClick = onDelete),
+            Text(
+                text = service.baseUrl,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
             )
         }
+        Icon(
+            Icons.Rounded.Edit,
+            contentDescription = "ویرایش",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .size(20.dp)
+                .clickable(onClick = onEdit),
+        )
+        Icon(
+            Icons.Rounded.Delete,
+            contentDescription = "حذف",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .size(20.dp)
+                .clickable(onClick = onDelete),
+        )
     }
 }
 
 /**
- * Add/edit dialog for a service — pick a ready preset (Gemini, CodeCraft,
- * OpenAI, …) and only paste the key later; everything else auto-fills.
+ * Add/edit a service: pick a ready preset (Gemini, CodeCraft, OpenAI, …) and
+ * everything auto-fills — the user only pastes a key later.
  */
 @Composable
 private fun ServiceEditorDialog(
@@ -576,15 +620,9 @@ private fun ServiceEditorDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (initial == null) "افزودن سرویس جدید" else "ویرایش سرویس") },
+        title = { Text(if (initial == null) "افزودن سرویس" else "ویرایش سرویس") },
         text = {
             Column {
-                Text(
-                    text = "سرویس‌ات را انتخاب کن؛ نشانی و تنظیمات خودکار پر می‌شود:",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(8.dp))
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier
@@ -621,10 +659,8 @@ private fun ServiceEditorDialog(
                     supportingText = {
                         Text(
                             text = when {
-                                preset == null ->
-                                    "سرویس‌های سازگار با OpenAI معمولاً با /v1 تمام می‌شوند."
-                                preset.id == "gemini" ->
-                                    "همین نشانی پیش‌فرض گوگل را نگه دار؛ کلید را در بخش هر سرویس وارد کن."
+                                preset == null -> "سرویس‌های سازگار با OpenAI معمولاً با /v1 تمام می‌شوند."
+                                preset.id == "gemini" -> "نشانی پیش‌فرض را نگه دار."
                                 else -> preset.keyHintFa
                             },
                             style = MaterialTheme.typography.bodySmall,
@@ -654,7 +690,7 @@ private fun ServiceEditorDialog(
     )
 }
 
-/** Opens the service's key console in the browser; silent when none is installed. */
+/** Opens the service's key console; silent when no browser is installed. */
 private fun openInBrowser(context: Context, url: String) {
     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
 }
