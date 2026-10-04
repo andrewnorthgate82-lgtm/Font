@@ -32,6 +32,13 @@ object AiServicePresets {
             keyHintFa = "برای کلیدهای AQ.… که روی پیش‌تنظیم قبلی خطای ۴۰۳ گرفتند؛ نام مدل را اگر فهرست نیامد دستی بنویس",
         ),
         AiServicePreset(
+            id = "pixazo",
+            nameFa = "Pixazo (ساخت تصویر)",
+            baseUrl = "https://gateway.pixazo.ai/gpt-image-2-5-flare/v1",
+            type = AiService.TYPE_PIXAZO,
+            keyHintFa = "کلید را از api-console.pixazo.ai/api_keys بگیر؛ برای مدل‌های دیگر Pixazo فقط همین نشانی را عوض کن",
+        ),
+        AiServicePreset(
             id = "codecraft",
             nameFa = "CodeCraft",
             baseUrl = "https://codecraftapi.com/v1",

@@ -39,6 +39,7 @@ data class AiService(
     val imageModel: String = "",
 ) {
     val isGemini: Boolean get() = type == TYPE_GEMINI
+    val isPixazo: Boolean get() = type == TYPE_PIXAZO
 
     companion object {
         /** Id of the service auto-created from the v1 single-service settings. */
@@ -49,6 +50,9 @@ data class AiService(
 
         /** Google Gemini native format ({base}/models/{model}:generateContent, X-goog-api-key). */
         const val TYPE_GEMINI = "gemini"
+
+        /** Pixazo image gateway ({base}/text-to-image + job polling, Ocp-Apim-Subscription-Key). */
+        const val TYPE_PIXAZO = "pixazo"
     }
 }
 

@@ -24,6 +24,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
@@ -71,6 +72,22 @@ class OpenAiCompatibleProvider @Inject constructor(
         // just saved the key and wants to pick a model must be able to test.
         val config = readConnectionConfig()
             ?: return@withContext ProviderHealth.Failed(configGapFa(requireModel = false))
+        if (config.isPixazo) {
+            // No cheap listing endpoint exists; probing the public status route
+            // with a fake request id tells us whether the key is accepted
+            // (401/403 = rejected key, anything else = gateway reachable).
+            val modelId = PixazoWire.parseModelId(config.baseUrl)
+            val probeUrl = PixazoWire.statusUrl("", modelId + "_connection-test", config.baseUrl)
+            return@withContext when (val response = httpCall("GET", probeUrl, config, body = null)) {
+                is HttpOutcome.Success ->
+                    if (response.code == 401 || response.code == 403) {
+                        ProviderHealth.Failed(persianHttpError(response.code, response.body))
+                    } else {
+                        ProviderHealth.Ok(listOf(modelId))
+                    }
+                is HttpOutcome.Failure -> ProviderHealth.Failed(response.messageFa)
+            }
+        }
         val modelsUrl = if (config.isGemini) GeminiWire.modelsUrl(config.baseUrl) else config.modelsUrl
         when (val response = httpCall("GET", modelsUrl, config, body = null)) {
             is HttpOutcome.Success -> {
@@ -92,6 +109,10 @@ class OpenAiCompatibleProvider @Inject constructor(
     override suspend fun listModels(): Result<List<String>> = withContext(ioDispatcher) {
         val config = readConnectionConfig()
             ?: return@withContext Result.failure(IllegalStateException(configGapFa(requireModel = false)))
+        if (config.isPixazo) {
+            // The model is baked into the service URL; surface it as the only pick.
+            return@withContext Result.success(listOf(PixazoWire.parseModelId(config.baseUrl)))
+        }
         val modelsUrl = if (config.isGemini) GeminiWire.modelsUrl(config.baseUrl) else config.modelsUrl
         when (val response = httpCall("GET", modelsUrl, config, body = null)) {
             is HttpOutcome.Success -> {
@@ -116,6 +137,9 @@ class OpenAiCompatibleProvider @Inject constructor(
     ): Result<ProviderGeneration> = withContext(ioDispatcher) {
         val config = readGenerationConfig()
             ?: return@withContext Result.failure(IllegalStateException(configGapFa(requireModel = true)))
+        if (config.isPixazo) {
+            return@withContext Result.failure(IllegalStateException(PIXAZO_TEXT_ONLY_FA))
+        }
         if (config.isGemini) {
             return@withContext geminiCall(
                 config,
@@ -172,6 +196,9 @@ class OpenAiCompatibleProvider @Inject constructor(
         if (selectedModel.isBlank()) {
             return@withContext Result.failure(IllegalStateException(NO_MODEL_FA))
         }
+        if (config.isPixazo) {
+            return@withContext Result.failure(IllegalStateException(PIXAZO_TEXT_ONLY_FA))
+        }
         if (config.isGemini) {
             return@withContext geminiCall(config, model = selectedModel, turns = turns) { it }
         }
@@ -211,6 +238,9 @@ class OpenAiCompatibleProvider @Inject constructor(
             val selectedModel = model.trim()
             if (selectedModel.isBlank()) {
                 return@withContext Result.failure(IllegalStateException(NO_MODEL_FA))
+            }
+            if (config.isPixazo) {
+                return@withContext pixazoGenerate(config, prompt, size)
             }
             if (config.isGemini) {
                 // Gemini has no OpenAI-style images endpoint; the تصویر tab's
@@ -454,6 +484,74 @@ class OpenAiCompatibleProvider @Inject constructor(
         }
     }
 
+    // --- Pixazo async image jobs ------------------------------------------------------
+
+    /**
+     * One Pixazo round-trip: submit {prompt, size} to {base}/text-to-image
+     * (Ocp-Apim-Subscription-Key auth), then poll the job status until the
+     * public image URL appears. The repository downloads that URL plainly.
+     */
+    private suspend fun pixazoGenerate(config: ProviderConfig, prompt: String, size: String): Result<GeneratedImage> =
+        withContext(ioDispatcher) {
+            val request = PixazoWire.PixazoSubmitRequest(prompt = prompt, size = size)
+            val body = json.encodeToString(PixazoWire.PixazoSubmitRequest.serializer(), request)
+            when (val submit = httpCall("POST", PixazoWire.textToImageUrl(config.baseUrl), config, body)) {
+                is HttpOutcome.Failure -> Result.failure(IllegalStateException(submit.messageFa))
+                is HttpOutcome.Success -> {
+                    if (submit.code !in 200..299) {
+                        return@withContext Result.failure(
+                            IllegalStateException(persianHttpError(submit.code, submit.body)),
+                        )
+                    }
+                    val job = runCatching {
+                        json.decodeFromString(PixazoWire.PixazoSubmitResponse.serializer(), submit.body)
+                    }.getOrNull()
+                    if (job == null || job.requestId.isBlank()) {
+                        return@withContext Result.failure(IllegalStateException(BAD_IMAGE_REPLY_FA))
+                    }
+                    pollPixazoJob(PixazoWire.statusUrl(job.pollingUrl, job.requestId, config.baseUrl), config)
+                }
+            }
+        }
+
+    /** Polls a Pixazo job until COMPLETED / FAILED or the attempt budget runs out. */
+    private suspend fun pollPixazoJob(statusUrl: String, config: ProviderConfig): Result<GeneratedImage> {
+        repeat(PIXAZO_MAX_POLLS) { attempt ->
+            if (attempt > 0) delay(pixazoPollIntervalMs)
+            when (val response = httpCall("GET", statusUrl, config, body = null)) {
+                is HttpOutcome.Failure -> return Result.failure(IllegalStateException(response.messageFa))
+                is HttpOutcome.Success -> {
+                    if (response.code !in 200..299) {
+                        return Result.failure(IllegalStateException(persianHttpError(response.code, response.body)))
+                    }
+                    val status = runCatching {
+                        json.decodeFromString(PixazoWire.PixazoStatusResponse.serializer(), response.body)
+                    }.getOrNull() ?: continue
+                    when {
+                        PixazoWire.isCompleted(status.status) -> {
+                            val url = status.output?.mediaUrl?.firstOrNull()
+                            return if (url.isNullOrBlank()) {
+                                Result.failure(IllegalStateException(BAD_IMAGE_REPLY_FA))
+                            } else {
+                                Result.success(GeneratedImage.FromUrl(url))
+                            }
+                        }
+                        PixazoWire.isFailed(status.status) -> {
+                            return Result.failure(
+                                IllegalStateException(
+                                    PIXAZO_JOB_FAILED_FA +
+                                        (status.error?.take(200)?.let { " ($it)" } ?: ""),
+                                ),
+                            )
+                        }
+                        // QUEUED / PROCESSING → keep polling
+                    }
+                }
+            }
+        }
+        return Result.failure(IllegalStateException(PIXAZO_TIMEOUT_FA))
+    }
+
     private fun httpCall(method: String, url: String, config: ProviderConfig, body: String?): HttpOutcome {
         var connection: HttpURLConnection? = null
         return try {
@@ -461,10 +559,10 @@ class OpenAiCompatibleProvider @Inject constructor(
                 requestMethod = method
                 connectTimeout = CONNECT_TIMEOUT_MS
                 readTimeout = READ_TIMEOUT_MS
-                if (config.isGemini) {
-                    setRequestProperty(GeminiWire.API_KEY_HEADER, config.key)
-                } else {
-                    setRequestProperty(AUTH_HEADER, AUTH_PREFIX + config.key)
+                when {
+                    config.isGemini -> setRequestProperty(GeminiWire.API_KEY_HEADER, config.key)
+                    config.isPixazo -> setRequestProperty(PixazoWire.API_KEY_HEADER, config.key)
+                    else -> setRequestProperty(AUTH_HEADER, AUTH_PREFIX + config.key)
                 }
                 setRequestProperty("Content-Type", "application/json")
                 setRequestProperty("Accept", "application/json")
@@ -597,6 +695,18 @@ class OpenAiCompatibleProvider @Inject constructor(
 
         /** "…can only afford 800…" from OpenRouter's 402 body. */
         val AFFORD_REGEX = Regex("""can only afford (\d+)""")
+
+        // --- Pixazo -----------------------------------------------------------------
+        /** Poll attempts for a Pixazo job before giving up (~5 min at the default interval). */
+        const val PIXAZO_MAX_POLLS = 100
+
+        /** Interval between Pixazo job polls — a hook lowered by unit tests. */
+        var pixazoPollIntervalMs: Long = 3_000L
+
+        const val PIXAZO_TEXT_ONLY_FA =
+            "این سرویس فقط ساخت تصویر دارد؛ برای گفتگو و تولید پرامپت، در تنظیمات یک سرویس گفتگو (مثل CodeCraft) را فعال کن."
+        const val PIXAZO_JOB_FAILED_FA = "ساخت تصویر در سرور ناموفق بود؛ دوباره تلاش کن."
+        const val PIXAZO_TIMEOUT_FA = "ساخت تصویر بیش از حد طول کشید؛ دوباره تلاش کن."
 
         /**
          * Pure picker for the first missing config piece (unit-tested).
