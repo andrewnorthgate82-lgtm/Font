@@ -371,6 +371,7 @@ class OpenAiCompatibleProvider @Inject constructor(
         val protocol: String = AiService.TYPE_OPENAI_COMPATIBLE,
     ) {
         val isGemini: Boolean get() = protocol == AiService.TYPE_GEMINI
+        val isPixazo: Boolean get() = protocol == AiService.TYPE_PIXAZO
         val chatUrl: String get() = baseUrl + CHAT_COMPLETIONS_PATH
         val modelsUrl: String get() = baseUrl + MODELS_PATH
         val imagesUrl: String get() = baseUrl + IMAGES_PATH
@@ -526,25 +527,27 @@ class OpenAiCompatibleProvider @Inject constructor(
                     }
                     val status = runCatching {
                         json.decodeFromString(PixazoWire.PixazoStatusResponse.serializer(), response.body)
-                    }.getOrNull() ?: continue
-                    when {
-                        PixazoWire.isCompleted(status.status) -> {
-                            val url = status.output?.mediaUrl?.firstOrNull()
-                            return if (url.isNullOrBlank()) {
-                                Result.failure(IllegalStateException(BAD_IMAGE_REPLY_FA))
-                            } else {
-                                Result.success(GeneratedImage.FromUrl(url))
+                    }.getOrNull()
+                    if (status != null) {
+                        when {
+                            PixazoWire.isCompleted(status.status) -> {
+                                val url = status.output?.mediaUrl?.firstOrNull()
+                                return if (url.isNullOrBlank()) {
+                                    Result.failure(IllegalStateException(BAD_IMAGE_REPLY_FA))
+                                } else {
+                                    Result.success(GeneratedImage.FromUrl(url))
+                                }
                             }
+                            PixazoWire.isFailed(status.status) -> {
+                                return Result.failure(
+                                    IllegalStateException(
+                                        PIXAZO_JOB_FAILED_FA +
+                                            (status.error?.take(200)?.let { " ($it)" } ?: ""),
+                                    ),
+                                )
+                            }
+                            // QUEUED / PROCESSING → keep polling
                         }
-                        PixazoWire.isFailed(status.status) -> {
-                            return Result.failure(
-                                IllegalStateException(
-                                    PIXAZO_JOB_FAILED_FA +
-                                        (status.error?.take(200)?.let { " ($it)" } ?: ""),
-                                ),
-                            )
-                        }
-                        // QUEUED / PROCESSING → keep polling
                     }
                 }
             }
@@ -655,10 +658,11 @@ class OpenAiCompatibleProvider @Inject constructor(
             append(")")
             if (code == 403 && isHtml) {
                 append(
-                    "\nراه‌حل‌های احتمالی:" +
-                        "\n۱) اگر اینترنت فعلی گوشی از منطقهٔ پشتیبانی‌نشدهٔ گوگل می‌رود، با یک VPN کامل (نه فقط پراکسی مرورگر) امتحان کن." +
-                        "\n۲) اگر کلیدت را از Google Cloud (Vertex) ساخته‌ای، در تنظیمات پیش‌تنظیم «Gemini (Vertex Express)» را امتحان کن." +
-                        "\n۳) محدودیت‌ها و فعال‌بودن «Gemini API» را برای کلید در پنل گوگل چک کن.",
+                    "\nراه‌حل‌های احتمالی (به ترتیب احتمال):" +
+                        "\n۱) اگر کلیدت را جایی کپی یا اشتراک کرده‌ای، گوگل آن را سریع غیرفعال می‌کند؛ از aistudio.google.com/apikey یک کلید تازه بساز و کلید جدید را هیچ‌جا کپی نکن." +
+                        "\n۲) اگر اینترنت فعلی گوشی از منطقهٔ پشتیبانی‌نشدهٔ گوگل می‌رود، با یک VPN کامل (نه فقط پراکسی مرورگر) امتحان کن." +
+                        "\n۳) اگر کلیدت با AIza… شروع می‌شود و در AI Studio برچسب «Unrestricted» دارد، همان‌جا گزینهٔ Add restrictions را بزن." +
+                        "\n۴) اگر کلیدت را از Google Cloud (Vertex) ساخته‌ای، در تنظیمات پیش‌تنظیم «Gemini (Vertex Express)» را امتحان کن.",
                 )
             }
             if (bodySnippet.isNotEmpty()) {

@@ -22,7 +22,7 @@ object AiServicePresets {
             nameFa = "Google Gemini (AI Studio)",
             baseUrl = "https://generativelanguage.googleapis.com/v1beta",
             type = AiService.TYPE_GEMINI,
-            keyHintFa = "کلید را از aistudio.google.com ← Get API key بگیر (کلیدهای AIza… و AQ.… هر دو معتبرند)",
+            keyHintFa = "کلید تازه را از aistudio.google.com/apikey بگیر (AIza… و AQ.… هر دو معتبرند)؛ کلید را هیچ‌جا کپی/اشتراک نکن — گوگل کلید لو رفته را سریع غیرفعال می‌کند",
         ),
         AiServicePreset(
             id = "gemini_vertex",
