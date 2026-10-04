@@ -104,6 +104,7 @@ fun AppNavHost(
                 prompts = prompts,
                 generations = generations,
                 currentRoute = currentRoute,
+                viewModel = menuViewModel,
                 onOpenChat = { openTab(Routes.CHAT_TAB) },
                 onOpenConversation = { id -> openTabWithArgs(Routes.chat(id)) },
                 onOpenPromptTab = { openTab(Routes.HOME) },

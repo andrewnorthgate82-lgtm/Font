@@ -258,7 +258,7 @@ class OpenAiCompatibleProvider @Inject constructor(
             }
             val request = ImageGenerationRequestDto(model = selectedModel, prompt = prompt, size = size)
             val body = json.encodeToString(ImageGenerationRequestDto.serializer(), request)
-            when (val response = httpCall("POST", config.imagesUrl, config, body)) {
+            when (val response = httpCallWithRetry("POST", config.imagesUrl, config, body)) {
                 is HttpOutcome.Success -> {
                     if (response.code == 404) {
                         // The service has no images endpoint at all (text-only
@@ -301,7 +301,7 @@ class OpenAiCompatibleProvider @Inject constructor(
     ): Result<GeneratedImage> = withContext(ioDispatcher) {
         val request = GeminiWire.imageRequest(prompt)
         val body = json.encodeToString(GeminiWire.GeminiGenerateRequest.serializer(), request)
-        when (val response = httpCall("POST", GeminiWire.generateContentUrl(config.baseUrl, model), config, body)) {
+        when (val response = httpCallWithRetry("POST", GeminiWire.generateContentUrl(config.baseUrl, model), config, body)) {
             is HttpOutcome.Success -> {
                 if (response.code !in 200..299) {
                     return@withContext Result.failure(
@@ -497,7 +497,7 @@ class OpenAiCompatibleProvider @Inject constructor(
         serializer: KSerializer<T>,
         withMaxTokens: (T, Int?) -> T,
     ): HttpOutcome {
-        var response = httpCall("POST", config.chatUrl, config, encodeChatBody(request, serializer))
+        var response = httpCallWithRetry("POST", config.chatUrl, config, encodeChatBody(request, serializer))
         if (response is HttpOutcome.Success && response.code == 402) {
             val affordable = AFFORD_REGEX.find(response.body)?.groupValues?.get(1)?.toIntOrNull()
             if (affordable != null && affordable >= MIN_AFFORDABLE_TOKENS) {
@@ -505,12 +505,12 @@ class OpenAiCompatibleProvider @Inject constructor(
                     request,
                     (affordable * 9 / 10).coerceIn(MIN_AFFORDABLE_TOKENS, DEFAULT_MAX_TOKENS),
                 )
-                response = httpCall("POST", config.chatUrl, config, encodeChatBody(retry, serializer))
+                response = httpCallWithRetry("POST", config.chatUrl, config, encodeChatBody(retry, serializer))
             }
         }
         if (response is HttpOutcome.Success && response.code == 400 && response.body.contains("max_tokens")) {
             val retry = withMaxTokens(request, null)
-            response = httpCall("POST", config.chatUrl, config, encodeChatBody(retry, serializer))
+            response = httpCallWithRetry("POST", config.chatUrl, config, encodeChatBody(retry, serializer))
         }
         return response
     }
@@ -596,6 +596,30 @@ class OpenAiCompatibleProvider @Inject constructor(
         return Result.failure(IllegalStateException(PIXAZO_TIMEOUT_FA))
     }
 
+    /**
+     * Generation calls go through this wrapper: on a temporary rate limit
+     * (HTTP 429) or server hiccup (503) it waits and retries automatically —
+     * up to [RATE_LIMIT_RETRIES] times — so a one-off quota burst (very common
+     * on free Gemini keys) does not kill the whole generation. Probes and
+     * model listings keep the plain [httpCall] (their quota is separate).
+     */
+    private suspend fun httpCallWithRetry(
+        method: String,
+        url: String,
+        config: ProviderConfig,
+        body: String?,
+    ): HttpOutcome {
+        var attempt = 0
+        while (true) {
+            val outcome = httpCall(method, url, config, body)
+            val temporary = outcome is HttpOutcome.Success && (outcome.code == 429 || outcome.code == 503)
+            if (!temporary || attempt >= RATE_LIMIT_RETRIES) return outcome
+            val delays = rateLimitRetryDelaysMs
+            delay(delays[attempt.coerceAtMost(delays.lastIndex)])
+            attempt++
+        }
+    }
+
     private fun httpCall(method: String, url: String, config: ProviderConfig, body: String?): HttpOutcome {
         var connection: HttpURLConnection? = null
         return try {
@@ -678,7 +702,9 @@ class OpenAiCompatibleProvider @Inject constructor(
         // showing the raw soup helps nobody; keep only the <title> line.
         val isHtml = trimmed.startsWith("<!DOCTYPE", ignoreCase = true) ||
             trimmed.startsWith("<html", ignoreCase = true)
-        val bodySnippet = (if (isHtml) htmlTitleOf(trimmed) else trimmed.take(300)).orEmpty()
+        val bodySnippet = (
+            if (isHtml) htmlTitleOf(trimmed) else trimmed.take(if (code == 429) 120 else 300)
+            ).orEmpty()
         val reason = when (code) {
             401, 403 ->
                 if (isHtml) {
@@ -688,7 +714,12 @@ class OpenAiCompatibleProvider @Inject constructor(
                 }
             402 -> "اعتبار (کردیت) حساب این سرویس برای این درخواست کافی نیست. حساب را در پنل سرویس شارژ کن، مدل رایگان‌تری انتخاب کن، یا در تنظیمات به سرویس دیگری برگرد."
             404 -> "نشانی سرور یا نام مدل پیدا نشد. نشانی پایه و نام مدل را بررسی کن."
-            429 -> "سهمیه یا نرخ درخواست‌ها تمام شده است؛ کمی بعد دوباره امتحان کن."
+            429 ->
+                "سهمیه یا نرخ درخواست‌های این کلید موقتاً تمام شده است. " +
+                    "(تست اتصال و فهرست مدل‌ها سهمیهٔ جدایی دارند؛ برای همین کار می‌کنند ولی ساخت پرامپت/تصویر نه.) " +
+                    "چند دقیقه صبر کن و دوباره امتحان کن؛ " +
+                    "اگر کلید رایگان گوگل است و سقف روزانه پر شده، فردا ریست می‌شود — " +
+                    "مصرف را در aistudio.google.com/apikey ببین یا در تنظیمات، سرویس دیگری به این بخش وصل کن."
             in 500..599 -> "سرور شخص ثالث خطا داده است؛ بعداً دوباره امتحان کن."
             else -> "درخواست رد شد."
         }
@@ -747,6 +778,12 @@ class OpenAiCompatibleProvider @Inject constructor(
 
         /** Interval between Pixazo job polls — a hook lowered by unit tests. */
         var pixazoPollIntervalMs: Long = 3_000L
+
+        /** Automatic retries of a 429/503 before giving up. */
+        const val RATE_LIMIT_RETRIES = 2
+
+        /** Backoff before each 429/503 retry — a hook lowered by unit tests. */
+        var rateLimitRetryDelaysMs: List<Long> = listOf(2_000L, 5_000L)
 
         const val PIXAZO_TEXT_ONLY_FA =
             "این سرویس فقط ساخت تصویر دارد؛ برای گفتگو و تولید پرامپت، در تنظیمات یک سرویس گفتگو (مثل CodeCraft) را فعال کن."
