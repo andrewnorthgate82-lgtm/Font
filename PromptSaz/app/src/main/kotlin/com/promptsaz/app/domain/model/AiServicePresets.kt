@@ -10,6 +10,8 @@ data class AiServicePreset(
     val baseUrl: String,
     val type: String,
     val keyHintFa: String,
+    /** Where the user creates/manages this service's API key (opens in browser). */
+    val consoleUrl: String? = null,
 )
 
 object AiServicePresets {
@@ -22,7 +24,8 @@ object AiServicePresets {
             nameFa = "Google Gemini (AI Studio)",
             baseUrl = "https://generativelanguage.googleapis.com/v1beta",
             type = AiService.TYPE_GEMINI,
-            keyHintFa = "کلید تازه را از aistudio.google.com/apikey بگیر (AIza… و AQ.… هر دو معتبرند)؛ کلید را هیچ‌جا کپی/اشتراک نکن — گوگل کلید لو رفته را سریع غیرفعال می‌کند",
+            keyHintFa = "کلید تازه را از AI Studio بگیر (AIza… و AQ.… هر دو معتبرند)؛ کلید را هیچ‌جا کپی/اشتراک نکن — گوگل کلید لو رفته را سریع غیرفعال می‌کند",
+            consoleUrl = "https://aistudio.google.com/apikey",
         ),
         AiServicePreset(
             id = "gemini_vertex",
@@ -36,7 +39,8 @@ object AiServicePresets {
             nameFa = "Pixazo (ساخت تصویر)",
             baseUrl = "https://gateway.pixazo.ai/gpt-image-2-5-flare/v1",
             type = AiService.TYPE_PIXAZO,
-            keyHintFa = "کلید را از api-console.pixazo.ai/api_keys بگیر؛ برای مدل‌های دیگر Pixazo فقط همین نشانی را عوض کن",
+            keyHintFa = "کلید را از کنسول Pixazo بگیر؛ برای مدل‌های دیگر Pixazo فقط همین نشانی را عوض کن",
+            consoleUrl = "https://api-console.pixazo.ai/api_keys",
         ),
         AiServicePreset(
             id = "codecraft",
@@ -50,28 +54,32 @@ object AiServicePresets {
             nameFa = "OpenAI",
             baseUrl = "https://api.openai.com/v1",
             type = AiService.TYPE_OPENAI_COMPATIBLE,
-            keyHintFa = "کلید sk-… از platform.openai.com",
+            keyHintFa = "کلید sk-… از پلتفرم OpenAI",
+            consoleUrl = "https://platform.openai.com/api-keys",
         ),
         AiServicePreset(
             id = "openrouter",
             nameFa = "OpenRouter",
             baseUrl = "https://openrouter.ai/api/v1",
             type = AiService.TYPE_OPENAI_COMPATIBLE,
-            keyHintFa = "کلید sk-or-… از openrouter.ai/keys",
+            keyHintFa = "کلید sk-or-… از پنل OpenRouter",
+            consoleUrl = "https://openrouter.ai/keys",
         ),
         AiServicePreset(
             id = "deepseek",
             nameFa = "DeepSeek",
             baseUrl = "https://api.deepseek.com/v1",
             type = AiService.TYPE_OPENAI_COMPATIBLE,
-            keyHintFa = "کلید sk-… از platform.deepseek.com",
+            keyHintFa = "کلید sk-… از پلتفرم DeepSeek",
+            consoleUrl = "https://platform.deepseek.com/api_keys",
         ),
         AiServicePreset(
             id = "groq",
             nameFa = "Groq",
             baseUrl = "https://api.groq.com/openai/v1",
             type = AiService.TYPE_OPENAI_COMPATIBLE,
-            keyHintFa = "کلید gsk_… از console.groq.com/keys",
+            keyHintFa = "کلید gsk_… از کنسول Groq",
+            consoleUrl = "https://console.groq.com/keys",
         ),
         AiServicePreset(
             id = "ollama",

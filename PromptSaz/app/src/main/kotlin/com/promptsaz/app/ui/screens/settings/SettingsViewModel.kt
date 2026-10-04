@@ -123,6 +123,11 @@ class SettingsViewModel @Inject constructor(
                 maskedKey = secureKeyStore.maskApiKey(serviceId),
             )
         }
+        // smooth the setup flow: with the key saved and no model picked yet,
+        // fetch the model list right away so the next tap is the model itself
+        if (settings.value.activeService?.model.isNullOrBlank()) {
+            loadModels()
+        }
     }
 
     fun clearApiKey() {
