@@ -98,13 +98,13 @@ class ChatRepositoryTest {
         var lastTurns: List<ChatTurn> = emptyList()
         var reply: String = "پاسخ دستیار برای تست."
 
-        open override suspend fun chat(model: String, turns: List<ChatTurn>): Result<String> {
+        open override suspend fun chat(model: String, turns: List<ChatTurn>, serviceId: String?): Result<String> {
             lastModel = model
             lastTurns = turns
             return Result.success(reply)
         }
 
-        override suspend fun generateImage(model: String, prompt: String, size: String): Result<GeneratedImage> =
+        override suspend fun generateImage(model: String, prompt: String, size: String, serviceId: String?): Result<GeneratedImage> =
             Result.failure(IllegalStateException("not used"))
 
         override suspend fun fetchImageBytes(url: String): Result<ByteArray> =
@@ -324,7 +324,7 @@ class ChatRepositoryTest {
     fun `provider failure keeps the user message and surfaces the persian error`() = runBlocking {
         val dao = FakeChatDao()
         val provider = object : FakeProvider() {
-            override suspend fun chat(model: String, turns: List<ChatTurn>): Result<String> =
+            override suspend fun chat(model: String, turns: List<ChatTurn>, serviceId: String?): Result<String> =
                 Result.failure(IllegalStateException("کلید API نامعتبر است."))
         }
         val repo = ChatRepositoryImpl(dao, provider, FakeImageStore(), FakeSettingsRepository())

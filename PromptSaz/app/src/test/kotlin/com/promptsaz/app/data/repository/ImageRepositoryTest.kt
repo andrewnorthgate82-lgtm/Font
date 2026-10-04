@@ -47,13 +47,13 @@ class ImageRepositoryTest {
         var lastTurns: List<ChatTurn> = emptyList()
         var reply: String = "  cinematic photo, golden hour, warm tones  "
 
-        override suspend fun chat(model: String, turns: List<ChatTurn>): Result<String> {
+        override suspend fun chat(model: String, turns: List<ChatTurn>, serviceId: String?): Result<String> {
             lastModel = model
             lastTurns = turns
             return Result.success(reply)
         }
 
-        override suspend fun generateImage(model: String, prompt: String, size: String): Result<GeneratedImage> =
+        override suspend fun generateImage(model: String, prompt: String, size: String, serviceId: String?): Result<GeneratedImage> =
             Result.failure(IllegalStateException("not used"))
 
         override suspend fun fetchImageBytes(url: String): Result<ByteArray> =
@@ -92,7 +92,7 @@ class ImageRepositoryTest {
     @Test
     fun `generateImagePrompt surfaces the provider failure untouched`() = runBlocking {
         val provider = object : FakeProvider() {
-            override suspend fun chat(model: String, turns: List<ChatTurn>): Result<String> =
+            override suspend fun chat(model: String, turns: List<ChatTurn>, serviceId: String?): Result<String> =
                 Result.failure(IllegalStateException("کلید API نامعتبر است."))
         }
         val repository = ImageRepositoryImpl(FakeDao(), provider, FakeStore())
