@@ -91,7 +91,7 @@ data class AppSettings(
             MODE_IMAGE -> imageServiceId
             else -> return null
         }
-        aiServices.firstOrNull { it.id == binding }
+        return aiServices.firstOrNull { it.id == binding }
             ?: aiServices.takeIf { it.size == 1 }?.firstOrNull()
     }
 

@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+private const val NO_SERVICE_FA = "اول سرویس تصویر را در تنظیمات انتخاب کن."
+
 /**
  * تصویر tab: prompt → generated image, with its own model picker (image
  * models usually differ from chat models) and a local history.
@@ -52,7 +54,6 @@ class ImageStudioViewModel @Inject constructor(
         val canMakeImagePrompt: Boolean get() = prompt.isNotBlank() && !imagePromptLoading && !needsSetup
 
         companion object {
-            const val NO_SERVICE_FA = "اول سرویس تصویر را در تنظیمات انتخاب کن."
             const val SIZE_SQUARE = "1024x1024"
             const val SIZE_PORTRAIT = "1024x1536"
             const val SIZE_LANDSCAPE = "1536x1024"
