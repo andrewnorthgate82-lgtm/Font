@@ -2,6 +2,7 @@ package com.promptsaz.app.domain.usecase
 
 import com.promptsaz.app.domain.engine.PromptEngine
 import com.promptsaz.app.domain.engine.score.QualityScorer
+import com.promptsaz.app.domain.model.AppSettings
 import com.promptsaz.app.domain.model.ArchivedPrompt
 import com.promptsaz.app.domain.model.GeneratedPrompt
 import com.promptsaz.app.domain.model.PromptSpec
@@ -49,12 +50,14 @@ class GeneratePromptUseCase @Inject constructor(
 
         if (settings.aiEnabled) {
             val provider = providerRegistry.active()
+            // تولید پرامپت runs on ITS OWN bound service (per-section AI).
+            val serviceId = settings.serviceFor(AppSettings.MODE_PROMPT)?.id
             if (provider == null) {
                 aiError = "هیچ سرویس هوش مصنوعی نصب نیست؛ با موتور آفلاین ساخته شد."
-            } else if (!provider.isConfigured()) {
+            } else if (!provider.isConfigured(serviceId)) {
                 aiError = "حالت هوش مصنوعی فعال است اما کلید یا مدل تنظیم نشده؛ با موتور آفلاین ساخته شد."
             } else {
-                provider.generatePrompt(spec, kb)
+                provider.generatePrompt(spec, kb, serviceId)
                     .onSuccess { generation ->
                         result = GeneratedPrompt(
                             spec = spec,

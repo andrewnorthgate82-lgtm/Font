@@ -56,6 +56,8 @@ class ProviderGeminiTest {
         override suspend fun updateService(id: String, name: String, baseUrl: String, type: String) {}
         override suspend fun removeService(id: String) {}
         override suspend fun setActiveService(id: String) {}
+        override suspend fun setModeService(modeId: String, serviceId: String) {}
+        override suspend fun setServiceModel(serviceId: String, model: String, imageModel: Boolean) {}
     }
 
     @Volatile private var generatePath: String? = null

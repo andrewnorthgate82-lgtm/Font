@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Archive
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Lightbulb
 import androidx.compose.material.icons.rounded.MenuBook
@@ -75,6 +76,7 @@ fun HomeScreen(
     onNavigateToArchive: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToKb: () -> Unit,
+    onNavigateToAbout: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -124,6 +126,14 @@ fun HomeScreen(
                             onClick = {
                                 menuOpen = false
                                 onNavigateToSettings()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("درباره برنامه") },
+                            leadingIcon = { Icon(Icons.Rounded.Info, contentDescription = null) },
+                            onClick = {
+                                menuOpen = false
+                                onNavigateToAbout()
                             },
                         )
                     }
@@ -366,6 +376,9 @@ fun HomeScreen(
         onSelect = viewModel::selectModel,
         onRefresh = viewModel::loadModels,
         onDismiss = viewModel::dismissModelPicker,
+        services = state.services,
+        selectedServiceId = state.serviceId,
+        onSelectService = viewModel::selectService,
     )
 }
 

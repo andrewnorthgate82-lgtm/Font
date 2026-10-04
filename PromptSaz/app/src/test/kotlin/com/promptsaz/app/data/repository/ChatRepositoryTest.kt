@@ -125,15 +125,15 @@ class ChatRepositoryTest {
             "data:image/jpeg;base64," + bytes.decodeToString()
     }
 
-    private class FakeSettingsRepository : SettingsRepository {
-        private val flow = MutableStateFlow(
-            AppSettings(
-                aiServices = listOf(
-                    AiService(id = "s1", name = "تست", baseUrl = "https://example.com/v1", model = "selected-model"),
-                ),
-                activeServiceId = "s1",
+    private class FakeSettingsRepository(
+        initial: AppSettings = AppSettings(
+            aiServices = listOf(
+                AiService(id = "s1", name = "تست", baseUrl = "https://example.com/v1", model = "selected-model"),
             ),
-        )
+            activeServiceId = "s1",
+        ),
+    ) : SettingsRepository {
+        private val flow = MutableStateFlow(initial)
         override val settings: Flow<AppSettings> = flow
         override suspend fun setThemeMode(mode: ThemeMode) {}
         override suspend fun setDefaultDomain(domainId: String) {}
@@ -148,6 +148,20 @@ class ChatRepositoryTest {
         override suspend fun updateService(id: String, name: String, baseUrl: String, type: String) {}
         override suspend fun removeService(id: String) {}
         override suspend fun setActiveService(id: String) { flow.value = flow.value.copy(activeServiceId = id) }
+        override suspend fun setModeService(modeId: String, serviceId: String) {}
+        override suspend fun setServiceModel(serviceId: String, model: String, imageModel: Boolean) {
+            flow.value = flow.value.copy(
+                aiServices = flow.value.aiServices.map {
+                    if (it.id != serviceId) {
+                        it
+                    } else if (imageModel) {
+                        it.copy(imageModel = model)
+                    } else {
+                        it.copy(model = model)
+                    }
+                },
+            )
+        }
 
         private fun updateActiveService(block: (AiService) -> AiService) {
             val current = flow.value
@@ -233,6 +247,33 @@ class ChatRepositoryTest {
         assertTrue(userTurns[1].imageDataUrl!!.contains("SECOND"))
         // history keeps growing in Room
         assertEquals(4, dao.messages.size)
+    }
+
+    @Test
+    fun `the chat tab runs on its own bound service, not the default one`() = runBlocking {
+        val dao = FakeChatDao()
+        val provider = FakeProvider()
+        val repo = ChatRepositoryImpl(
+            chatDao = dao,
+            provider = provider,
+            imageStore = FakeImageStore(),
+            settingsRepository = FakeSettingsRepository(
+                AppSettings(
+                    aiServices = listOf(
+                        AiService(id = "s1", name = "پیش‌فرض", baseUrl = "https://one.example/v1", model = "default-model"),
+                        AiService(id = "s2", name = "چت", baseUrl = "https://two.example/v1", model = "chat-model"),
+                    ),
+                    activeServiceId = "s1",
+                    chatServiceId = "s2",
+                ),
+            ),
+        )
+
+        val result = repo.sendMessage(0L, "سلام", image = null, imageExtension = null)
+
+        assertTrue(result.isSuccess)
+        // the message went through the service bound to گفتگو — not the default
+        assertEquals("chat-model", provider.lastModel)
     }
 
     @Test

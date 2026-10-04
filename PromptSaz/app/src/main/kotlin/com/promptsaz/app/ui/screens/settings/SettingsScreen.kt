@@ -33,7 +33,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -65,6 +64,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.promptsaz.app.domain.model.AiService
 import com.promptsaz.app.domain.model.AiServicePresets
+import com.promptsaz.app.domain.model.AppSettings
 import com.promptsaz.app.domain.model.DetailLevel
 import com.promptsaz.app.domain.model.OutputLanguage
 import com.promptsaz.app.domain.model.TargetAi
@@ -73,28 +73,25 @@ import com.promptsaz.app.ui.components.AppHeader
 import com.promptsaz.app.ui.components.SectionLabel
 import com.promptsaz.app.ui.components.SelectChipRow
 
-/** Settings: theme, generation defaults, AI services (multi key/model), about. */
+/**
+ * Settings — categorized per section: هر بخش (گفتگو / تولید پرامپت / تولید
+ * تصویر) سرویس و مدل و کلید خودش را دارد. Below that: services management,
+ * and about. Minimal, calm, Persian-first.
+ */
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onNavigateToAbout: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
-    val activeService = settings.activeService
     val context = LocalContext.current
 
-    // service editor dialog state (null = closed; service = editing, null = new)
     var editorTarget by remember { mutableStateOf<AiService?>(null) }
     var editorOpen by remember { mutableStateOf(false) }
 
-    LaunchedEffect(uiState.testResult) {
-        uiState.testResult?.let {
-            snackbar.showSnackbar(it.second)
-            viewModel.consumeTestResult()
-        }
-    }
     LaunchedEffect(uiState.keySavedNotice) {
         if (uiState.keySavedNotice) {
             snackbar.showSnackbar("کلید API ذخیره شد ✓ (فقط روی همین گوشی و رمزنگاری‌شده)")
@@ -118,305 +115,146 @@ fun SettingsScreen(
                 onSelect = { id -> viewModel.setThemeMode(ThemeMode.fromId(id)) },
             )
 
-            SectionLabel("پیش‌فرض‌های ساخت پرامپت")
-            Text("حوزه", style = MaterialTheme.typography.labelMedium)
-            SelectChipRow(
-                options = uiState.domains.map { it.id to it.nameFa },
-                selectedId = settings.defaultDomainId,
-                onSelect = viewModel::setDefaultDomain,
-            )
-            Text("مدل هدف", style = MaterialTheme.typography.labelMedium)
-            SelectChipRow(
-                options = TargetAi.entries.map { it.id to it.labelFa },
-                selectedId = settings.defaultTargetAi.id,
-                onSelect = { id -> viewModel.setDefaultTarget(TargetAi.fromId(id)) },
-            )
-            Text("زبان پرامپت", style = MaterialTheme.typography.labelMedium)
-            SelectChipRow(
-                options = OutputLanguage.entries.map { it.id to it.labelFa },
-                selectedId = settings.defaultOutputLanguage.id,
-                onSelect = { id -> viewModel.setDefaultLanguage(OutputLanguage.fromId(id)) },
-            )
-            Text("سطح جزئیات", style = MaterialTheme.typography.labelMedium)
-            SelectChipRow(
-                options = DetailLevel.entries.map { it.id to it.labelFa },
-                selectedId = settings.defaultDetailLevel.id,
-                onSelect = { id -> viewModel.setDefaultDetail(DetailLevel.fromId(id)) },
+            // --- per-section AI -------------------------------------------------------
+            SectionLabel("گفتگو")
+            SectionAiBlock(
+                modeId = AppSettings.MODE_CHAT,
+                settings = settings,
+                viewModel = viewModel,
+                isImage = false,
             )
 
-            SectionLabel("حالت هوش مصنوعی (اختیاری)")
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+            SectionLabel("تولید پرامپت")
+            SectionAiBlock(
+                modeId = AppSettings.MODE_PROMPT,
+                settings = settings,
+                viewModel = viewModel,
+                isImage = false,
+                extra = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "ساخت پرامپت با هوش مصنوعی",
-                                style = MaterialTheme.typography.titleSmall,
+                                style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                text = "خاموش = کاملاً آفلاین و بدون نیاز به کلید (پیش‌فرض)",
+                                text = "خاموش = کاملاً آفلاین و بدون کلید",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         Switch(checked = settings.aiEnabled, onCheckedChange = viewModel::setAiEnabled)
                     }
-
-                    if (settings.aiEnabled) {
-                        Text(
-                            text = "توجه: در این حالت، ایده و تنظیمات شما برای ساخت پرامپت به سرور شخص ثالثی که نشانی‌اش را وارد کرده‌ای ارسال می‌شود.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.tertiary,
-                            modifier = Modifier.padding(vertical = 8.dp),
-                        )
-                    }
-
-                    // --- services list --------------------------------------------
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = "سرویس‌های هوش مصنوعی من",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
+                    Text("حوزه", style = MaterialTheme.typography.labelMedium)
+                    SelectChipRow(
+                        options = uiState.domains.map { it.id to it.nameFa },
+                        selectedId = settings.defaultDomainId,
+                        onSelect = viewModel::setDefaultDomain,
                     )
-                    Text(
-                        text = "می‌توانی چند سرویس (مثلاً CodeCraft و OpenAI و OpenRouter) کنار هم نگه داری؛ با لمس هرکدام، آن سرویس فعال می‌شود.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 4.dp),
+                    Text("مدل هدف", style = MaterialTheme.typography.labelMedium)
+                    SelectChipRow(
+                        options = TargetAi.entries.map { it.id to it.labelFa },
+                        selectedId = settings.defaultTargetAi.id,
+                        onSelect = { id -> viewModel.setDefaultTarget(TargetAi.fromId(id)) },
                     )
+                    Text("زبان پرامپت", style = MaterialTheme.typography.labelMedium)
+                    SelectChipRow(
+                        options = OutputLanguage.entries.map { it.id to it.labelFa },
+                        selectedId = settings.defaultOutputLanguage.id,
+                        onSelect = { id -> viewModel.setDefaultLanguage(OutputLanguage.fromId(id)) },
+                    )
+                    Text("سطح جزئیات", style = MaterialTheme.typography.labelMedium)
+                    SelectChipRow(
+                        options = DetailLevel.entries.map { it.id to it.labelFa },
+                        selectedId = settings.defaultDetailLevel.id,
+                        onSelect = { id -> viewModel.setDefaultDetail(DetailLevel.fromId(id)) },
+                    )
+                },
+            )
 
-                    settings.aiServices.forEach { service ->
-                        ServiceRow(
-                            service = service,
-                            active = service.id == activeService?.id,
-                            onActivate = { viewModel.setActiveService(service.id) },
-                            onEdit = {
-                                editorTarget = service
-                                editorOpen = true
-                            },
-                            onDelete = { viewModel.removeService(service.id) },
-                        )
-                    }
+            SectionLabel("تولید تصویر")
+            SectionAiBlock(
+                modeId = AppSettings.MODE_IMAGE,
+                settings = settings,
+                viewModel = viewModel,
+                isImage = true,
+            )
 
-                    OutlinedButton(
-                        onClick = {
-                            editorTarget = null
-                            editorOpen = true
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp),
-                    ) {
-                        Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.size(4.dp))
-                        Text("افزودن سرویس جدید")
-                    }
+            // --- services management --------------------------------------------------
+            SectionLabel("سرویس‌ها و کلیدها")
+            Text(
+                text = "سرویس‌های همزمان نگه دار و هر بخش را در همان بخش به سرویس دلخواه ببند. سرویس پیش‌فرض برای سرویس‌های تازه است.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            settings.aiServices.forEach { service ->
+                ServiceRow(
+                    service = service,
+                    active = service.id == settings.activeService?.id,
+                    onActivate = { viewModel.setActiveService(service.id) },
+                    onEdit = {
+                        editorTarget = service
+                        editorOpen = true
+                    },
+                    onDelete = { viewModel.removeService(service.id) },
+                )
+            }
+            OutlinedButton(
+                onClick = {
+                    editorTarget = null
+                    editorOpen = true
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+            ) {
+                Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.size(4.dp))
+                Text("افزودن سرویس جدید")
+            }
 
-                    // --- active service config ------------------------------------
-                    if (activeService != null) {
-                        Spacer(Modifier.height(16.dp))
+            // --- about -----------------------------------------------------------------
+            SectionLabel("درباره")
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                onClick = onNavigateToAbout,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 32.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+                ) {
+                    Icon(
+                        Icons.Rounded.Cloud,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "تنظیمات سرویس فعال: ${activeService.name}",
-                            style = MaterialTheme.typography.titleSmall,
+                            text = "درباره پرامپت‌ساز",
+                            style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                         )
                         Text(
-                            text = activeService.baseUrl,
+                            text = "طراحی و اجرا: محسن ابوطالبیان",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        AiServicePresets.matchOf(activeService)?.consoleUrl?.let { consoleUrl ->
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { openInBrowser(context, consoleUrl) }
-                                    .padding(vertical = 6.dp),
-                            ) {
-                                Icon(
-                                    Icons.Rounded.OpenInNew,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                                Text(
-                                    text = "ساخت یا مدیریت کلید این سرویس ↗",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                        }
-
-                        Spacer(Modifier.height(8.dp))
-                        var keyInput by rememberSaveable(activeService.id) { mutableStateOf("") }
-                        var keyVisible by rememberSaveable { mutableStateOf(false) }
-                        OutlinedTextField(
-                            value = keyInput,
-                            onValueChange = { keyInput = it },
-                            label = { Text("کلید API این سرویس") },
-                            placeholder = { Text("AIza… / cc_… / sk-…") },
-                            singleLine = true,
-                            visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                            trailingIcon = {
-                                IconButton(onClick = { keyVisible = !keyVisible }) {
-                                    Icon(
-                                        imageVector = if (keyVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                                        contentDescription = if (keyVisible) "پنهان کردن کلید" else "نمایش کلید",
-                                    )
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Text(
-                            text = "کلید هر سرویس جداگانه و فقط روی همین گوشی، رمزنگاری‌شده نگه داشته می‌شود و هرگز جایی دیگر ذخیره یا ارسال نمی‌شود.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = 4.dp),
-                        )
-                        AiServicePresets.matchOf(activeService)?.let { preset ->
-                            if (preset.id != AiServicePresets.CUSTOM_ID) {
-                                Text(
-                                    text = preset.keyHintFa,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(bottom = 4.dp),
-                                )
-                            }
-                        }
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Button(
-                                onClick = { viewModel.saveApiKey(keyInput); keyInput = "" },
-                                enabled = keyInput.isNotBlank(),
-                            ) { Text("ذخیره کلید") }
-                            if (uiState.hasKey) {
-                                OutlinedButton(onClick = viewModel::clearApiKey) { Text("حذف کلید") }
-                            }
-                        }
-                        if (uiState.hasKey) {
-                            Text(
-                                text = "کلید ذخیره‌شده: ${uiState.maskedKey ?: ""}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(top = 4.dp),
-                            )
-                        }
-
-                        Spacer(Modifier.height(12.dp))
-                        // local edit state + commit on Done / focus loss — typing never
-                        // fights the async settings round-trip (the old base-URL bug)
-                        var modelInput by rememberSaveable(activeService.id, activeService.model) {
-                            mutableStateOf(activeService.model)
-                        }
-                        OutlinedTextField(
-                            value = modelInput,
-                            onValueChange = { modelInput = it },
-                            label = { Text("نام مدل این سرویس") },
-                            placeholder = { Text("مثلاً gpt-4o-mini") },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(
-                                onDone = { viewModel.setAiModel(modelInput.trim()) },
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .onFocusChanged { focus ->
-                                    if (!focus.isFocused && modelInput.trim() != activeService.model) {
-                                        viewModel.setAiModel(modelInput.trim())
-                                    }
-                                },
-                        )
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 8.dp),
-                        ) {
-                            OutlinedButton(onClick = viewModel::loadModels, enabled = !uiState.modelsLoading) {
-                                Text("دریافت فهرست مدل‌ها")
-                            }
-                            OutlinedButton(onClick = viewModel::testConnection, enabled = !uiState.testing) {
-                                Text("تست اتصال")
-                            }
-                            if (uiState.modelsLoading || uiState.testing) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.height(20.dp).padding(start = 4.dp),
-                                    strokeWidth = 2.dp,
-                                )
-                            }
-                        }
-                        Text(
-                            text = "اگر فهرست مدل‌ها دریافت نشد، نام مدل را دستی همان کادر بالا بنویس.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
-                        if (uiState.models.isNotEmpty()) {
-                            Text(
-                                text = "مدل پیدا شد؛ یکی را انتخاب کن:",
-                                style = MaterialTheme.typography.labelMedium,
-                                modifier = Modifier.padding(top = 8.dp),
-                            )
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 240.dp)
-                                    .verticalScroll(rememberScrollState()),
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                uiState.models.take(40).forEach { model ->
-                                    FilterChip(
-                                        selected = activeService.model == model,
-                                        onClick = { viewModel.setAiModel(model) },
-                                        label = { Text(model) },
-                                    )
-                                }
-                            }
-                        }
-                        uiState.testResult?.let { (ok, message) ->
-                            Card(
-                                colors = CardDefaults.cardColors(
-                                    containerColor = if (ok) {
-                                        MaterialTheme.colorScheme.primaryContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.errorContainer
-                                    },
-                                ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 8.dp),
-                            ) {
-                                Text(
-                                    text = message,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (ok) {
-                                        MaterialTheme.colorScheme.onPrimaryContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.onErrorContainer
-                                    },
-                                    modifier = Modifier.padding(12.dp),
-                                )
-                            }
-                        }
                     }
+                    Icon(
+                        Icons.Rounded.OpenInNew,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp),
+                    )
                 }
             }
-
-            SectionLabel("درباره پرامپت‌ساز")
-            Text(
-                text = "پرامپت‌ساز نسخه ۱.۰.۰ — ایده خام تو را به پرامپت حرفه‌ای و ساخت‌یافته تبدیل می‌کند. موتور آفلاین بدون اینترنت کار می‌کند؛ حالت هوش مصنوعی اختیاری است. فونت وزیرمتن (OFL) استفاده شده است.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 32.dp),
-            )
         }
 
         SnackbarHost(hostState = snackbar)
@@ -439,12 +277,215 @@ fun SettingsScreen(
     }
 }
 
-/** Opens the service's key console in the browser; silent when none is installed. */
-private fun openInBrowser(context: Context, url: String) {
-    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+/**
+ * One section's AI block: service binding (chips), that service's key, its
+ * model (field + fetch + chips) and a connection test — all scoped to the mode.
+ */
+@Composable
+private fun SectionAiBlock(
+    modeId: String,
+    settings: AppSettings,
+    viewModel: SettingsViewModel,
+    isImage: Boolean,
+    extra: @Composable () -> Unit = {},
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val service = settings.serviceFor(modeId)
+    val models = uiState.modelsByMode[modeId].orEmpty()
+    val loading = uiState.loadingByMode[modeId] == true
+    val testResult = uiState.testByMode[modeId]
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // --- service binding -----------------------------------------------
+            Text(
+                text = "سرویس این بخش",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp)
+                    .horizontalScroll(rememberScrollState()),
+            ) {
+                settings.aiServices.forEach { candidate ->
+                    val selected = candidate.id == service?.id
+                    FilterChip(
+                        selected = selected,
+                        onClick = { viewModel.setModeService(modeId, candidate.id) },
+                        label = { Text(candidate.name, maxLines = 1) },
+                    )
+                }
+            }
+
+            if (service != null) {
+                AiServicePresets.matchOf(service)?.consoleUrl?.let { consoleUrl ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { openInBrowser(context, consoleUrl) }
+                            .padding(vertical = 6.dp),
+                    ) {
+                        Icon(
+                            Icons.Rounded.OpenInNew,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Text(
+                            text = "ساخت یا مدیریت کلید این سرویس ↗",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+
+                // --- key ------------------------------------------------------------
+                var keyInput by rememberSaveable(service.id) { mutableStateOf("") }
+                var keyVisible by rememberSaveable { mutableStateOf(false) }
+                OutlinedTextField(
+                    value = keyInput,
+                    onValueChange = { keyInput = it },
+                    label = { Text("کلید API این سرویس") },
+                    placeholder = { Text("AIza… / cc_… / sk-…") },
+                    singleLine = true,
+                    visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        androidx.compose.material3.IconButton(onClick = { keyVisible = !keyVisible }) {
+                            Icon(
+                                imageVector = if (keyVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                                contentDescription = if (keyVisible) "پنهان کردن کلید" else "نمایش کلید",
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (uiState.hasKey(service.id)) {
+                    Text(
+                        text = "کلید ذخیره‌شده: ${uiState.maskedKey(service.id) ?: ""}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp),
+                ) {
+                    Button(
+                        onClick = { viewModel.saveApiKey(service.id, keyInput); keyInput = "" },
+                        enabled = keyInput.isNotBlank(),
+                    ) { Text("ذخیره کلید") }
+                    if (uiState.hasKey(service.id)) {
+                        OutlinedButton(onClick = { viewModel.clearApiKey(service.id) }) { Text("حذف کلید") }
+                    }
+                }
+
+                // --- model ------------------------------------------------------------
+                var modelInput by rememberSaveable(service.id, if (isImage) service.imageModel else service.model) {
+                    mutableStateOf(if (isImage) service.imageModel else service.model)
+                }
+                OutlinedTextField(
+                    value = modelInput,
+                    onValueChange = { modelInput = it },
+                    label = { Text(if (isImage) "مدل تصویر این سرویس" else "مدل این سرویس") },
+                    placeholder = { Text("مثلاً gemini-flash-latest") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            viewModel.setServiceModel(
+                                service.id,
+                                modelInput.trim(),
+                                imageModel = isImage,
+                            )
+                        },
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                        .onFocusChanged { focus ->
+                            val current = if (isImage) service.imageModel else service.model
+                            if (!focus.isFocused && modelInput.trim() != current) {
+                                viewModel.setServiceModel(service.id, modelInput.trim(), imageModel = isImage)
+                            }
+                        },
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                ) {
+                    OutlinedButton(onClick = { viewModel.loadModels(modeId) }, enabled = !loading) {
+                        Text("دریافت فهرست مدل‌ها")
+                    }
+                    OutlinedButton(onClick = { viewModel.testConnection(modeId) }, enabled = !loading) {
+                        Text("تست اتصال")
+                    }
+                    if (loading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.height(20.dp).padding(start = 4.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    }
+                }
+                if (models.isNotEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 220.dp)
+                            .verticalScroll(rememberScrollState())
+                            .padding(top = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        models.take(40).forEach { model ->
+                            FilterChip(
+                                selected = (if (isImage) service.imageModel else service.model) == model,
+                                onClick = { viewModel.setServiceModel(service.id, model, imageModel = isImage) },
+                                label = { Text(model) },
+                            )
+                        }
+                    }
+                }
+                testResult?.let { (ok, message) ->
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (ok) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        },
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            } else {
+                Text(
+                    text = "اول یک سرویس بساز یا اضافه کن.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+
+            extra()
+        }
+    }
 }
 
-/** One row of the services list: tap = activate, edit / delete icons on the side. */
+/** One row of the services list: tap = make default, edit / delete on the side. */
 @Composable
 private fun ServiceRow(
     service: AiService,
@@ -483,7 +524,7 @@ private fun ServiceRow(
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = service.name + if (active) "  (فعال)" else "",
+                    text = service.name + if (active) "  (پیش‌فرض)" else "",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                 )
@@ -517,7 +558,6 @@ private fun ServiceRow(
 /**
  * Add/edit dialog for a service — pick a ready preset (Gemini, CodeCraft,
  * OpenAI, …) and only paste the key later; everything else auto-fills.
- * Local state, saved with one explicit button.
  */
 @Composable
 private fun ServiceEditorDialog(
@@ -525,7 +565,6 @@ private fun ServiceEditorDialog(
     onDismiss: () -> Unit,
     onSave: (name: String, baseUrl: String, type: String) -> Unit,
 ) {
-    // start from the preset matching the edited service (custom when unknown)
     var presetId by rememberSaveable {
         mutableStateOf(initial?.let { AiServicePresets.matchOf(it)?.id } ?: "")
     }
@@ -585,7 +624,7 @@ private fun ServiceEditorDialog(
                                 preset == null ->
                                     "سرویس‌های سازگار با OpenAI معمولاً با /v1 تمام می‌شوند."
                                 preset.id == "gemini" ->
-                                    "همین نشانی پیش‌فرض گوگل را نگه دار؛ کلید را بعد از ذخیره در کادر «کلید API این سرویس» وارد کن."
+                                    "همین نشانی پیش‌فرض گوگل را نگه دار؛ کلید را در بخش هر سرویس وارد کن."
                                 else -> preset.keyHintFa
                             },
                             style = MaterialTheme.typography.bodySmall,
@@ -613,4 +652,9 @@ private fun ServiceEditorDialog(
             TextButton(onClick = onDismiss) { Text("انصراف") }
         },
     )
+}
+
+/** Opens the service's key console in the browser; silent when none is installed. */
+private fun openInBrowser(context: Context, url: String) {
+    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
 }

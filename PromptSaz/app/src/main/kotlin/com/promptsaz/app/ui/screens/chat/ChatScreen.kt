@@ -400,6 +400,9 @@ fun ChatScreen(
         onSelect = viewModel::selectModel,
         onRefresh = viewModel::loadModels,
         onDismiss = viewModel::dismissModelPicker,
+        services = state.services,
+        selectedServiceId = state.serviceId,
+        onSelectService = viewModel::selectService,
     )
 }
 

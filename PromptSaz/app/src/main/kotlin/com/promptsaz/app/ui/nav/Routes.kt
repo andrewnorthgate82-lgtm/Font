@@ -10,6 +10,7 @@ object Routes {
     const val RESULT = "result"
     const val ARCHIVE = "archive"
     const val SETTINGS = "settings"
+    const val ABOUT = "about"
     const val KB = "kb"
     const val KB_DOMAIN = "kb/{domainId}"
 

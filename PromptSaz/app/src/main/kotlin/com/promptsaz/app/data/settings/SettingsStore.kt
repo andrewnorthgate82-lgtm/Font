@@ -39,6 +39,9 @@ class SettingsStore(private val context: Context) {
         val AI_IMAGE_MODEL = stringPreferencesKey("ai_image_model")
         val AI_SERVICES = stringPreferencesKey("ai_services")
         val ACTIVE_SERVICE_ID = stringPreferencesKey("active_service_id")
+        val CHAT_SERVICE_ID = stringPreferencesKey("chat_service_id")
+        val PROMPT_SERVICE_ID = stringPreferencesKey("prompt_service_id")
+        val IMAGE_SERVICE_ID = stringPreferencesKey("image_service_id")
     }
 
     /** Settings stream; falls back to defaults if the store is unreadable. */
@@ -60,6 +63,9 @@ class SettingsStore(private val context: Context) {
                 activeServiceId = prefs[Keys.ACTIVE_SERVICE_ID]
                     ?.takeIf { id -> servicesOf(prefs).any { it.id == id } }
                     ?: servicesOf(prefs).firstOrNull()?.id.orEmpty(),
+                chatServiceId = prefs[Keys.CHAT_SERVICE_ID].orEmpty(),
+                promptServiceId = prefs[Keys.PROMPT_SERVICE_ID].orEmpty(),
+                imageServiceId = prefs[Keys.IMAGE_SERVICE_ID].orEmpty(),
             )
         }
 
@@ -136,6 +142,37 @@ class SettingsStore(private val context: Context) {
         context.settingsDataStore.edit { prefs ->
             if (servicesOf(prefs).any { it.id == id }) {
                 prefs[Keys.ACTIVE_SERVICE_ID] = id
+            }
+        }
+    }
+
+    /** Binds one section (chat / prompt / image) to a specific service. */
+    suspend fun setModeService(modeId: String, serviceId: String) {
+        context.settingsDataStore.edit { prefs ->
+            val valid = serviceId.isBlank() || servicesOf(prefs).any { it.id == serviceId }
+            if (!valid) return@edit
+            val key = when (modeId) {
+                AppSettings.MODE_CHAT -> Keys.CHAT_SERVICE_ID
+                AppSettings.MODE_PROMPT -> Keys.PROMPT_SERVICE_ID
+                AppSettings.MODE_IMAGE -> Keys.IMAGE_SERVICE_ID
+                else -> return@edit
+            }
+            prefs[key] = serviceId
+        }
+    }
+
+    /** Sets the chat/prompt (or image) model of ONE service. */
+    suspend fun setServiceModel(serviceId: String, model: String, imageModel: Boolean) {
+        context.settingsDataStore.edit { prefs ->
+            val services = servicesOf(prefs).toMutableList()
+            val index = services.indexOfFirst { it.id == serviceId }
+            if (index >= 0) {
+                services[index] = if (imageModel) {
+                    services[index].copy(imageModel = model.trim())
+                } else {
+                    services[index].copy(model = model.trim())
+                }
+                prefs[Keys.AI_SERVICES] = AiServiceCodec.encode(services)
             }
         }
     }

@@ -34,6 +34,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import com.promptsaz.app.domain.model.AiService
 
 /**
  * ChatGPT-style model picker: a bottom sheet listing the account's models
@@ -51,6 +54,10 @@ fun ModelPickerSheet(
     onSelect: (String) -> Unit,
     onRefresh: () -> Unit,
     onDismiss: () -> Unit,
+    /** Optional per-section service switcher — pass the configured services. */
+    services: List<AiService> = emptyList(),
+    selectedServiceId: String = "",
+    onSelectService: (String) -> Unit = {},
 ) {
     if (!visible) return
     var query by remember { mutableStateOf("") }
@@ -82,6 +89,48 @@ fun ModelPickerSheet(
                     icon = Icons.Rounded.Refresh,
                     contentDescription = "به‌روزرسانی فهرست مدل‌ها",
                     onClick = onRefresh,
+                )
+            }
+
+            // --- service switcher (per-section AI) ---------------------------
+            if (services.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                ) {
+                    services.forEach { service ->
+                        val selectedService = service.id == selectedServiceId
+                        androidx.compose.material3.Surface(
+                            shape = RoundedCornerShape(50),
+                            color = if (selectedService) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant
+                            },
+                            onClick = { onSelectService(service.id) },
+                        ) {
+                            Text(
+                                text = service.name,
+                                color = if (selectedService) {
+                                    androidx.compose.ui.graphics.Color.White
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "سرویس این بخش — با لمس عوض می‌شود",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 

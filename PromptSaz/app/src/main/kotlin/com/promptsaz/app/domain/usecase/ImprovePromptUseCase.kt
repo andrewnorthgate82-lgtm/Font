@@ -5,6 +5,7 @@ import com.promptsaz.app.domain.engine.assembler.PromptAssembler
 import com.promptsaz.app.domain.engine.improve.PromptAnalyzer
 import com.promptsaz.app.domain.engine.improve.PromptRewriter
 import com.promptsaz.app.domain.engine.score.QualityScorer
+import com.promptsaz.app.domain.model.AppSettings
 import com.promptsaz.app.domain.model.DomainKnowledge
 import com.promptsaz.app.domain.model.GeneratedPrompt
 import com.promptsaz.app.domain.model.ImprovementReport
@@ -60,8 +61,9 @@ class ImprovePromptUseCase @Inject constructor(
 
         if (settings.aiEnabled) {
             val provider = providerRegistry.active()
-            if (provider != null && provider.isConfigured()) {
-                provider.generatePrompt(spec, kb)
+            val serviceId = settings.serviceFor(AppSettings.MODE_PROMPT)?.id
+            if (provider != null && provider.isConfigured(serviceId)) {
+                provider.generatePrompt(spec, kb, serviceId)
                     .onSuccess { generation ->
                         result = GeneratedPrompt(
                             spec = spec,

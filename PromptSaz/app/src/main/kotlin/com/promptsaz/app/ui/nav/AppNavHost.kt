@@ -26,6 +26,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.promptsaz.app.ui.screens.about.AboutScreen
 import com.promptsaz.app.ui.screens.archive.ArchiveScreen
 import com.promptsaz.app.ui.screens.chat.ChatScreen
 import com.promptsaz.app.ui.screens.clarify.ClarifyScreen
@@ -112,6 +113,7 @@ fun AppNavHost() {
                     onNavigateToArchive = { navController.navigate(Routes.ARCHIVE) },
                     onNavigateToSettings = { navController.navigate(Routes.SETTINGS) },
                     onNavigateToKb = { navController.navigate(Routes.KB) },
+                    onNavigateToAbout = { navController.navigate(Routes.ABOUT) },
                 )
             }
             composable(Routes.IMAGE) {
@@ -160,7 +162,13 @@ fun AppNavHost() {
                 KbDomainScreen(onBack = { navController.popBackStack() })
             }
             composable(Routes.SETTINGS) {
-                SettingsScreen(onBack = { navController.popBackStack() })
+                SettingsScreen(
+                    onBack = { navController.popBackStack() },
+                    onNavigateToAbout = { navController.navigate(Routes.ABOUT) },
+                )
+            }
+            composable(Routes.ABOUT) {
+                AboutScreen(onBack = { navController.popBackStack() })
             }
         }
     }

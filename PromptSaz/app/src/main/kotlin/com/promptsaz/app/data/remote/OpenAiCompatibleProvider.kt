@@ -58,20 +58,19 @@ class OpenAiCompatibleProvider @Inject constructor(
 
     // --- PromptProvider ---------------------------------------------------------
 
-    override suspend fun isConfigured(): Boolean = withContext(ioDispatcher) {
-        val settings = settingsRepository.settings.first()
-        val service = settings.activeService
+    override suspend fun isConfigured(serviceId: String?): Boolean = withContext(ioDispatcher) {
+        val service = resolveService(serviceId)
         service != null &&
             service.baseUrl.isNotBlank() &&
             service.model.isNotBlank() &&
             secureKeyStore.hasApiKey(service.id)
     }
 
-    override suspend fun testConnection(): ProviderHealth = withContext(ioDispatcher) {
+    override suspend fun testConnection(serviceId: String?): ProviderHealth = withContext(ioDispatcher) {
         // /models needs only key + base URL — NOT a model name. A user who has
         // just saved the key and wants to pick a model must be able to test.
-        val config = readConnectionConfig()
-            ?: return@withContext ProviderHealth.Failed(configGapFa(requireModel = false))
+        val config = readConnectionConfig(serviceId)
+            ?: return@withContext ProviderHealth.Failed(configGapFa(requireModel = false, serviceId))
         if (config.isPixazo) {
             // No cheap listing endpoint exists; probing the public status route
             // with a fake request id tells us whether the key is accepted
@@ -106,9 +105,9 @@ class OpenAiCompatibleProvider @Inject constructor(
         }
     }
 
-    override suspend fun listModels(): Result<List<String>> = withContext(ioDispatcher) {
-        val config = readConnectionConfig()
-            ?: return@withContext Result.failure(IllegalStateException(configGapFa(requireModel = false)))
+    override suspend fun listModels(serviceId: String?): Result<List<String>> = withContext(ioDispatcher) {
+        val config = readConnectionConfig(serviceId)
+            ?: return@withContext Result.failure(IllegalStateException(configGapFa(requireModel = false, serviceId)))
         if (config.isPixazo) {
             // The model is baked into the service URL; surface it as the only pick.
             return@withContext Result.success(listOf(PixazoWire.parseModelId(config.baseUrl)))
@@ -134,9 +133,10 @@ class OpenAiCompatibleProvider @Inject constructor(
     override suspend fun generatePrompt(
         spec: PromptSpec,
         kb: DomainKnowledge?,
+        serviceId: String?,
     ): Result<ProviderGeneration> = withContext(ioDispatcher) {
-        val config = readGenerationConfig()
-            ?: return@withContext Result.failure(IllegalStateException(configGapFa(requireModel = true)))
+        val config = readGenerationConfig(serviceId)
+            ?: return@withContext Result.failure(IllegalStateException(configGapFa(requireModel = true, serviceId)))
         if (config.isPixazo) {
             return@withContext Result.failure(IllegalStateException(PIXAZO_TEXT_ONLY_FA))
         }
@@ -189,9 +189,13 @@ class OpenAiCompatibleProvider @Inject constructor(
      * an image become [text, image_url] part arrays (OpenAI vision format), so
      * multimodal models can read and analyze the attached picture.
      */
-    override suspend fun chat(model: String, turns: List<ChatTurn>): Result<String> = withContext(ioDispatcher) {
-        val config = readConnectionConfig()
-            ?: return@withContext Result.failure(IllegalStateException(configGapFa(requireModel = false)))
+    override suspend fun chat(
+        model: String,
+        turns: List<ChatTurn>,
+        serviceId: String?,
+    ): Result<String> = withContext(ioDispatcher) {
+        val config = readConnectionConfig(serviceId)
+            ?: return@withContext Result.failure(IllegalStateException(configGapFa(requireModel = false, serviceId)))
         val selectedModel = model.trim()
         if (selectedModel.isBlank()) {
             return@withContext Result.failure(IllegalStateException(NO_MODEL_FA))
@@ -231,10 +235,15 @@ class OpenAiCompatibleProvider @Inject constructor(
     }
 
     /** Generates one image via the OpenAI-compatible images endpoint. */
-    override suspend fun generateImage(model: String, prompt: String, size: String): Result<GeneratedImage> =
+    override suspend fun generateImage(
+        model: String,
+        prompt: String,
+        size: String,
+        serviceId: String?,
+    ): Result<GeneratedImage> =
         withContext(ioDispatcher) {
-            val config = readConnectionConfig()
-                ?: return@withContext Result.failure(IllegalStateException(configGapFa(requireModel = false)))
+            val config = readConnectionConfig(serviceId)
+                ?: return@withContext Result.failure(IllegalStateException(configGapFa(requireModel = false, serviceId)))
             val selectedModel = model.trim()
             if (selectedModel.isBlank()) {
                 return@withContext Result.failure(IllegalStateException(NO_MODEL_FA))
@@ -377,14 +386,19 @@ class OpenAiCompatibleProvider @Inject constructor(
         val imagesUrl: String get() = baseUrl + IMAGES_PATH
     }
 
-    /** Key + base URL of the ACTIVE service — enough for /models and the test. */
-    private suspend fun readConnectionConfig(): ProviderConfig? {
+    /** Resolves a service by id; null id → the globally active service. */
+    private suspend fun resolveService(serviceId: String?): AiService? {
         val settings = settingsRepository.settings.first()
-        val service = settings.activeService ?: return null
+        return settings.aiServices.firstOrNull { it.id == serviceId } ?: settings.activeService
+    }
+
+    /** Key + base URL of one service — enough for /models and the test. */
+    private suspend fun readConnectionConfig(serviceId: String?): ProviderConfig? {
+        val service = resolveService(serviceId) ?: return null
         val key = secureKeyStore.getApiKey(service.id)
         val base = service.baseUrl.trim().trimEnd('/')
         if (key.isNullOrBlank() || base.isBlank()) return null
-        return ProviderConfig(key = key, model = "", baseUrl = base, protocol = service.type)
+        return ProviderConfig(key = key, model = service.model, baseUrl = base, protocol = service.type)
     }
 
     /**
@@ -417,21 +431,19 @@ class OpenAiCompatibleProvider @Inject constructor(
         }
     }
 
-    /** Key + base URL + model — required only for generation. */
-    private suspend fun readGenerationConfig(): ProviderConfig? {
-        val connection = readConnectionConfig() ?: return null
-        val model = settingsRepository.settings.first().aiModel.trim()
-        if (model.isBlank()) return null
-        return connection.copy(model = model)
+    /** Key + base URL + model of one service — required only for generation. */
+    private suspend fun readGenerationConfig(serviceId: String?): ProviderConfig? {
+        val connection = readConnectionConfig(serviceId) ?: return null
+        if (connection.model.isBlank()) return null
+        return connection
     }
 
     /**
      * Names the FIRST missing piece in Persian so the user is never told the
      * key is missing when it is actually the model (or the base URL).
      */
-    private suspend fun configGapFa(requireModel: Boolean): String {
-        val settings = settingsRepository.settings.first()
-        val service = settings.activeService
+    private suspend fun configGapFa(requireModel: Boolean, serviceId: String? = null): String {
+        val service = resolveService(serviceId)
         return missingConfigMessageFa(
             hasKey = service != null && secureKeyStore.hasApiKey(service.id),
             hasBaseUrl = !service?.baseUrl.isNullOrBlank(),

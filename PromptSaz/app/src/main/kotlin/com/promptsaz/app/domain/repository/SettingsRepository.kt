@@ -34,4 +34,10 @@ interface SettingsRepository {
     )
     suspend fun removeService(id: String)
     suspend fun setActiveService(id: String)
+
+    /** Binds one section (AppSettings.MODE_*) to a specific service ("" = default). */
+    suspend fun setModeService(modeId: String, serviceId: String)
+
+    /** Sets the chat/prompt (or image) model of one service. */
+    suspend fun setServiceModel(serviceId: String, model: String, imageModel: Boolean)
 }

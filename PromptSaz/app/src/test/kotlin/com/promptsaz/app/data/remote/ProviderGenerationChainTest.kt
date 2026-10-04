@@ -56,6 +56,20 @@ class ProviderGenerationChainTest {
         override suspend fun updateService(id: String, name: String, baseUrl: String, type: String) {}
         override suspend fun removeService(id: String) {}
         override suspend fun setActiveService(id: String) { flow.value = flow.value.copy(activeServiceId = id) }
+        override suspend fun setModeService(modeId: String, serviceId: String) {}
+        override suspend fun setServiceModel(serviceId: String, model: String, imageModel: Boolean) {
+            flow.value = flow.value.copy(
+                aiServices = flow.value.aiServices.map {
+                    if (it.id != serviceId) {
+                        it
+                    } else if (imageModel) {
+                        it.copy(imageModel = model)
+                    } else {
+                        it.copy(model = model)
+                    }
+                },
+            )
+        }
 
         private fun updateActiveService(block: (AiService) -> AiService) {
             val current = flow.value

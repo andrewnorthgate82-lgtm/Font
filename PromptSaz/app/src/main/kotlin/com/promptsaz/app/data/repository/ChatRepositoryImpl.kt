@@ -5,6 +5,7 @@ import com.promptsaz.app.data.db.ChatConversationEntity
 import com.promptsaz.app.data.db.ChatMessageEntity
 import com.promptsaz.app.data.db.toDomain
 import com.promptsaz.app.data.files.ImageFileStore
+import com.promptsaz.app.domain.model.AppSettings
 import com.promptsaz.app.domain.model.ChatConversation
 import com.promptsaz.app.domain.model.ChatMessage
 import com.promptsaz.app.domain.model.ChatTurn
@@ -104,7 +105,9 @@ class ChatRepositoryImpl @Inject constructor(
         // 2) build the turn history: system prompt + last N messages.
         //    Only the message just sent carries its image as a data URL;
         //    older attachments are referenced with a placeholder.
-        val model = settingsRepository.settings.first().aiModel
+        //    The گفتگو tab runs on ITS OWN bound service + model.
+        val chatService = settingsRepository.settings.first().serviceFor(AppSettings.MODE_CHAT)
+        val model = chatService?.model.orEmpty()
         val history = chatDao.messages(id).takeLast(HISTORY_LIMIT)
         val turns = buildList {
             add(ChatTurn(role = "system", text = AiModePrompts.CHAT_SYSTEM_PROMPT_FA))
@@ -141,7 +144,7 @@ class ChatRepositoryImpl @Inject constructor(
         }
 
         // 3) call the model and persist the reply
-        return provider.chat(model, turns).mapCatching { reply ->
+        return provider.chat(model, turns, chatService?.id).mapCatching { reply ->
             val replyId = chatDao.insertMessage(
                 ChatMessageEntity(
                     conversationId = id,

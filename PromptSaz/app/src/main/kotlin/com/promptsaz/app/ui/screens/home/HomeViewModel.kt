@@ -44,6 +44,8 @@ class HomeViewModel @Inject constructor(
         val models: List<String> = emptyList(),
         val modelsLoading: Boolean = false,
         val modelsErrorFa: String? = null,
+        val services: List<com.promptsaz.app.domain.model.AiService> = emptyList(),
+        val serviceId: String = "",
     ) {
         val ideaLength: Int get() = idea.length
     }
@@ -52,10 +54,18 @@ class HomeViewModel @Inject constructor(
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
     init {
-        // live AI settings: badge + the model pill in the top bar
+        // live AI settings: badge + the model pill — تولید پرامپت has its OWN service
         viewModelScope.launch {
             settingsRepository.settings.collect { settings ->
-                _uiState.update { it.copy(aiEnabled = settings.aiEnabled, selectedModel = settings.aiModel) }
+                val service = settings.serviceFor(com.promptsaz.app.domain.model.AppSettings.MODE_PROMPT)
+                _uiState.update {
+                    it.copy(
+                        aiEnabled = settings.aiEnabled,
+                        selectedModel = service?.model.orEmpty(),
+                        services = settings.aiServices,
+                        serviceId = service?.id.orEmpty(),
+                    )
+                }
             }
         }
         viewModelScope.launch {
@@ -105,9 +115,10 @@ class HomeViewModel @Inject constructor(
 
     fun loadModels() {
         val provider = providerRegistry.active() ?: return
+        val serviceId = _uiState.value.serviceId.ifBlank { null }
         viewModelScope.launch {
             _uiState.update { it.copy(modelsLoading = true, modelsErrorFa = null) }
-            provider.listModels()
+            provider.listModels(serviceId)
                 .onSuccess { models ->
                     _uiState.update { it.copy(modelsLoading = false, models = models) }
                 }
@@ -123,9 +134,18 @@ class HomeViewModel @Inject constructor(
     }
 
     fun selectModel(model: String) {
+        val serviceId = _uiState.value.serviceId
         viewModelScope.launch {
-            settingsRepository.setAiModel(model)
+            settingsRepository.setServiceModel(serviceId, model, imageModel = false)
             _uiState.update { it.copy(selectedModel = model) }
+        }
+    }
+
+    /** Binds the تولید پرامپت tab to a different service (per-section AI). */
+    fun selectService(serviceId: String) {
+        viewModelScope.launch {
+            settingsRepository.setModeService(com.promptsaz.app.domain.model.AppSettings.MODE_PROMPT, serviceId)
+            _uiState.update { it.copy(models = emptyList(), modelsErrorFa = null) }
         }
     }
 

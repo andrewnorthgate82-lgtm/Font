@@ -39,6 +39,8 @@ class ImageStudioViewModel @Inject constructor(
         val models: List<String> = emptyList(),
         val modelsLoading: Boolean = false,
         val modelsErrorFa: String? = null,
+        val services: List<com.promptsaz.app.domain.model.AiService> = emptyList(),
+        val serviceId: String = "",
         val history: List<ImageGeneration> = emptyList(),
         val current: ImageGeneration? = null,
         val imageUnsupported: Boolean = false,
@@ -62,11 +64,15 @@ class ImageStudioViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             settingsRepository.settings.collect { settings ->
-                val serviceId = settings.activeService?.id
+                // تولید تصویر runs on ITS OWN bound service (per-section AI).
+                val service = settings.serviceFor(com.promptsaz.app.domain.model.AppSettings.MODE_IMAGE)
+                val model = service?.imageModel.orEmpty().ifBlank { service?.model.orEmpty() }
                 _uiState.update {
                     it.copy(
-                        selectedModel = settings.aiImageModel.ifBlank { settings.aiModel },
-                        hasKey = serviceId != null && keyStore.hasApiKey(serviceId),
+                        selectedModel = model,
+                        hasKey = service != null && keyStore.hasApiKey(service.id),
+                        services = settings.aiServices,
+                        serviceId = service?.id.orEmpty(),
                     )
                 }
             }
@@ -102,9 +108,10 @@ class ImageStudioViewModel @Inject constructor(
 
     fun loadModels() {
         val provider = providerRegistry.active() ?: return
+        val serviceId = _uiState.value.serviceId.ifBlank { null }
         viewModelScope.launch {
             _uiState.update { it.copy(modelsLoading = true, modelsErrorFa = null) }
-            provider.listModels()
+            provider.listModels(serviceId)
                 .onSuccess { models ->
                     _uiState.update { it.copy(modelsLoading = false, models = models) }
                 }
@@ -120,9 +127,18 @@ class ImageStudioViewModel @Inject constructor(
     }
 
     fun selectModel(model: String) {
+        val serviceId = _uiState.value.serviceId
         viewModelScope.launch {
-            settingsRepository.setAiImageModel(model)
+            settingsRepository.setServiceModel(serviceId, model, imageModel = true)
             _uiState.update { it.copy(selectedModel = model) }
+        }
+    }
+
+    /** Binds the تولید تصویر tab to a different service (per-section AI). */
+    fun selectService(serviceId: String) {
+        viewModelScope.launch {
+            settingsRepository.setModeService(com.promptsaz.app.domain.model.AppSettings.MODE_IMAGE, serviceId)
+            _uiState.update { it.copy(models = emptyList(), modelsErrorFa = null, imageUnsupported = false) }
         }
     }
 
@@ -164,7 +180,7 @@ class ImageStudioViewModel @Inject constructor(
         if (!state.canGenerate) return
         viewModelScope.launch {
             _uiState.update { it.copy(generating = true, errorFa = null) }
-            imageRepository.generate(state.prompt, state.selectedModel, state.size)
+            imageRepository.generate(state.prompt, state.selectedModel, state.size, state.serviceId.ifBlank { null })
                 .onSuccess { generation ->
                     _uiState.update { it.copy(generating = false, current = generation, imageUnsupported = false) }
                 }
@@ -189,7 +205,7 @@ class ImageStudioViewModel @Inject constructor(
         if (!state.canMakeImagePrompt) return
         viewModelScope.launch {
             _uiState.update { it.copy(imagePromptLoading = true, errorFa = null) }
-            imageRepository.generateImagePrompt(state.prompt, state.selectedModel)
+            imageRepository.generateImagePrompt(state.prompt, state.selectedModel, state.serviceId.ifBlank { null })
                 .onSuccess { suggestion ->
                     _uiState.update { it.copy(imagePromptLoading = false, imagePrompt = suggestion) }
                 }

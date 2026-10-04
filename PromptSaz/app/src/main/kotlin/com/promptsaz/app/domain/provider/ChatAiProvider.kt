@@ -14,10 +14,15 @@ interface ChatAiProvider {
      * selected model and returns the assistant's reply text.
      * Multimodal models receive image turns as image_url content parts.
      */
-    suspend fun chat(model: String, turns: List<ChatTurn>): Result<String>
+    suspend fun chat(model: String, turns: List<ChatTurn>, serviceId: String? = null): Result<String>
 
     /** Generates one image from [prompt] via POST {base}/images/generations. */
-    suspend fun generateImage(model: String, prompt: String, size: String): Result<GeneratedImage>
+    suspend fun generateImage(
+        model: String,
+        prompt: String,
+        size: String,
+        serviceId: String? = null,
+    ): Result<GeneratedImage>
 
     /** Downloads raw bytes of a generated-image URL (pre-signed, no auth). */
     suspend fun fetchImageBytes(url: String): Result<ByteArray>

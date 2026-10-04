@@ -29,12 +29,17 @@ class ImageRepositoryImpl @Inject constructor(
     override fun history(): Flow<List<ImageGeneration>> =
         dao.observeAll().map { list -> list.map { it.toDomain() } }
 
-    override suspend fun generate(prompt: String, model: String, size: String): Result<ImageGeneration> {
+    override suspend fun generate(
+        prompt: String,
+        model: String,
+        size: String,
+        serviceId: String?,
+    ): Result<ImageGeneration> {
         val trimmedPrompt = prompt.trim()
         if (trimmedPrompt.isBlank()) {
             return Result.failure(IllegalStateException(EMPTY_PROMPT_FA))
         }
-        return provider.generateImage(model, trimmedPrompt, size).mapCatching { generated ->
+        return provider.generateImage(model, trimmedPrompt, size, serviceId).mapCatching { generated ->
             val bytes = when (generated) {
                 is GeneratedImage.FromUrl ->
                     provider.fetchImageBytes(generated.url).getOrElse { error ->
@@ -61,7 +66,7 @@ class ImageRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun generateImagePrompt(prompt: String, model: String): Result<String> {
+    override suspend fun generateImagePrompt(prompt: String, model: String, serviceId: String?): Result<String> {
         val trimmedPrompt = prompt.trim()
         if (trimmedPrompt.isBlank()) {
             return Result.failure(IllegalStateException(EMPTY_PROMPT_FA))
@@ -70,7 +75,7 @@ class ImageRepositoryImpl @Inject constructor(
             ChatTurn(role = "system", text = AiModePrompts.IMAGE_PROMPT_SYSTEM_FA),
             ChatTurn(role = "user", text = trimmedPrompt),
         )
-        return provider.chat(model, turns).mapCatching { reply ->
+        return provider.chat(model, turns, serviceId).mapCatching { reply ->
             reply.trim().ifBlank { throw IllegalStateException(BAD_PROMPT_REPLY_FA) }
         }
     }

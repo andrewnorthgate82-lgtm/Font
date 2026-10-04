@@ -43,6 +43,8 @@ class ChatViewModel @Inject constructor(
         val modelsLoading: Boolean = false,
         val modelsErrorFa: String? = null,
         val drawerOpen: Boolean = false,
+        val services: List<com.promptsaz.app.domain.model.AiService> = emptyList(),
+        val serviceId: String = "",
     ) {
         val canSend: Boolean get() = !sending
         val needsSetup: Boolean get() = !hasKey || selectedModel.isBlank()
@@ -56,12 +58,15 @@ class ChatViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             settingsRepository.settings.collect { settings ->
-                val serviceId = settings.activeService?.id
+                // گفتگو runs on ITS OWN bound service (per-section AI).
+                val service = settings.serviceFor(com.promptsaz.app.domain.model.AppSettings.MODE_CHAT)
                 _uiState.update {
                     it.copy(
                         aiEnabled = settings.aiEnabled,
-                        selectedModel = settings.aiModel,
-                        hasKey = serviceId != null && keyStore.hasApiKey(serviceId),
+                        selectedModel = service?.model.orEmpty(),
+                        hasKey = service != null && keyStore.hasApiKey(service.id),
+                        services = settings.aiServices,
+                        serviceId = service?.id.orEmpty(),
                     )
                 }
             }
@@ -90,9 +95,10 @@ class ChatViewModel @Inject constructor(
 
     fun loadModels() {
         val provider = providerRegistry.active() ?: return
+        val serviceId = _uiState.value.serviceId.ifBlank { null }
         viewModelScope.launch {
             _uiState.update { it.copy(modelsLoading = true, modelsErrorFa = null) }
-            provider.listModels()
+            provider.listModels(serviceId)
                 .onSuccess { models ->
                     _uiState.update { it.copy(modelsLoading = false, models = models) }
                 }
@@ -108,9 +114,18 @@ class ChatViewModel @Inject constructor(
     }
 
     fun selectModel(model: String) {
+        val serviceId = _uiState.value.serviceId
         viewModelScope.launch {
-            settingsRepository.setAiModel(model)
+            settingsRepository.setServiceModel(serviceId, model, imageModel = false)
             _uiState.update { it.copy(selectedModel = model) }
+        }
+    }
+
+    /** Binds the گفتگو tab to a different service (per-section AI). */
+    fun selectService(serviceId: String) {
+        viewModelScope.launch {
+            settingsRepository.setModeService(com.promptsaz.app.domain.model.AppSettings.MODE_CHAT, serviceId)
+            _uiState.update { it.copy(models = emptyList(), modelsErrorFa = null) }
         }
     }
 

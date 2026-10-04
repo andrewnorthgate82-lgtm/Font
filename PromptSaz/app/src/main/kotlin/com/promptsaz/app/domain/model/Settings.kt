@@ -66,10 +66,26 @@ data class AppSettings(
     /** All configured AI services; exactly one is [activeServiceId]. */
     val aiServices: List<AiService> = emptyList(),
     val activeServiceId: String = "",
+    /** Per-section service bindings; empty → fall back to [activeServiceId]. */
+    val chatServiceId: String = "",
+    val promptServiceId: String = "",
+    val imageServiceId: String = "",
 ) {
-    /** The service every AI call goes through right now. */
+    /** The global default service (Settings key management, fallback binding). */
     val activeService: AiService?
         get() = aiServices.firstOrNull { it.id == activeServiceId } ?: aiServices.firstOrNull()
+
+    /** The service a given section (chat / prompt / image) calls right now. */
+    fun serviceFor(modeId: String): AiService? {
+        val override = when (modeId) {
+            MODE_CHAT -> chatServiceId
+            MODE_PROMPT -> promptServiceId
+            MODE_IMAGE -> imageServiceId
+            else -> ""
+        }
+        val target = override.ifBlank { activeServiceId }
+        return aiServices.firstOrNull { it.id == target } ?: aiServices.firstOrNull()
+    }
 
     /** Views kept for the v1 single-service consumers (provider, view models). */
     val aiBaseUrl: String get() = activeService?.baseUrl?.trim()?.trimEnd('/') ?: ""
@@ -82,5 +98,10 @@ data class AppSettings(
          * A URL is not a secret, so it may ship in code; the API key never does.
          */
         const val DEFAULT_AI_BASE_URL: String = "https://codecraftapi.com/v1"
+
+        /** Section ids for [serviceFor] / setModeService. */
+        const val MODE_CHAT = "chat"
+        const val MODE_PROMPT = "prompt"
+        const val MODE_IMAGE = "image"
     }
 }

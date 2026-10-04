@@ -22,17 +22,21 @@ interface PromptProvider {
     val displayNameFa: String
 
     /** True when the user has entered everything needed to call the API. */
-    suspend fun isConfigured(): Boolean
+    suspend fun isConfigured(serviceId: String? = null): Boolean
 
     /** Hits the provider's health/models endpoint; failures carry the exact
      *  HTTP status and error body so the Settings UI can show them in Persian. */
-    suspend fun testConnection(): ProviderHealth
+    suspend fun testConnection(serviceId: String? = null): ProviderHealth
 
     /** Model ids for the picker; falls back to a manual entry on failure. */
-    suspend fun listModels(): Result<List<String>>
+    suspend fun listModels(serviceId: String? = null): Result<List<String>>
 
     /** Generates one prompt for the spec, following AiModePrompts.SYSTEM_PROMPT. */
-    suspend fun generatePrompt(spec: PromptSpec, kb: DomainKnowledge?): Result<ProviderGeneration>
+    suspend fun generatePrompt(
+        spec: PromptSpec,
+        kb: DomainKnowledge?,
+        serviceId: String? = null,
+    ): Result<ProviderGeneration>
 }
 
 /** Successful generation from a provider. */
