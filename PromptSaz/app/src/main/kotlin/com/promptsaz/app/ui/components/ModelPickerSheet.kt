@@ -213,6 +213,7 @@ fun ModelPickerSheet(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                                     modifier = Modifier
+                                        .animateItem()
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(14.dp))
                                         .background(rowBackground)

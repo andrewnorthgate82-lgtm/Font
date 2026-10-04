@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «پرامپت جدید» widget metadata (3×1 cells, statically tappable). -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="150dp"
+    android:minHeight="40dp"
+    android:targetCellWidth="3"
+    android:targetCellHeight="1"
+    android:maxResizeWidth="320dp"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/widget_new_prompt"
+    android:previewLayout="@layout/widget_new_prompt"
+    android:description="@string/widget_new_prompt_desc"
+    android:resizeMode="horizontal"
+    android:widgetCategory="home_screen" />

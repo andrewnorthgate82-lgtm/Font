@@ -49,7 +49,7 @@ fun AboutScreen(onBack: () -> Unit) {
     val context = LocalContext.current
 
     Column(modifier = Modifier.fillMaxSize()) {
-        AppHeader(title = "درباره پرامپت‌ساز", onBack = onBack)
+        AppHeader(title = "درباره چیستا", onBack = onBack)
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -77,7 +77,7 @@ fun AboutScreen(onBack: () -> Unit) {
             }
             Spacer(Modifier.height(16.dp))
             Text(
-                text = "پرامپت‌ساز",
+                text = "چیستا",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.ExtraBold,
             )

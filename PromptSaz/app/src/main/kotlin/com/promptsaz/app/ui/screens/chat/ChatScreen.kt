@@ -4,6 +4,8 @@ import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -247,7 +249,14 @@ fun ChatScreen(
                         .padding(horizontal = 14.dp, vertical = 12.dp),
                 ) {
                     items(state.messages, key = { it.id }) { message ->
-                        Box(modifier = Modifier.animateItem()) {
+                        Box(
+                            modifier = Modifier.animateItem(
+                                placementSpec = spring(
+                                    dampingRatio = 0.9f,
+                                    stiffness = Spring.StiffnessMediumLow,
+                                ),
+                            ),
+                        ) {
                             MessageBubble(
                                 message = message,
                                 readImage = viewModel::readImageFile,

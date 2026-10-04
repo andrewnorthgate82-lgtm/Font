@@ -562,12 +562,12 @@ private fun saveToGallery(context: Context, bytes: ByteArray, fileName: String):
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, "promptsaz-$fileName")
             put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/PromptSaz")
+            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Chista")
         }
         val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
             ?: return "ذخیره ناموفق بود."
         context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
-        "در گالری، پوشهٔ PromptSaz ذخیره شد."
+        "در گالری، پوشهٔ چیستا ذخیره شد."
     }.getOrElse { "ذخیره ناموفق بود: ${it.message ?: ""}" }
 }
 

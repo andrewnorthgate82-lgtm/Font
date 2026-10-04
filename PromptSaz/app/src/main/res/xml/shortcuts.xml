@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press app-icon shortcuts: گفتگو / پرامپت جدید / تولید تصویر.
+     Each carries the open_section deep-link extra MainActivity understands. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="new_prompt"
+        android:enabled="true"
+        android:icon="@drawable/ic_splash_icon"
+        android:shortcutShortLabel="@string/shortcut_new_prompt"
+        android:shortcutLongLabel="@string/shortcut_new_prompt">
+        <intent
+            android:action="android.intent.action.MAIN"
+            android:targetPackage="com.promptsaz.app"
+            android:targetClass="com.promptsaz.app.MainActivity">
+            <extra
+                android:name="open_section"
+                android:value="prompt_new" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="chat"
+        android:enabled="true"
+        android:icon="@drawable/ic_splash_icon"
+        android:shortcutShortLabel="@string/shortcut_chat"
+        android:shortcutLongLabel="@string/shortcut_chat">
+        <intent
+            android:action="android.intent.action.MAIN"
+            android:targetPackage="com.promptsaz.app"
+            android:targetClass="com.promptsaz.app.MainActivity">
+            <extra
+                android:name="open_section"
+                android:value="chat" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="image"
+        android:enabled="true"
+        android:icon="@drawable/ic_splash_icon"
+        android:shortcutShortLabel="@string/shortcut_image"
+        android:shortcutLongLabel="@string/shortcut_image">
+        <intent
+            android:action="android.intent.action.MAIN"
+            android:targetPackage="com.promptsaz.app"
+            android:targetClass="com.promptsaz.app.MainActivity">
+            <extra
+                android:name="open_section"
+                android:value="image" />
+        </intent>
+    </shortcut>
+</shortcuts>

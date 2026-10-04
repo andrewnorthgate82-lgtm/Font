@@ -5,7 +5,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 
 /**
- * «پرامپت‌ساز» unified 2026 palette — one accent family (electric indigo →
+ * «چیستا» unified 2026 palette — one accent family (electric indigo →
  * violet) on Apple-style neutral scaffolding: near-white canvas, pure cards,
  * true-black dark mode. Every screen draws only from this file.
  */

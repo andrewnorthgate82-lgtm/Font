@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  PromptSaz — «پرامپت‌ساز»
+  چیستا — «PromptSaz»
   INTERNET is declared for the optional AI mode only; the app makes zero
   network calls unless the user enables AI mode in Settings.
 -->
@@ -33,15 +33,34 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- singleTask so widget/shortcut taps reuse the running instance
+             (onNewIntent) instead of stacking a second MainActivity. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
+
+        <!-- ویجت «پرامپت جدید» -->
+        <receiver
+            android:name=".widget.ChistaPromptWidget"
+            android:exported="false"
+            android:label="@string/shortcut_new_prompt">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/chista_widget_info" />
+        </receiver>
 
     </application>
 

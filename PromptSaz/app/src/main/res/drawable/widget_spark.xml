@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The white prompt spark (widget scale, 48dp viewport). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M24,6 L27.2,18.8 L40,24 L27.2,29.2 L24,42 L20.8,29.2 L8,24 L20.8,18.8 Z" />
+    <path
+        android:fillColor="#FFF59E0B"
+        android:pathData="M34,33 m-2.8,0 a2.8,2.8 0 1 0 5.6,0 a2.8,2.8 0 1 0 -5.6,0" />
+    <path
+        android:fillColor="#B3FFFFFF"
+        android:pathData="M14,35 m-2,0 a2,2 0 1 0 4,0 a2,2 0 1 0 -4,0" />
+</vector>

@@ -1,5 +1,13 @@
 package com.promptsaz.app.ui.nav
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -105,7 +113,7 @@ fun AppMenuDrawer(
                 )
             }
             Text(
-                text = "پرامپت‌ساز",
+                text = "چیستا",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.ExtraBold,
             )
@@ -286,12 +294,22 @@ private fun MenuSection(
             )
         }
     }
-    if (expanded) {
+    AnimatedVisibility(
+        visible = expanded,
+        enter = expandVertically(springMenu()) + fadeIn(tween(180)),
+        exit = shrinkVertically(springMenu()) + fadeOut(tween(140)),
+    ) {
         Column(modifier = Modifier.padding(start = 6.dp)) {
             content()
         }
     }
 }
+
+/** Gentle spring for the menu's expand/collapse — ظریف و نرم. */
+private fun springMenu() = spring(
+    dampingRatio = Spring.DampingRatioNoBouncy,
+    stiffness = Spring.StiffnessMediumLow,
+)
 
 /** One history entry under a section. */
 @Composable

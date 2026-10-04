@@ -1,5 +1,7 @@
 package com.promptsaz.app.ui.nav
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -9,9 +11,11 @@ import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -23,6 +27,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.promptsaz.app.MainActivity
 import com.promptsaz.app.ui.screens.about.AboutScreen
 import com.promptsaz.app.ui.screens.archive.ArchiveScreen
 import com.promptsaz.app.ui.screens.chat.ChatScreen
@@ -42,7 +47,10 @@ import kotlinx.coroutines.launch
  * with its ۵ تاریخچهٔ اخیر one tap away. No bottom bar.
  */
 @Composable
-fun AppNavHost() {
+fun AppNavHost(
+    openSection: String? = null,
+    onSectionHandled: () -> Unit = {},
+) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
@@ -72,6 +80,20 @@ fun AppNavHost() {
 
     fun closeDrawer() {
         scope.launch { drawerState.close() }
+    }
+
+    // home-screen widget / app-shortcut deep link («پرامپت جدید» و …)
+    LaunchedEffect(openSection) {
+        when (openSection) {
+            MainActivity.SECTION_CHAT -> openTab(Routes.CHAT_TAB)
+            MainActivity.SECTION_IMAGE -> openTab(Routes.IMAGE_TAB)
+            MainActivity.SECTION_PROMPT_NEW -> navController.navigate(Routes.HOME) {
+                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                launchSingleTop = true
+                restoreState = false // always a FRESH prompt screen
+            }
+        }
+        if (openSection != null) onSectionHandled()
     }
 
     ModalNavigationDrawer(
@@ -118,21 +140,21 @@ fun AppNavHost() {
                 if (isSectionSwitch(initialState, targetState)) {
                     fadeIn(tween(220))
                 } else {
-                    slideInHorizontally(tween(340)) { -it / 3 } + fadeIn(tween(340))
+                    slideInHorizontally(pageSpring()) { -it / 3 } + fadeIn(tween(340))
                 }
             },
             exitTransition = {
                 if (isSectionSwitch(initialState, targetState)) {
                     fadeOut(tween(160))
                 } else {
-                    slideOutHorizontally(tween(340)) { it / 4 } + fadeOut(tween(340))
+                    slideOutHorizontally(pageSpring()) { it / 4 } + fadeOut(tween(340))
                 }
             },
             popEnterTransition = {
-                slideInHorizontally(tween(340)) { it / 4 } + fadeIn(tween(340))
+                slideInHorizontally(pageSpring()) { it / 4 } + fadeIn(tween(340))
             },
             popExitTransition = {
-                slideOutHorizontally(tween(340)) { -it / 3 } + fadeOut(tween(340))
+                slideOutHorizontally(pageSpring()) { -it / 3 } + fadeOut(tween(340))
             },
         ) {
             composable(
@@ -229,3 +251,9 @@ fun AppNavHost() {
         }
     }
 }
+
+/** Soft page spring: a hint of overshoot (0.9 damping) — ظریف, not bouncy. */
+private fun pageSpring() = spring<IntOffset>(
+    dampingRatio = 0.9f,
+    stiffness = Spring.StiffnessMediumLow,
+)

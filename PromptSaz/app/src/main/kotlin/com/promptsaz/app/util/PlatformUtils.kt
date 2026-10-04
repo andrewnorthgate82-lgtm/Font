@@ -15,7 +15,7 @@ object PlatformUtils {
 
     fun copyToClipboard(context: Context, text: String): Boolean = try {
         val manager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        manager.setPrimaryClip(ClipData.newPlainText("PromptSaz", text))
+        manager.setPrimaryClip(ClipData.newPlainText("چیستا", text))
         true
     } catch (_: Exception) {
         false

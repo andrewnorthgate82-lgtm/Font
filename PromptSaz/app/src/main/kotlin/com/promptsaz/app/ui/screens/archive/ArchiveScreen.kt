@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -156,15 +157,17 @@ fun ArchiveScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(prompts, key = { it.id }) { prompt ->
-                    ArchiveCard(
-                        prompt = prompt,
-                        domainName = domains.firstOrNull { it.id == prompt.domainId }?.nameFa,
-                        onOpen = { onOpenPrompt(prompt.id) },
-                        onToggleFavorite = { viewModel.toggleFavorite(prompt.id) },
-                        onCopy = { PlatformUtils.copyWithFeedback(context, prompt.promptText) },
-                        onDuplicate = { viewModel.duplicate(prompt.id) },
-                        onDelete = { deleteTarget = prompt },
-                    )
+                    Box(modifier = Modifier.animateItem()) {
+                        ArchiveCard(
+                            prompt = prompt,
+                            domainName = domains.firstOrNull { it.id == prompt.domainId }?.nameFa,
+                            onOpen = { onOpenPrompt(prompt.id) },
+                            onToggleFavorite = { viewModel.toggleFavorite(prompt.id) },
+                            onCopy = { PlatformUtils.copyWithFeedback(context, prompt.promptText) },
+                            onDuplicate = { viewModel.duplicate(prompt.id) },
+                            onDelete = { deleteTarget = prompt },
+                        )
+                    }
                 }
             }
         }

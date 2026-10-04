@@ -8,6 +8,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -221,8 +224,12 @@ fun SettingsScreen(
                 .fillMaxWidth(),
             transitionSpec = {
                 val direction = if (targetState > initialState) 1 else -1
-                (slideInHorizontally { it / 3 * direction } + fadeIn()) togetherWith
-                    (slideOutHorizontally { -it / 3 * direction } + fadeOut())
+                val pageSpring = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMediumLow,
+                )
+                (slideInHorizontally(pageSpring) { it / 3 * direction } + fadeIn(tween(200))) togetherWith
+                    (slideOutHorizontally(pageSpring) { -it / 3 * direction } + fadeOut(tween(150)))
             },
             label = "settingsPages",
         ) { page ->
