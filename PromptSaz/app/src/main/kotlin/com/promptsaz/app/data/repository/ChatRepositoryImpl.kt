@@ -107,7 +107,10 @@ class ChatRepositoryImpl @Inject constructor(
         //    older attachments are referenced with a placeholder.
         //    The گفتگو tab runs on ITS OWN bound service + model.
         val chatService = settingsRepository.settings.first().serviceFor(AppSettings.MODE_CHAT)
-        val model = chatService?.model.orEmpty()
+        if (chatService == null) {
+            return Result.failure(IllegalStateException(NO_CHAT_SERVICE_FA))
+        }
+        val model = chatService.model
         val history = chatDao.messages(id).takeLast(HISTORY_LIMIT)
         val turns = buildList {
             add(ChatTurn(role = "system", text = AiModePrompts.CHAT_SYSTEM_PROMPT_FA))
@@ -165,6 +168,7 @@ class ChatRepositoryImpl @Inject constructor(
         const val HISTORY_LIMIT = 24
         const val TITLE_MAX_CHARS = 48
         const val UNTITLED_FA = "گفتگوی جدید"
+        const val NO_CHAT_SERVICE_FA = "اول سرویس گفتگو را در تنظیمات انتخاب کن."
         const val IMAGE_PLACEHOLDER_FA = "[تصویر پیوست‌شده]"
         const val FEEDBACK_LIKE_NOTE_FA =
             "(بازخورد کاربر به پاسخ بالا: این پاسخ را پسندید؛ پاسخ‌های بعدی به همین سبک و کیفیت باشند.)"

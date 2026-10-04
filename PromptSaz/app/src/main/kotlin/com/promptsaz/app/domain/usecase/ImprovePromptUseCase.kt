@@ -62,7 +62,7 @@ class ImprovePromptUseCase @Inject constructor(
         if (settings.aiEnabled) {
             val provider = providerRegistry.active()
             val serviceId = settings.serviceFor(AppSettings.MODE_PROMPT)?.id
-            if (provider != null && provider.isConfigured(serviceId)) {
+            if (provider != null && serviceId != null && provider.isConfigured(serviceId)) {
                 provider.generatePrompt(spec, kb, serviceId)
                     .onSuccess { generation ->
                         result = GeneratedPrompt(

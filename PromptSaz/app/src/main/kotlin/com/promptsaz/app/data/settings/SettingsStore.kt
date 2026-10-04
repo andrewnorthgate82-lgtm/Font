@@ -63,9 +63,18 @@ class SettingsStore(private val context: Context) {
                 activeServiceId = prefs[Keys.ACTIVE_SERVICE_ID]
                     ?.takeIf { id -> servicesOf(prefs).any { it.id == id } }
                     ?: servicesOf(prefs).firstOrNull()?.id.orEmpty(),
-                chatServiceId = prefs[Keys.CHAT_SERVICE_ID].orEmpty(),
-                promptServiceId = prefs[Keys.PROMPT_SERVICE_ID].orEmpty(),
-                imageServiceId = prefs[Keys.IMAGE_SERVICE_ID].orEmpty(),
+                // one-time migration: a section that never got an explicit
+                // binding inherits the v1 "default" so nothing breaks — from
+                // now on every section owns its choice (no global default)
+                chatServiceId = prefs[Keys.CHAT_SERVICE_ID]
+                    .orEmpty()
+                    .ifBlank { prefs[Keys.ACTIVE_SERVICE_ID].orEmpty() },
+                promptServiceId = prefs[Keys.PROMPT_SERVICE_ID]
+                    .orEmpty()
+                    .ifBlank { prefs[Keys.ACTIVE_SERVICE_ID].orEmpty() },
+                imageServiceId = prefs[Keys.IMAGE_SERVICE_ID]
+                    .orEmpty()
+                    .ifBlank { prefs[Keys.ACTIVE_SERVICE_ID].orEmpty() },
             )
         }
 
@@ -107,6 +116,12 @@ class SettingsStore(private val context: Context) {
             newId = id
             prefs[Keys.AI_SERVICES] = AiServiceCodec.encode(services)
             prefs[Keys.ACTIVE_SERVICE_ID] = id
+            if (servicesOf(prefs).size == 1) {
+                // اولین سرویس: هر سه بخش خودکار به آن وصل می‌شوند
+                prefs[Keys.CHAT_SERVICE_ID] = id
+                prefs[Keys.PROMPT_SERVICE_ID] = id
+                prefs[Keys.IMAGE_SERVICE_ID] = id
+            }
         }
         return newId
     }
@@ -134,6 +149,10 @@ class SettingsStore(private val context: Context) {
             prefs[Keys.AI_SERVICES] = AiServiceCodec.encode(services)
             if (removedActive) {
                 prefs[Keys.ACTIVE_SERVICE_ID] = services.firstOrNull()?.id.orEmpty()
+            }
+            // sections that were bound to this service become unbound
+            listOf(Keys.CHAT_SERVICE_ID, Keys.PROMPT_SERVICE_ID, Keys.IMAGE_SERVICE_ID).forEach { key ->
+                if (prefs[key] == id) prefs.remove(key)
             }
         }
     }

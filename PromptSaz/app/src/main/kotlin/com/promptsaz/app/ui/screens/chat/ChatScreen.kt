@@ -184,10 +184,10 @@ fun ChatScreen(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                     ) {
                         Text(
-                            text = if (!state.hasKey) {
-                                "کلید API را در تنظیمات وارد کن."
-                            } else {
-                                "یک مدل انتخاب کن."
+                            text = when {
+                                state.serviceId.isBlank() -> "سرویس گفتگو را در تنظیمات انتخاب کن."
+                                !state.hasKey -> "کلید API را در تنظیمات وارد کن."
+                                else -> "یک مدل انتخاب کن."
                             },
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),
@@ -196,11 +196,15 @@ fun ChatScreen(
                             shape = RoundedCornerShape(50),
                             color = MaterialTheme.colorScheme.tertiary,
                             onClick = {
-                                if (!state.hasKey) onNavigateToSettings() else viewModel.openModelPicker()
+                                if (!state.hasKey || state.serviceId.isBlank()) {
+                                    onNavigateToSettings()
+                                } else {
+                                    viewModel.openModelPicker()
+                                }
                             },
                         ) {
                             Text(
-                                text = if (!state.hasKey) "تنظیمات" else "انتخاب مدل",
+                                text = if (!state.hasKey || state.serviceId.isBlank()) "تنظیمات" else "انتخاب مدل",
                                 color = Color.White,
                                 style = MaterialTheme.typography.labelMedium,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -257,11 +261,13 @@ fun ChatScreen(
                         .padding(horizontal = 14.dp, vertical = 12.dp),
                 ) {
                     items(state.messages, key = { it.id }) { message ->
-                        MessageBubble(
-                            message = message,
-                            readImage = viewModel::readImageFile,
-                            onFeedback = { feedback -> viewModel.toggleFeedback(message, feedback) },
-                        )
+                        Box(modifier = Modifier.animateItem()) {
+                            MessageBubble(
+                                message = message,
+                                readImage = viewModel::readImageFile,
+                                onFeedback = { feedback -> viewModel.toggleFeedback(message, feedback) },
+                            )
+                        }
                     }
                     if (state.sending) {
                         item(key = "typing") {

@@ -63,28 +63,36 @@ data class AppSettings(
     val defaultOutputLanguage: OutputLanguage = OutputLanguage.SAME_AS_INPUT,
     val defaultDetailLevel: DetailLevel = DetailLevel.STANDARD,
     val aiEnabled: Boolean = false,
-    /** All configured AI services; exactly one is [activeServiceId]. */
+    /** All configured AI services. */
     val aiServices: List<AiService> = emptyList(),
+    /** Legacy v1 field — kept only to migrate old installs; never shown in UI. */
     val activeServiceId: String = "",
-    /** Per-section service bindings; empty → fall back to [activeServiceId]. */
+    /**
+     * Per-section service bindings — each section (گفتگو / تولید پرامپت /
+     * تولید تصویر) owns its service. There is NO global default anymore.
+     */
     val chatServiceId: String = "",
     val promptServiceId: String = "",
     val imageServiceId: String = "",
 ) {
-    /** The global default service (Settings key management, fallback binding). */
+    /** Legacy single-service view (v1 provider defaults). */
     val activeService: AiService?
         get() = aiServices.firstOrNull { it.id == activeServiceId } ?: aiServices.firstOrNull()
 
-    /** The service a given section (chat / prompt / image) calls right now. */
+    /**
+     * The service a section calls right now: its OWN binding — or, when only
+     * one service exists, that one (there is nothing else to choose) — never
+     * an implicit global default.
+     */
     fun serviceFor(modeId: String): AiService? {
-        val override = when (modeId) {
+        val binding = when (modeId) {
             MODE_CHAT -> chatServiceId
             MODE_PROMPT -> promptServiceId
             MODE_IMAGE -> imageServiceId
-            else -> ""
+            else -> return null
         }
-        val target = override.ifBlank { activeServiceId }
-        return aiServices.firstOrNull { it.id == target } ?: aiServices.firstOrNull()
+        aiServices.firstOrNull { it.id == binding }
+            ?: aiServices.takeIf { it.size == 1 }?.firstOrNull()
     }
 
     /** Views kept for the v1 single-service consumers (provider, view models). */

@@ -84,8 +84,15 @@ class SettingsViewModel @Inject constructor(
     // --- per-section binding + models --------------------------------------------------
 
     /** Binds a section to one of the configured services. */
-    fun setModeService(modeId: String, serviceId: String) = launchSetting {
-        settingsRepository.setModeService(modeId, serviceId)
+    fun setModeService(modeId: String, serviceId: String) {
+        // the old service's model list / test result no longer belongs here
+        _uiState.update {
+            it.copy(
+                modelsByMode = it.modelsByMode - modeId,
+                testByMode = it.testByMode - modeId,
+            )
+        }
+        launchSetting { settingsRepository.setModeService(modeId, serviceId) }
     }
 
     /** Saves the model picked inside a section's block. */
@@ -175,8 +182,6 @@ class SettingsViewModel @Inject constructor(
     }
 
     // --- service management --------------------------------------------------------------
-
-    fun setActiveService(id: String) = launchSetting { settingsRepository.setActiveService(id) }
 
     fun addService(name: String, baseUrl: String, type: String) = launchSetting {
         settingsRepository.addService(name, normalizeUrl(baseUrl), type)

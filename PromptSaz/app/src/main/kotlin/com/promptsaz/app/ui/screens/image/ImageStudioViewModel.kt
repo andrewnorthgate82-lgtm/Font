@@ -52,6 +52,7 @@ class ImageStudioViewModel @Inject constructor(
         val canMakeImagePrompt: Boolean get() = prompt.isNotBlank() && !imagePromptLoading && !needsSetup
 
         companion object {
+            const val NO_SERVICE_FA = "اول سرویس تصویر را در تنظیمات انتخاب کن."
             const val SIZE_SQUARE = "1024x1024"
             const val SIZE_PORTRAIT = "1024x1536"
             const val SIZE_LANDSCAPE = "1536x1024"
@@ -178,6 +179,10 @@ class ImageStudioViewModel @Inject constructor(
     fun generate() {
         val state = _uiState.value
         if (!state.canGenerate) return
+        if (state.serviceId.isBlank()) {
+            _uiState.update { it.copy(errorFa = NO_SERVICE_FA) }
+            return
+        }
         viewModelScope.launch {
             _uiState.update { it.copy(generating = true, errorFa = null) }
             imageRepository.generate(state.prompt, state.selectedModel, state.size, state.serviceId.ifBlank { null })
@@ -203,6 +208,10 @@ class ImageStudioViewModel @Inject constructor(
     fun generateImagePrompt() {
         val state = _uiState.value
         if (!state.canMakeImagePrompt) return
+        if (state.serviceId.isBlank()) {
+            _uiState.update { it.copy(errorFa = NO_SERVICE_FA) }
+            return
+        }
         viewModelScope.launch {
             _uiState.update { it.copy(imagePromptLoading = true, errorFa = null) }
             imageRepository.generateImagePrompt(state.prompt, state.selectedModel, state.serviceId.ifBlank { null })

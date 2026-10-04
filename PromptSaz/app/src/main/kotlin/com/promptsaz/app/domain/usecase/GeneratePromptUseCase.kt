@@ -54,6 +54,8 @@ class GeneratePromptUseCase @Inject constructor(
             val serviceId = settings.serviceFor(AppSettings.MODE_PROMPT)?.id
             if (provider == null) {
                 aiError = "هیچ سرویس هوش مصنوعی نصب نیست؛ با موتور آفلاین ساخته شد."
+            } else if (serviceId == null) {
+                aiError = "سرویس بخش پرامپت در تنظیمات انتخاب نشده؛ با موتور آفلاین ساخته شد."
             } else if (!provider.isConfigured(serviceId)) {
                 aiError = "حالت هوش مصنوعی فعال است اما کلید یا مدل تنظیم نشده؛ با موتور آفلاین ساخته شد."
             } else {
