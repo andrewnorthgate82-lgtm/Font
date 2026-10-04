@@ -552,7 +552,7 @@ private fun SectionSettingsTab(
             }
         }
     }
-    AiServicePresets.matchOf(service)?.consoleUrl?.let { consoleUrl ->
+    service?.let { AiServicePresets.matchOf(it) }?.consoleUrl?.let { consoleUrl ->
         Text(
             text = "ساخت یا مدیریت کلید این سرویس ↗",
             style = MaterialTheme.typography.labelMedium,
