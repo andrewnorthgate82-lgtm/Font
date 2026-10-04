@@ -444,7 +444,7 @@ class OpenAiCompatibleProvider @Inject constructor(
         val url = GeminiWire.generateContentUrl(config.baseUrl, model)
         val request = GeminiWire.fromTurns(turns, maxOutputTokens = DEFAULT_MAX_TOKENS)
         val body = json.encodeToString(GeminiWire.GeminiGenerateRequest.serializer(), request)
-        when (val response = httpCall("POST", url, config, body)) {
+        when (val response = httpCallWithRetry("POST", url, config, body)) {
             is HttpOutcome.Success -> {
                 if (response.code !in 200..299) {
                     Result.failure(IllegalStateException(persianHttpError(response.code, response.body)))
