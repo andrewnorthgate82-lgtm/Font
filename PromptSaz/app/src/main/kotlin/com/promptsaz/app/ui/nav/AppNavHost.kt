@@ -183,7 +183,7 @@ fun AppNavHost() {
                 )
             }
             composable(Routes.RESULT) {
-                val goHome = {
+                val goHome: () -> Unit = {
                     navController.popBackStack(Routes.HOME, inclusive = false)
                 }
                 ResultScreen(
