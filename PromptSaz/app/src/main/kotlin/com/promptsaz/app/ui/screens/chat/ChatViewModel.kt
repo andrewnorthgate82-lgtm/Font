@@ -1,5 +1,6 @@
 package com.promptsaz.app.ui.screens.chat
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.promptsaz.app.data.settings.ApiKeyStore
@@ -27,6 +28,7 @@ class ChatViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val providerRegistry: ProviderRegistry,
     private val keyStore: ApiKeyStore,
+    private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
     data class UiState(
@@ -42,7 +44,6 @@ class ChatViewModel @Inject constructor(
         val models: List<String> = emptyList(),
         val modelsLoading: Boolean = false,
         val modelsErrorFa: String? = null,
-        val drawerOpen: Boolean = false,
         val services: List<com.promptsaz.app.domain.model.AiService> = emptyList(),
         val serviceId: String = "",
     ) {
@@ -76,10 +77,10 @@ class ChatViewModel @Inject constructor(
                 _uiState.update { it.copy(conversations = list) }
             }
         }
-    }
-
-    fun openDrawer(open: Boolean) {
-        _uiState.update { it.copy(drawerOpen = open) }
+        // deep link from the app menu: open a specific conversation
+        savedStateHandle.get<Long>("conversationId")?.takeIf { it > 0L }?.let { id ->
+            openConversation(id)
+        }
     }
 
     fun openModelPicker() {
@@ -132,13 +133,13 @@ class ChatViewModel @Inject constructor(
     fun newConversation() {
         messagesJob?.cancel()
         _uiState.update {
-            it.copy(conversationId = 0L, messages = emptyList(), errorFa = null, drawerOpen = false)
+            it.copy(conversationId = 0L, messages = emptyList(), errorFa = null)
         }
     }
 
     fun openConversation(conversationId: Long) {
         messagesJob?.cancel()
-        _uiState.update { it.copy(conversationId = conversationId, errorFa = null, drawerOpen = false) }
+        _uiState.update { it.copy(conversationId = conversationId, errorFa = null) }
         messagesJob = viewModelScope.launch {
             chatRepository.messages(conversationId).collect { messages ->
                 _uiState.update { it.copy(messages = messages) }
@@ -153,15 +154,6 @@ class ChatViewModel @Inject constructor(
                 newConversation()
             }
         }
-    }
-
-    /**
-     * Rates a message (like/dislike); tapping the active rating clears it.
-     * The rating is fed back into the next request of the conversation.
-     */
-    fun toggleFeedback(message: ChatMessage, feedback: Int) {
-        val next = if (message.feedback == feedback) ChatMessage.FEEDBACK_NONE else feedback
-        viewModelScope.launch { chatRepository.setFeedback(message.id, next) }
     }
 
     /** Reads a stored attachment for the message list. */

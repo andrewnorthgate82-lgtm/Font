@@ -22,8 +22,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -32,29 +30,23 @@ import androidx.compose.material.icons.rounded.AddCircle
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
-import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.SaveAlt
-import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -76,7 +68,6 @@ import com.promptsaz.app.ui.components.SoftIconButton
 import com.promptsaz.app.ui.theme.BrandGradient
 import com.promptsaz.app.util.PlatformUtils
 import java.io.File
-import kotlinx.coroutines.launch
 
 /**
  * تصویر tab — same skeleton as the گفتگو tab: a history drawer, a top bar
@@ -87,24 +78,19 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ImageStudioScreen(
+    onOpenMenu: () -> Unit,
     onNavigateToSettings: () -> Unit,
     viewModel: ImageStudioViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val drawerState = rememberDrawerState(DrawerValue.Closed)
     var saveMessage by remember { mutableStateOf<String?>(null) }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = { HistoryDrawer(state, viewModel, drawerState, onNavigateToSettings) },
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .imePadding(),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .imePadding(),
-        ) {
             // --- top bar -------------------------------------------------------
             Surface(color = MaterialTheme.colorScheme.surface) {
                 Row(
@@ -116,8 +102,8 @@ fun ImageStudioScreen(
                 ) {
                     SoftIconButton(
                         icon = Icons.Rounded.Menu,
-                        contentDescription = "تاریخچهٔ ساخت‌ها",
-                        onClick = { scope.launch { drawerState.open() } },
+                        contentDescription = "منوی برنامه",
+                        onClick = onOpenMenu,
                     )
                     Text(
                         text = "تولید تصویر",
@@ -397,7 +383,7 @@ fun ImageStudioScreen(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 6.dp),
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
                     ) {
                         Text(
                             text = "اندازه:",
@@ -463,7 +449,7 @@ fun ImageStudioScreen(
                                             SolidColor(MaterialTheme.colorScheme.surfaceVariant)
                                         },
                                     )
-                                    .size(52.dp),
+                                    .size(56.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 if (state.generating) {
@@ -485,7 +471,6 @@ fun ImageStudioScreen(
                 }
             }
         }
-    }
 
     ModelPickerSheet(
         visible = state.modelPickerVisible,
@@ -545,111 +530,6 @@ private fun EmptyStudio(onSuggestion: (String) -> Unit, modifier: Modifier = Mod
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                     )
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun HistoryDrawer(
-    state: ImageStudioViewModel.UiState,
-    viewModel: ImageStudioViewModel,
-    drawerState: androidx.compose.material3.DrawerState,
-    onNavigateToSettings: () -> Unit,
-) {
-    val scope = rememberCoroutineScope()
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(16.dp),
-    ) {
-        Text(
-            text = "ساخت‌های اخیر",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-        )
-        Spacer(Modifier.height(12.dp))
-        Surface(
-            shape = RoundedCornerShape(50),
-            color = MaterialTheme.colorScheme.primary,
-            onClick = {
-                viewModel.newGeneration()
-                scope.launch { drawerState.close() }
-            },
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-            ) {
-                Icon(Icons.Rounded.AddCircle, contentDescription = null, tint = Color.White)
-                Text("ساخت جدید", color = Color.White, style = MaterialTheme.typography.titleSmall)
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-        if (state.history.isEmpty()) {
-            Text(
-                "هنوز تصویری نساخته‌ای.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(state.history, key = { it.id }) { generation ->
-                    val active = state.current?.id == generation.id
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = if (active) {
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        },
-                        onClick = {
-                            viewModel.openFromHistory(generation)
-                            scope.launch { drawerState.close() }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                        ) {
-                            Text(
-                                text = generation.prompt,
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 1,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Icon(
-                                Icons.Rounded.Delete,
-                                contentDescription = "حذف ساخت",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier
-                                    .size(18.dp)
-                                    .clickable { viewModel.deleteFromHistory(generation) },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-        Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            onClick = onNavigateToSettings,
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-            ) {
-                Icon(Icons.Rounded.Settings, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("تنظیمات", style = MaterialTheme.typography.bodyMedium)
             }
         }
     }

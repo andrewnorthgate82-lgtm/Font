@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -29,31 +30,23 @@ import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.AddCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
-import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Menu
-import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.ThumbDown
-import androidx.compose.material.icons.rounded.ThumbUp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,7 +54,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -73,7 +65,6 @@ import com.promptsaz.app.ui.components.ModelPickerSheet
 import com.promptsaz.app.ui.components.SoftIconButton
 import com.promptsaz.app.ui.theme.BrandGradient
 import com.promptsaz.app.util.PlatformUtils
-import kotlinx.coroutines.launch
 
 /**
  * گفتگوی جدید — the ChatGPT-style chat tab: a conversations drawer, a clean
@@ -83,13 +74,12 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
+    onOpenMenu: () -> Unit,
     onNavigateToSettings: () -> Unit,
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val drawerState = rememberDrawerState(DrawerValue.Closed)
 
     var input by remember { mutableStateOf("") }
     var pendingImage by remember { mutableStateOf<Pair<ByteArray, String>?>(null) }
@@ -119,15 +109,11 @@ fun ChatScreen(
         }
     }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = { ConversationsDrawer(state, viewModel, drawerState, onNavigateToSettings) },
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .imePadding(),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .imePadding(),
-        ) {
             // --- top bar -----------------------------------------------------
             Surface(color = MaterialTheme.colorScheme.surface) {
                 Row(
@@ -139,8 +125,8 @@ fun ChatScreen(
                 ) {
                     SoftIconButton(
                         icon = Icons.Rounded.Menu,
-                        contentDescription = "فهرست گفتگوها",
-                        onClick = { scope.launch { drawerState.open() } },
+                        contentDescription = "منوی برنامه",
+                        onClick = onOpenMenu,
                     )
                     Text(
                         text = "گفتگو",
@@ -265,7 +251,6 @@ fun ChatScreen(
                             MessageBubble(
                                 message = message,
                                 readImage = viewModel::readImageFile,
-                                onFeedback = { feedback -> viewModel.toggleFeedback(message, feedback) },
                             )
                         }
                     }
@@ -352,6 +337,7 @@ fun ChatScreen(
                                     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                                 )
                             },
+                            iconPadding = 16.dp,
                         )
                         OutlinedTextField(
                             value = input,
@@ -381,10 +367,10 @@ fun ChatScreen(
                             Box(
                                 modifier = Modifier
                                     .background(
-                                    if (canSend) BrandGradient
-                                    else SolidColor(MaterialTheme.colorScheme.surfaceVariant),
-                                )
-                                    .size(52.dp),
+                                        if (canSend) BrandGradient
+                                        else SolidColor(MaterialTheme.colorScheme.surfaceVariant),
+                                    )
+                                    .size(56.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Icon(
@@ -398,7 +384,6 @@ fun ChatScreen(
                 }
             }
         }
-    }
 
     ModelPickerSheet(
         visible = state.modelPickerVisible,
@@ -468,7 +453,6 @@ private fun EmptyChat(onSuggestion: (String) -> Unit, modifier: Modifier = Modif
 private fun MessageBubble(
     message: ChatMessage,
     readImage: (String) -> ByteArray?,
-    onFeedback: (Int) -> Unit,
 ) {
     val fromUser = message.isFromUser
     val context = LocalContext.current
@@ -477,204 +461,67 @@ private fun MessageBubble(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(horizontalAlignment = if (fromUser) Alignment.Start else Alignment.End) {
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = if (fromUser) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
-                },
-                contentColor = if (fromUser) {
-                    MaterialTheme.colorScheme.onPrimary
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                },
-                modifier = Modifier.widthIn(max = 300.dp),
-            ) {
-                Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                    message.imageFileName?.let { fileName ->
-                        val bitmap = remember(fileName) {
-                            readImage(fileName)?.let {
-                                runCatching { BitmapFactory.decodeByteArray(it, 0, it.size) }.getOrNull()
+            // متن انتخاب‌پذیر: لمس و نگه‌داشتن → انتخاب و کپی
+            SelectionContainer {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (fromUser) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                    },
+                    contentColor = if (fromUser) {
+                        MaterialTheme.colorScheme.onPrimary
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
+                    modifier = Modifier.widthIn(max = 300.dp),
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                        message.imageFileName?.let { fileName ->
+                            val bitmap = remember(fileName) {
+                                readImage(fileName)?.let {
+                                    runCatching { BitmapFactory.decodeByteArray(it, 0, it.size) }.getOrNull()
+                                }
+                            }
+                            bitmap?.let {
+                                Image(
+                                    bitmap = it.asImageBitmap(),
+                                    contentDescription = "تصویر پیوست‌شده",
+                                    contentScale = ContentScale.FillWidth,
+                                    modifier = Modifier
+                                        .widthIn(max = 280.dp)
+                                        .clip(RoundedCornerShape(12.dp)),
+                                )
+                                Spacer(Modifier.height(6.dp))
                             }
                         }
-                        bitmap?.let {
-                            Image(
-                                bitmap = it.asImageBitmap(),
-                                contentDescription = "تصویر پیوست‌شده",
-                                contentScale = ContentScale.FillWidth,
-                                modifier = Modifier
-                                    .widthIn(max = 280.dp)
-                                    .clip(RoundedCornerShape(12.dp)),
+                        if (message.text.isNotBlank()) {
+                            Text(
+                                text = message.text,
+                                style = MaterialTheme.typography.bodyLarge,
                             )
-                            Spacer(Modifier.height(6.dp))
                         }
-                    }
-                    if (message.text.isNotBlank()) {
-                        Text(
-                            text = message.text,
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
                     }
                 }
             }
-            // --- message actions: copy (+ like/dislike on replies) --------
+            // one quiet copy action (selection covers everything else)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
                 modifier = Modifier.padding(top = 2.dp),
             ) {
-                MessageActionIcon(
-                    icon = Icons.Rounded.ContentCopy,
-                    description = "کپی پیام",
-                    onClick = {
-                        if (message.text.isNotBlank()) {
-                            PlatformUtils.copyWithFeedback(context, message.text)
-                        }
-                    },
+                Icon(
+                    imageVector = Icons.Rounded.ContentCopy,
+                    contentDescription = "کپی پیام",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                    modifier = Modifier
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .clickable(
+                            enabled = message.text.isNotBlank(),
+                            onClick = { PlatformUtils.copyWithFeedback(context, message.text) },
+                        ),
                 )
-                if (!fromUser) {
-                    MessageActionIcon(
-                        icon = Icons.Rounded.ThumbUp,
-                        description = "پاسخ خوب بود",
-                        active = message.feedback == ChatMessage.FEEDBACK_LIKE,
-                        onClick = { onFeedback(ChatMessage.FEEDBACK_LIKE) },
-                    )
-                    MessageActionIcon(
-                        icon = Icons.Rounded.ThumbDown,
-                        description = "پاسخ خوب نبود",
-                        active = message.feedback == ChatMessage.FEEDBACK_DISLIKE,
-                        onClick = { onFeedback(ChatMessage.FEEDBACK_DISLIKE) },
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** Small circular icon button under a message bubble (copy / like / dislike). */
-@Composable
-private fun MessageActionIcon(
-    icon: ImageVector,
-    description: String,
-    onClick: () -> Unit,
-    active: Boolean = false,
-) {
-    Icon(
-        imageVector = icon,
-        contentDescription = description,
-        tint = if (active) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
-        },
-        modifier = Modifier
-            .size(20.dp)
-            .clip(CircleShape)
-            .clickable(onClick = onClick),
-    )
-}
-
-@Composable
-private fun ConversationsDrawer(
-    state: ChatViewModel.UiState,
-    viewModel: ChatViewModel,
-    drawerState: androidx.compose.material3.DrawerState,
-    onNavigateToSettings: () -> Unit,
-) {
-    val scope = rememberCoroutineScope()
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(16.dp),
-    ) {
-        Text(
-            text = "گفتگوها",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-        )
-        Spacer(Modifier.height(12.dp))
-        Surface(
-            shape = RoundedCornerShape(50),
-            color = MaterialTheme.colorScheme.primary,
-            onClick = {
-                viewModel.newConversation()
-                scope.launch { drawerState.close() }
-            },
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-            ) {
-                Icon(Icons.Rounded.AddCircle, contentDescription = null, tint = Color.White)
-                Text("گفتگوی جدید", color = Color.White, style = MaterialTheme.typography.titleSmall)
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-        if (state.conversations.isEmpty()) {
-            Text(
-                "هنوز گفتگویی نداری.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(state.conversations, key = { it.id }) { conversation ->
-                    val active = conversation.id == state.conversationId
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = if (active) {
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        },
-                        onClick = {
-                            viewModel.openConversation(conversation.id)
-                            scope.launch { drawerState.close() }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                        ) {
-                            Text(
-                                text = conversation.title,
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 1,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Icon(
-                                Icons.Rounded.Delete,
-                                contentDescription = "حذف گفتگو",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier
-                                    .size(18.dp)
-                                    .clickable { viewModel.deleteConversation(conversation.id) },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-        Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            onClick = onNavigateToSettings,
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-            ) {
-                Icon(Icons.Rounded.Settings, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("تنظیمات", style = MaterialTheme.typography.bodyMedium)
             }
         }
     }

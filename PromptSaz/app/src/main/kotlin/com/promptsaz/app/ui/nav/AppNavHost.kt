@@ -5,26 +5,17 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.EditNote
-import androidx.compose.material.icons.outlined.Forum
-import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material.icons.rounded.EditNote
-import androidx.compose.material.icons.rounded.Forum
-import androidx.compose.material.icons.rounded.Image
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -43,97 +34,95 @@ import com.promptsaz.app.ui.screens.kb.KbDomainScreen
 import com.promptsaz.app.ui.screens.result.ResultScreen
 import com.promptsaz.app.ui.screens.detail.PromptDetailScreen
 import com.promptsaz.app.ui.screens.settings.SettingsScreen
-
-private data class TabItem(
-    val route: String,
-    val labelFa: String,
-    val icon: ImageVector,
-    val selectedIcon: ImageVector,
-)
+import kotlinx.coroutines.launch
 
 /**
- * Three-mode app (ChatGPT-like): گفتگو / تولید پرامپت / تولید تصویر as
- * bottom-bar tabs; every other screen pushes on top without the bar.
+ * Navigation shell: the three sections live in the unified app MENU (drawer)
+ * — گفتگو / تولید پرامپت / تولید تصویر / تنظیمات / درباره ما — each section
+ * with its ۵ تاریخچهٔ اخیر one tap away. No bottom bar.
  */
 @Composable
 fun AppNavHost() {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    val menuViewModel: AppMenuViewModel = hiltViewModel()
+    val conversations by menuViewModel.conversations.collectAsStateWithLifecycle()
+    val prompts by menuViewModel.prompts.collectAsStateWithLifecycle()
+    val generations by menuViewModel.generations.collectAsStateWithLifecycle()
 
-    val tabs = listOf(
-        TabItem(Routes.CHAT, "گفتگو", Icons.Outlined.Forum, Icons.Rounded.Forum),
-        TabItem(Routes.HOME, "تولید پرامپت", Icons.Outlined.EditNote, Icons.Rounded.EditNote),
-        TabItem(Routes.IMAGE, "تولید تصویر", Icons.Outlined.Image, Icons.Rounded.Image),
-    )
-    val showBottomBar = currentRoute in tabs.map { it.route }
+    /** Opens a section tab, preserving each tab's state. */
+    fun openTab(route: String) {
+        navController.navigate(route) {
+            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
 
-    Scaffold(
-        bottomBar = {
-            if (showBottomBar) {
-                androidx.compose.material3.HorizontalDivider(
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                )
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 0.dp,
-                ) {
-                    tabs.forEach { tab ->
-                        val selected = currentRoute == tab.route
-                        NavigationBarItem(
-                            selected = selected,
-                            onClick = {
-                                navController.navigate(tab.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = {
-                                Icon(
-                                    imageVector = if (selected) tab.selectedIcon else tab.icon,
-                                    contentDescription = tab.labelFa,
-                                )
-                            },
-                            label = { Text(tab.labelFa) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.primary,
-                                selectedTextColor = MaterialTheme.colorScheme.primary,
-                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
-                            ),
-                        )
+    /** Opens a section tab WITHOUT restoring state, so the deep-link args land. */
+    fun openTabWithArgs(route: String) {
+        navController.navigate(route) {
+            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+        }
+    }
+
+    fun closeDrawer() {
+        scope.launch { drawerState.close() }
+    }
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            AppMenuDrawer(
+                conversations = conversations,
+                prompts = prompts,
+                generations = generations,
+                currentRoute = currentRoute,
+                onOpenChat = { openTab(Routes.CHAT_TAB) },
+                onOpenConversation = { id -> openTabWithArgs(Routes.chat(id)) },
+                onOpenPromptTab = { openTab(Routes.HOME) },
+                onOpenPrompt = { id ->
+                    navController.navigate(Routes.promptDetail(id)) {
+                        launchSingleTop = true
                     }
-                }
-            }
+                },
+                onOpenArchive = { navController.navigate(Routes.ARCHIVE) { launchSingleTop = true } },
+                onOpenKb = { navController.navigate(Routes.KB) { launchSingleTop = true } },
+                onOpenImage = { openTab(Routes.IMAGE_TAB) },
+                onOpenGeneration = { id -> openTabWithArgs(Routes.image(id)) },
+                onOpenSettings = { navController.navigate(Routes.SETTINGS) { launchSingleTop = true } },
+                onOpenAbout = { navController.navigate(Routes.ABOUT) { launchSingleTop = true } },
+                onDismiss = { closeDrawer() },
+            )
         },
-    ) { padding ->
+    ) {
         // RTL-aware motion: pushed screens slide in from the left edge,
-        // tab switches just cross-fade — hierarchy vs siblings.
-        val tabRoutes = setOf(Routes.CHAT, Routes.HOME, Routes.IMAGE)
-        fun isTabSwitch(
-            initial: androidx.navigation.NavBackStackEntry?,
-            target: androidx.navigation.NavBackStackEntry?,
-        ): Boolean {
+        // section switches just cross-fade — hierarchy vs siblings.
+        val sectionRoutes = setOf(Routes.CHAT, Routes.HOME, Routes.IMAGE)
+
+        fun isSectionSwitch(initial: NavBackStackEntry?, target: NavBackStackEntry?): Boolean {
             val from = initial?.destination?.route
             val to = target?.destination?.route
-            return from in tabRoutes && to in tabRoutes
+            return from in sectionRoutes && to in sectionRoutes
         }
 
         NavHost(
             navController = navController,
             startDestination = Routes.CHAT,
-            modifier = Modifier.padding(padding),
+            modifier = Modifier.fillMaxWidth(),
             enterTransition = {
-                if (isTabSwitch(initialState, targetState)) {
+                if (isSectionSwitch(initialState, targetState)) {
                     fadeIn(tween(220))
                 } else {
                     slideInHorizontally(tween(340)) { -it / 3 } + fadeIn(tween(340))
                 }
             },
             exitTransition = {
-                if (isTabSwitch(initialState, targetState)) {
+                if (isSectionSwitch(initialState, targetState)) {
                     fadeOut(tween(160))
                 } else {
                     slideOutHorizontally(tween(340)) { it / 4 } + fadeOut(tween(340))
@@ -146,37 +135,60 @@ fun AppNavHost() {
                 slideOutHorizontally(tween(340)) { -it / 3 } + fadeOut(tween(340))
             },
         ) {
-            composable(Routes.CHAT) {
+            composable(
+                route = Routes.CHAT,
+                arguments = listOf(
+                    navArgument("conversationId") {
+                        type = NavType.LongType
+                        defaultValue = 0L
+                    },
+                ),
+            ) {
                 ChatScreen(
+                    onOpenMenu = { scope.launch { drawerState.open() } },
                     onNavigateToSettings = { navController.navigate(Routes.SETTINGS) },
                 )
             }
             composable(Routes.HOME) {
                 HomeScreen(
                     onNavigateToClarify = { navController.navigate(Routes.CLARIFY) },
-                    onNavigateToArchive = { navController.navigate(Routes.ARCHIVE) },
-                    onNavigateToSettings = { navController.navigate(Routes.SETTINGS) },
-                    onNavigateToKb = { navController.navigate(Routes.KB) },
-                    onNavigateToAbout = { navController.navigate(Routes.ABOUT) },
+                    onOpenMenu = { scope.launch { drawerState.open() } },
                 )
             }
-            composable(Routes.IMAGE) {
+            composable(
+                route = Routes.IMAGE,
+                arguments = listOf(
+                    navArgument("generationId") {
+                        type = NavType.LongType
+                        defaultValue = 0L
+                    },
+                ),
+            ) {
                 ImageStudioScreen(
+                    onOpenMenu = { scope.launch { drawerState.open() } },
                     onNavigateToSettings = { navController.navigate(Routes.SETTINGS) },
                 )
             }
             composable(Routes.CLARIFY) {
                 ClarifyScreen(
-                    onNavigateToResult = { navController.navigate(Routes.RESULT) },
+                    onNavigateToResult = {
+                        // pop CLARIFY away: from RESULT, back must land on HOME
+                        // (the old stack caused a back-key ping-pong)
+                        navController.navigate(Routes.RESULT) {
+                            popUpTo(Routes.HOME) { inclusive = false }
+                            launchSingleTop = true
+                        }
+                    },
                     onBack = { navController.popBackStack() },
                 )
             }
             composable(Routes.RESULT) {
+                val goHome = {
+                    navController.popBackStack(Routes.HOME, inclusive = false)
+                }
                 ResultScreen(
-                    onBack = { navController.popBackStack() },
-                    onNavigateHome = {
-                        navController.popBackStack(Routes.HOME, inclusive = false)
-                    },
+                    onBack = goHome,
+                    onNavigateHome = goHome,
                 )
             }
             composable(Routes.ARCHIVE) {

@@ -18,17 +18,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Archive
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.ExpandLess
-import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Lightbulb
-import androidx.compose.material.icons.rounded.MenuBook
-import androidx.compose.material.icons.rounded.MoreVert
-import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.HorizontalDivider
@@ -72,15 +66,11 @@ import com.promptsaz.app.util.toPersianDigits
 @Composable
 fun HomeScreen(
     onNavigateToClarify: () -> Unit,
-    onNavigateToArchive: () -> Unit,
-    onNavigateToSettings: () -> Unit,
-    onNavigateToKb: () -> Unit,
-    onNavigateToAbout: () -> Unit = {},
+    onOpenMenu: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var optionsExpanded by remember { mutableStateOf(false) }
-    var menuOpen by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -96,47 +86,11 @@ fun HomeScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 10.dp),
             ) {
-                Box {
-                    SoftIconButton(
-                        icon = Icons.Rounded.MoreVert,
-                        contentDescription = "گزینه‌های بیشتر",
-                        onClick = { menuOpen = true },
-                    )
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        DropdownMenuItem(
-                            text = { Text("دانش‌نامه حوزه‌ها") },
-                            leadingIcon = { Icon(Icons.Rounded.MenuBook, contentDescription = null) },
-                            onClick = {
-                                menuOpen = false
-                                onNavigateToKb()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("آرشیو پرامپت‌ها") },
-                            leadingIcon = { Icon(Icons.Rounded.Archive, contentDescription = null) },
-                            onClick = {
-                                menuOpen = false
-                                onNavigateToArchive()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("تنظیمات") },
-                            leadingIcon = { Icon(Icons.Rounded.Settings, contentDescription = null) },
-                            onClick = {
-                                menuOpen = false
-                                onNavigateToSettings()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("درباره برنامه") },
-                            leadingIcon = { Icon(Icons.Rounded.Info, contentDescription = null) },
-                            onClick = {
-                                menuOpen = false
-                                onNavigateToAbout()
-                            },
-                        )
-                    }
-                }
+                SoftIconButton(
+                    icon = Icons.Rounded.Menu,
+                    contentDescription = "منوی برنامه",
+                    onClick = onOpenMenu,
+                )
                 Text(
                     text = "تولید پرامپت",
                     style = MaterialTheme.typography.titleLarge,
@@ -149,7 +103,7 @@ fun HomeScreen(
                 Surface(
                     shape = RoundedCornerShape(50),
                     color = MaterialTheme.colorScheme.surfaceVariant,
-                    onClick = { if (state.aiEnabled) viewModel.openModelPicker() else onNavigateToSettings() },
+                    onClick = { if (state.aiEnabled) viewModel.openModelPicker() else onOpenMenu() },
                 ) {
                     Text(
                         text = when {
@@ -355,7 +309,7 @@ fun HomeScreen(
                                     SolidColor(MaterialTheme.colorScheme.surfaceVariant)
                                 },
                             )
-                            .size(52.dp),
+                            .size(56.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(

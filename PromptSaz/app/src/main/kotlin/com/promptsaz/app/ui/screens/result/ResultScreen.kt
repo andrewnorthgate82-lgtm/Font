@@ -43,6 +43,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.promptsaz.app.domain.model.VariantStyle
 import com.promptsaz.app.ui.components.AppHeader
 import com.promptsaz.app.ui.components.EmptyState
+import com.promptsaz.app.ui.components.IconAction
+import com.promptsaz.app.ui.components.IconActionRow
 import com.promptsaz.app.ui.components.ScoreBadge
 import com.promptsaz.app.ui.components.SectionLabel
 import com.promptsaz.app.util.PlatformUtils
@@ -85,6 +87,7 @@ fun ResultScreen(
         AppHeader(
             title = result.title,
             onBack = onBack,
+            showClose = true,
         )
 
         Column(
@@ -281,36 +284,28 @@ fun ResultScreen(
                 Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(vertical = 4.dp))
             }
 
-            // Actions
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Button(
-                    onClick = { PlatformUtils.copyWithFeedback(context, result.text) },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Icon(Icons.Rounded.ContentCopy, contentDescription = null)
-                    Text("کپی", modifier = Modifier.padding(start = 8.dp))
-                }
-                OutlinedButton(
-                    onClick = { PlatformUtils.shareText(context, result.text) },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Icon(Icons.Rounded.Share, contentDescription = null)
-                    Text("اشتراک", modifier = Modifier.padding(start = 8.dp))
-                }
-                OutlinedButton(
-                    onClick = viewModel::regenerate,
-                    enabled = !state.working,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Icon(Icons.Rounded.Refresh, contentDescription = null)
-                    Text("بازسازی", modifier = Modifier.padding(start = 8.dp))
-                }
-            }
+            // Actions — icon columns: fully responsive, labels never wrap
+            IconActionRow(
+                actions = listOf(
+                    IconAction(
+                        icon = Icons.Rounded.ContentCopy,
+                        label = "کپی",
+                        onClick = { PlatformUtils.copyWithFeedback(context, result.text) },
+                    ),
+                    IconAction(
+                        icon = Icons.Rounded.Share,
+                        label = "اشتراک",
+                        onClick = { PlatformUtils.shareText(context, result.text) },
+                    ),
+                    IconAction(
+                        icon = Icons.Rounded.Refresh,
+                        label = "بازسازی",
+                        onClick = viewModel::regenerate,
+                        enabled = !state.working,
+                    ),
+                ),
+                modifier = Modifier.padding(vertical = 12.dp),
+            )
 
             Text(
                 text = "این پرامپت را در ${result.spec.targetAi.labelFa} بچسبان و نتیجه را ببین.",

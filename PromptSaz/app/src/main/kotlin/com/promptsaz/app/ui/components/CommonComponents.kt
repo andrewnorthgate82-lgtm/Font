@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.KeyboardArrowLeft
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -55,12 +56,17 @@ import com.promptsaz.app.util.toPersianDigits
 
 // ---------------------------------------------------------------- headers ----
 
-/** Screen header: tinted round back button, plain bold title, actions. */
+/**
+ * Screen header: tinted round back button (or an ✕ close button with
+ * [showClose] — for flows that finish, like the prompt result), bold title,
+ * actions.
+ */
 @Composable
 fun AppHeader(
     title: String,
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
+    showClose: Boolean = false,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     Row(
@@ -72,8 +78,8 @@ fun AppHeader(
     ) {
         if (onBack != null) {
             SoftIconButton(
-                icon = Icons.AutoMirrored.Rounded.ArrowBack,
-                contentDescription = "بازگشت",
+                icon = if (showClose) Icons.Rounded.Close else Icons.AutoMirrored.Rounded.ArrowBack,
+                contentDescription = if (showClose) "بستن" else "بازگشت",
                 onClick = onBack,
             )
         }
@@ -270,7 +276,10 @@ fun GradientButton(
     }
 }
 
-/** Soft circular icon button for headers and toolbars. */
+/**
+ * Soft circular icon button — 8dp icon padding for toolbars (40dp total) or
+ * 16dp for input bars (56dp total, matching the text field height).
+ */
 @Composable
 fun SoftIconButton(
     icon: ImageVector,
@@ -278,6 +287,7 @@ fun SoftIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    iconPadding: androidx.compose.ui.unit.Dp = 8.dp,
 ) {
     Surface(
         onClick = onClick,
@@ -289,7 +299,7 @@ fun SoftIconButton(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = tint,
-            modifier = Modifier.padding(8.dp),
+            modifier = Modifier.padding(iconPadding),
         )
     }
 }
@@ -590,6 +600,75 @@ fun ScoreBadge(score: Int, modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+/** One action of an [IconActionRow]. */
+data class IconAction(
+    val icon: ImageVector,
+    val label: String,
+    val onClick: () -> Unit,
+    val enabled: Boolean = true,
+    val destructive: Boolean = false,
+)
+
+/**
+ * iOS-style action row: evenly weighted columns of a circular tinted icon +
+ * a one-line label. Fully responsive — labels can never wrap letter-by-letter
+ * the way text buttons did on narrow screens.
+ */
+@Composable
+fun IconActionRow(
+    actions: List<IconAction>,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        actions.forEach { action ->
+            val tint = if (action.destructive) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.primary
+            }
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable(enabled = action.enabled, onClick = action.onClick)
+                    .padding(vertical = 8.dp),
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = if (action.enabled) tint.copy(alpha = 0.12f) else Color.Transparent,
+                    border = if (action.enabled) null else BorderStroke(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                    ),
+                ) {
+                    Icon(
+                        imageVector = action.icon,
+                        contentDescription = action.label,
+                        tint = if (action.enabled) tint else MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.padding(12.dp),
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = action.label,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (action.enabled) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.outline
+                    },
+                    maxLines = 1,
+                )
+            }
         }
     }
 }

@@ -21,13 +21,11 @@ import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -49,6 +47,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.promptsaz.app.ui.components.AppHeader
 import com.promptsaz.app.ui.components.ConfirmDialog
 import com.promptsaz.app.ui.components.EmptyState
+import com.promptsaz.app.ui.components.IconAction
+import com.promptsaz.app.ui.components.IconActionRow
 import com.promptsaz.app.ui.components.SectionLabel
 import com.promptsaz.app.util.JalaliCalendar
 import com.promptsaz.app.util.PlatformUtils
@@ -182,43 +182,32 @@ fun PromptDetailScreen(
             }
 
             Spacer(Modifier.height(16.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Button(
-                    onClick = { PlatformUtils.copyWithFeedback(context, current.promptText) },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Icon(Icons.Rounded.ContentCopy, contentDescription = null)
-                    Text("کپی", modifier = Modifier.padding(start = 8.dp))
-                }
-                OutlinedButton(
-                    onClick = { PlatformUtils.shareText(context, current.promptText) },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Icon(Icons.Rounded.Share, contentDescription = null)
-                    Text("اشتراک", modifier = Modifier.padding(start = 8.dp))
-                }
-            }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                OutlinedButton(onClick = viewModel::duplicate, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Rounded.FileCopy, contentDescription = null)
-                    Text("ساخت کپی", modifier = Modifier.padding(start = 8.dp))
-                }
-                OutlinedButton(
-                    onClick = { deleteOpen = true },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Icon(Icons.Rounded.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                    Text("حذف", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(start = 8.dp))
-                }
-            }
+            IconActionRow(
+                actions = listOf(
+                    IconAction(
+                        icon = Icons.Rounded.ContentCopy,
+                        label = "کپی",
+                        onClick = { PlatformUtils.copyWithFeedback(context, current.promptText) },
+                    ),
+                    IconAction(
+                        icon = Icons.Rounded.Share,
+                        label = "اشتراک",
+                        onClick = { PlatformUtils.shareText(context, current.promptText) },
+                    ),
+                    IconAction(
+                        icon = Icons.Rounded.FileCopy,
+                        label = "کپی جدید",
+                        onClick = viewModel::duplicate,
+                    ),
+                    IconAction(
+                        icon = Icons.Rounded.Delete,
+                        label = "حذف",
+                        onClick = { deleteOpen = true },
+                        destructive = true,
+                    ),
+                ),
+                modifier = Modifier.padding(vertical = 8.dp),
+            )
         }
         SnackbarHost(hostState = snackbar)
     }

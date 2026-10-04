@@ -1,5 +1,6 @@
 package com.promptsaz.app.ui.screens.image
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.promptsaz.app.data.settings.ApiKeyStore
@@ -13,6 +14,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -28,6 +30,7 @@ class ImageStudioViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val providerRegistry: ProviderRegistry,
     private val keyStore: ApiKeyStore,
+    private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
     data class UiState(
@@ -85,6 +88,13 @@ class ImageStudioViewModel @Inject constructor(
                     val current = state.current ?: history.firstOrNull()
                     state.copy(history = history, current = current)
                 }
+            }
+        }
+        // deep link from the app menu: show one specific past generation
+        savedStateHandle.get<Long>("generationId")?.takeIf { it > 0L }?.let { targetId ->
+            viewModelScope.launch {
+                val history = imageRepository.history().first { list -> list.any { it.id == targetId } }
+                _uiState.update { it.copy(current = history.first { g -> g.id == targetId }) }
             }
         }
     }
