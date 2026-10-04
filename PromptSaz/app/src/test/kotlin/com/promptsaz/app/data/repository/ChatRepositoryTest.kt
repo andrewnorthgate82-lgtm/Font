@@ -214,7 +214,7 @@ class ChatRepositoryTest {
         // provider saw the selected model + system prompt
         assertEquals("selected-model", provider.lastModel)
         assertEquals("system", provider.lastTurns.first().role)
-        assertTrue(provider.lastTurns.first().text.contains("پرامپت‌ساز"))
+        assertTrue(provider.lastTurns.first().text.contains("چیستا"))
     }
 
     @Test
