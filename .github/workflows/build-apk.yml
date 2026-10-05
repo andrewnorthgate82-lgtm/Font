@@ -66,6 +66,9 @@ jobs:
         with:
           name: PromptSaz-apk
           path: PromptSaz/PromptSaz.apk
+          # every green build already publishes a Release APK — the artifact
+          # is just a backup, so it auto-expires fast instead of piling up
+          retention-days: 7
 
       - name: Publish GitHub Release
         working-directory: .
