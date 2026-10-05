@@ -126,4 +126,7 @@ dependencies {
     testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation(platform(libs.androidx.compose.bom))
     testImplementation("androidx.compose.ui:ui-test-junit4")
+    // provides the ComponentActivity createComposeRule() launches (Robolectric)
+    debugImplementation(platform(libs.androidx.compose.bom))
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

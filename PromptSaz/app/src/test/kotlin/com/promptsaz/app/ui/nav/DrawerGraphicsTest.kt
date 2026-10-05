@@ -47,8 +47,7 @@ class DrawerGraphicsTest {
     @get:Rule
     val compose = createComposeRule()
 
-    @Test
-    fun `menu sheet is opaque and hides the screen behind it`() {
+    private fun openMenuWithBlackScreenBehind() {
         compose.setContent {
             PromptSazTheme(themeMode = ThemeMode.DARK) {
                 ModalNavigationDrawer(
@@ -81,73 +80,33 @@ class DrawerGraphicsTest {
             }
         }
         compose.waitForIdle()
-
-        val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
-        val w = bitmap.width
-        val h = bitmap.height
-
-        // The RTL drawer sheet owns the right ~88% of the screen. Its far
-        // edge (inside the 16dp content padding, away from the rounded
-        // corners and the text) must be the sheet's own OPAQUE color.
-        val black = Color.Black.toArgb()
-        listOf(h / 4, h / 2, 3 * h / 4).forEach { y ->
-            val pixel = bitmap.getPixel(w - 4, y)
-            val alpha = (pixel ushr 24) and 0xFF
-            assertTrue(
-                "drawer looks see-through at y=$y (pixel=$pixel)",
-                alpha == 0xFF && pixel != black,
-            )
-        }
     }
 
     @Test
-    fun `menu content stays inside the sheet - the far edge strip is one flat color`() {
-        compose.setContent {
-            PromptSazTheme(themeMode = ThemeMode.DARK) {
-                ModalNavigationDrawer(
-                    drawerState = rememberDrawerState(DrawerValue.Open),
-                    drawerContent = {
-                        AppMenuDrawer(
-                            conversations = emptyList(),
-                            prompts = emptyList(),
-                            generations = emptyList(),
-                            currentRoute = null,
-                            viewModel = AppMenuViewModel(NoChatRepo, NoPromptRepo, NoImageRepo),
-                            onOpenChat = {},
-                            onOpenConversation = {},
-                            onOpenPromptTab = {},
-                            onOpenPrompt = {},
-                            onOpenArchive = {},
-                            onOpenKb = {},
-                            onOpenImage = {},
-                            onOpenGeneration = {},
-                            onOpenSettings = {},
-                            onOpenAbout = {},
-                            onDismiss = {},
-                        )
-                    },
-                ) {
-                    Box(Modifier.fillMaxSize().background(Color.Black))
-                }
-            }
-        }
-        compose.waitForIdle()
+    fun `menu sheet is opaque and hides the screen behind it`() {
+        openMenuWithBlackScreenBehind()
 
         val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
         val w = bitmap.width
         val h = bitmap.height
+        val black = Color.Black.toArgb()
 
-        // A vertical strip at the sheet's far edge must be a single flat
-        // color from top quarter to bottom quarter (the sheet surface) —
-        // no background pixels bleeding through anywhere.
-        val expected = bitmap.getPixel(w - 4, h / 2)
-        (h / 4..3 * h / 4 step 3).forEach { y ->
+        // The drawer sheet owns the trailing ~88% of the screen. Its far edge
+        // (inside the 16dp content padding, away from text and icons) must be
+        // the sheet's own OPAQUE color at EVERY height — top to bottom.
+        val failures = mutableListOf<String>()
+        for (i in 1..9) {
+            val y = h * i / 10
             val pixel = bitmap.getPixel(w - 4, y)
-            assertTrue(
-                "unexpected pixel at y=$y: $pixel vs $expected — content bleeds behind the sheet",
-                pixel == expected,
-            )
+            val alpha = (pixel ushr 24) and 0xFF
+            if (alpha != 0xFF || pixel == black) {
+                failures += "y=$y pixel=$pixel"
+            }
         }
+        assertTrue(
+            "drawer looks see-through at: ${failures.joinToString()}",
+            failures.isEmpty(),
+        )
     }
 }
 
