@@ -8,6 +8,7 @@ import com.promptsaz.app.domain.model.GeneratedPrompt
 import com.promptsaz.app.domain.model.ImprovementFinding
 import com.promptsaz.app.domain.model.VariantStyle
 import com.promptsaz.app.domain.usecase.GeneratePromptUseCase
+import com.promptsaz.app.domain.usecase.Regeneration
 import com.promptsaz.app.ui.session.GenerationSession
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -91,21 +92,31 @@ class ResultViewModel @Inject constructor(
         _uiState.update { it.copy(working = true, errorFa = null) }
         viewModelScope.launch {
             runCatching {
-                generateUseCase(base.spec.copy(detailLevel = nextLevel))
-            }.onSuccess { outcome ->
-                session.baseResult = outcome.result
-                session.baseGroupId = outcome.groupId
-                session.baseSavedId = outcome.savedId
-                session.aiErrorFa = outcome.aiErrorFa
-                _uiState.update {
-                    it.copy(
-                        result = outcome.result,
-                        variant = VariantStyle.STANDARD,
-                        findings = session.improveFindings,
-                        aiErrorFa = outcome.aiErrorFa,
-                        working = false,
-                        savedNoticeFa = "نسخه بهبودیافته ساخته و ذخیره شد ✓",
-                    )
+                generateUseCase.regenerateAiOnly(base.spec.copy(detailLevel = nextLevel))
+            }.onSuccess { regeneration ->
+                when (regeneration) {
+                    is Regeneration.Saved -> {
+                        session.baseResult = regeneration.result
+                        session.baseGroupId = regeneration.groupId
+                        session.baseSavedId = regeneration.savedId
+                        session.aiErrorFa = null
+                        _uiState.update {
+                            it.copy(
+                                result = regeneration.result,
+                                variant = VariantStyle.STANDARD,
+                                aiErrorFa = null,
+                                working = false,
+                                savedNoticeFa = "نسخه بهبودیافته ساخته و ذخیره شد ✓",
+                            )
+                        }
+                    }
+                    // The model failed (مثلاً سهمیه تمام شده) — keep the CURRENT
+                    // prompt on screen; never swap it for a weaker offline one.
+                    is Regeneration.Failed -> {
+                        _uiState.update {
+                            it.copy(working = false, errorFa = regeneration.messageFa)
+                        }
+                    }
                 }
             }.onFailure { error ->
                 _uiState.update { it.copy(working = false, errorFa = error.message ?: "بهبود ناموفق بود") }
@@ -118,20 +129,29 @@ class ResultViewModel @Inject constructor(
         if (_uiState.value.working) return
         _uiState.update { it.copy(working = true, errorFa = null) }
         viewModelScope.launch {
-            runCatching { generateUseCase(base.spec) }
-                .onSuccess { outcome ->
-                    session.baseResult = outcome.result
-                    session.baseGroupId = outcome.groupId
-                    session.baseSavedId = outcome.savedId
-                    session.aiErrorFa = outcome.aiErrorFa
-                    _uiState.update {
-                        it.copy(
-                            result = outcome.result,
-                            variant = VariantStyle.STANDARD,
-                            aiErrorFa = outcome.aiErrorFa,
-                            working = false,
-                            savedNoticeFa = "دوباره ساخته و ذخیره شد ✓",
-                        )
+            runCatching { generateUseCase.regenerateAiOnly(base.spec) }
+                .onSuccess { regeneration ->
+                    when (regeneration) {
+                        is Regeneration.Saved -> {
+                            session.baseResult = regeneration.result
+                            session.baseGroupId = regeneration.groupId
+                            session.baseSavedId = regeneration.savedId
+                            session.aiErrorFa = null
+                            _uiState.update {
+                                it.copy(
+                                    result = regeneration.result,
+                                    variant = VariantStyle.STANDARD,
+                                    aiErrorFa = null,
+                                    working = false,
+                                    savedNoticeFa = "دوباره ساخته و ذخیره شد ✓",
+                                )
+                            }
+                        }
+                        is Regeneration.Failed -> {
+                            _uiState.update {
+                                it.copy(working = false, errorFa = regeneration.messageFa)
+                            }
+                        }
                     }
                 }
                 .onFailure { error ->

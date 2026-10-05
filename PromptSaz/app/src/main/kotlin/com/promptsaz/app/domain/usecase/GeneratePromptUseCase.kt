@@ -4,6 +4,7 @@ import com.promptsaz.app.domain.engine.PromptEngine
 import com.promptsaz.app.domain.engine.score.QualityScorer
 import com.promptsaz.app.domain.model.AppSettings
 import com.promptsaz.app.domain.model.ArchivedPrompt
+import com.promptsaz.app.domain.model.DomainKnowledge
 import com.promptsaz.app.domain.model.GeneratedPrompt
 import com.promptsaz.app.domain.model.PromptSpec
 import com.promptsaz.app.domain.model.VariantStyle
@@ -45,43 +46,34 @@ class GeneratePromptUseCase @Inject constructor(
         val kb = kbRepository.getDomain(spec.domainId)
         val settings = settingsRepository.settings.first()
 
-        var aiError: String? = null
-        var result: GeneratedPrompt? = null
-
-        if (settings.aiEnabled) {
-            val provider = providerRegistry.active()
-            // تولید پرامپت runs on ITS OWN bound service (per-section AI).
-            val serviceId = settings.serviceFor(AppSettings.MODE_PROMPT)?.id
-            if (provider == null) {
-                aiError = "هیچ سرویس هوش مصنوعی نصب نیست؛ با موتور آفلاین ساخته شد."
-            } else if (serviceId == null) {
-                aiError = "سرویس بخش پرامپت در تنظیمات انتخاب نشده؛ با موتور آفلاین ساخته شد."
-            } else if (!provider.isConfigured(serviceId)) {
-                aiError = "حالت هوش مصنوعی فعال است اما کلید یا مدل تنظیم نشده؛ با موتور آفلاین ساخته شد."
-            } else {
-                provider.generatePrompt(spec, kb, serviceId)
-                    .onSuccess { generation ->
-                        result = GeneratedPrompt(
-                            spec = spec,
-                            title = generation.title.trim().take(40),
-                            text = generation.prompt.trim(),
-                            sections = emptyList(),
-                            score = scorer.scoreText(generation.prompt, spec),
-                            variantStyle = VariantStyle.STANDARD,
-                            isAiGenerated = true,
-                        )
-                    }
-                    .onFailure { error ->
-                        aiError = error.message ?: "ارتباط با سرور هوش مصنوعی برقرار نشد."
-                    }
-            }
-        }
-
-        val finalResult = result ?: engine.generate(spec, kb)
+        val attempt = tryAi(spec, kb, settings)
+        val finalResult = attempt.result ?: engine.generate(spec, kb)
         val groupId = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
         val savedId = promptRepository.save(finalResult.toArchived(groupId, now, now))
-        return Outcome(result = finalResult, savedId = savedId, groupId = groupId, aiErrorFa = aiError)
+        return Outcome(result = finalResult, savedId = savedId, groupId = groupId, aiErrorFa = attempt.errorFa)
+    }
+
+    /**
+     * AI-ONLY regeneration for the Result screen (بهبود ساختار / دوباره
+     * ساخت): when the model call fails — e.g. the key's quota just ran out —
+     * it must NEVER replace an existing AI prompt with a degraded offline
+     * rewrite. Nothing is saved on failure; the Persian reason comes back so
+     * the user knows exactly what happened and can retry later.
+     */
+    suspend fun regenerateAiOnly(spec: PromptSpec): Regeneration {
+        val kb = kbRepository.getDomain(spec.domainId)
+        val settings = settingsRepository.settings.first()
+
+        val attempt = tryAi(spec, kb, settings)
+        val result = attempt.result
+            ?: return Regeneration.Failed(
+                attempt.errorFa ?: "حالت هوش مصنوعی فعال نیست؛ در تنظیمات روشن کن.",
+            )
+        val groupId = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        val savedId = promptRepository.save(result.toArchived(groupId, now, now))
+        return Regeneration.Saved(result = result, savedId = savedId, groupId = groupId)
     }
 
     /** Saves a variant generated on the Result screen. */
@@ -89,6 +81,55 @@ class GeneratePromptUseCase @Inject constructor(
         val now = System.currentTimeMillis()
         return promptRepository.save(variant.toArchived(groupId, now, now))
     }
+
+    /** One AI attempt for the تولید پرامپت section — result null = failed. */
+    private suspend fun tryAi(
+        spec: PromptSpec,
+        kb: DomainKnowledge?,
+        settings: AppSettings,
+    ): AiAttempt {
+        if (!settings.aiEnabled) return AiAttempt(null, null)
+        val provider = providerRegistry.active()
+        // تولید پرامپت runs on ITS OWN bound service (per-section AI).
+        val serviceId = settings.serviceFor(AppSettings.MODE_PROMPT)?.id
+        if (provider == null) {
+            return AiAttempt(null, "هیچ سرویس هوش مصنوعی نصب نیست؛ با موتور آفلاین ساخته شد.")
+        }
+        if (serviceId == null) {
+            return AiAttempt(null, "سرویس بخش پرامپت در تنظیمات انتخاب نشده؛ با موتور آفلاین ساخته شد.")
+        }
+        if (!provider.isConfigured(serviceId)) {
+            return AiAttempt(null, "حالت هوش مصنوعی فعال است اما کلید یا مدل تنظیم نشده؛ با موتور آفلاین ساخته شد.")
+        }
+        return when (val generation = provider.generatePrompt(spec, kb, serviceId)) {
+            is Result.success ->
+                AiAttempt(
+                    result = GeneratedPrompt(
+                        spec = spec,
+                        title = generation.value.title.trim().take(40),
+                        text = generation.value.prompt.trim(),
+                        sections = emptyList(),
+                        score = scorer.scoreText(generation.value.prompt, spec),
+                        variantStyle = VariantStyle.STANDARD,
+                        isAiGenerated = true,
+                    ),
+                    errorFa = null,
+                )
+            is Result.failure ->
+                AiAttempt(null, generation.exceptionOrNull()?.message ?: "ارتباط با سرور هوش مصنوعی برقرار نشد.")
+        }
+    }
+
+    private data class AiAttempt(
+        val result: GeneratedPrompt?,
+        val errorFa: String?,
+    )
+}
+
+/** Result of an AI-only regeneration (never downgrades to the offline engine). */
+sealed interface Regeneration {
+    data class Saved(val result: GeneratedPrompt, val savedId: Long, val groupId: String) : Regeneration
+    data class Failed(val messageFa: String) : Regeneration
 }
 
 /** Maps a generation into its archive representation. */

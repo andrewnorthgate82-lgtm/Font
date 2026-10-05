@@ -64,6 +64,9 @@ class ProviderRateLimitRetryTest {
     /** how many 429s to answer before switching to success */
     @Volatile private var rateLimitedFirst = 2
 
+    /** Retry-After header (seconds) sent with 429s, when set. */
+    @Volatile private var retryAfterHeader: String? = null
+
     private var server: HttpServer? = null
     private var provider: OpenAiCompatibleProvider? = null
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
@@ -80,6 +83,7 @@ class ProviderRateLimitRetryTest {
             if (hit <= rateLimitedFirst) {
                 val err = """{"error":{"code":429,"message":"You exceeded your current quota, please check your plan and billing details."}}"""
                 val bytes = err.toByteArray(Charsets.UTF_8)
+                retryAfterHeader?.let { exchange.responseHeaders.add("Retry-After", it) }
                 exchange.sendResponseHeaders(429, bytes.size.toLong())
                 exchange.responseBody.use { it.write(bytes) }
             } else {
@@ -145,7 +149,26 @@ class ProviderRateLimitRetryTest {
         val message = result.exceptionOrNull()?.message.orEmpty()
         assertTrue("should mention the separate models quota: $message", message.contains("سهمیهٔ جدایی"))
         assertTrue("should guide about the daily reset: $message", message.contains("ریست"))
-        // 1 initial attempt + 2 automatic retries
-        assertEquals(3, generateHits.get())
+        // 1 initial attempt + 3 automatic retries
+        assertEquals(4, generateHits.get())
+    }
+
+    @Test
+    fun `the server Retry-After hint is honored`() = runBlocking {
+        rateLimitedFirst = 1
+        retryAfterHeader = "1" // server says: wait 1 second
+
+        val startedAt = System.currentTimeMillis()
+        val result = provider!!.chat(
+            model = "gemini-flash-latest",
+            turns = listOf(ChatTurn(role = "user", text = "سلام")),
+        )
+        val elapsed = System.currentTimeMillis() - startedAt
+
+        assertTrue("chat failed: ${result.exceptionOrNull()?.message}", result.isSuccess)
+        // the default test hook delay is 10ms — only the honored Retry-After
+        // header can explain a ~1s wait before the successful retry
+        assertTrue("Retry-After was not honored (elapsed=${elapsed}ms)", elapsed >= 900)
+        assertEquals(2, generateHits.get())
     }
 }

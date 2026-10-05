@@ -398,7 +398,12 @@ class OpenAiCompatibleProvider @Inject constructor(
     // --- HTTP core ------------------------------------------------------------------
 
     private sealed interface HttpOutcome {
-        data class Success(val code: Int, val body: String) : HttpOutcome
+        data class Success(
+            val code: Int,
+            val body: String,
+            /** Server's Retry-After hint in ms, when present (429/503). */
+            val retryAfterMs: Long? = null,
+        ) : HttpOutcome
         data class Failure(val messageFa: String) : HttpOutcome
     }
 
@@ -615,7 +620,13 @@ class OpenAiCompatibleProvider @Inject constructor(
             val temporary = outcome is HttpOutcome.Success && (outcome.code == 429 || outcome.code == 503)
             if (!temporary || attempt >= RATE_LIMIT_RETRIES) return outcome
             val delays = rateLimitRetryDelaysMs
-            delay(delays[attempt.coerceAtMost(delays.lastIndex)])
+            val defaultWait = delays[attempt.coerceAtMost(delays.lastIndex)]
+            // Google tells us exactly how long to wait (Retry-After, seconds).
+            // Trust it — bounded — so a per-minute quota resets in time.
+            val wait = outcome.retryAfterMs
+                ?.coerceIn(0L, RATE_LIMIT_MAX_RETRY_WAIT_MS)
+                ?: defaultWait
+            delay(wait)
             attempt++
         }
     }
@@ -640,9 +651,14 @@ class OpenAiCompatibleProvider @Inject constructor(
                 }
             }
             val code = connection.responseCode
+            val retryAfterMs = connection.getHeaderField("Retry-After")
+                ?.trim()
+                ?.toLongOrNull()
+                ?.takeIf { it >= 0 }
+                ?.times(1_000L)
             val responseText = (if (code in 200..299) connection.inputStream else connection.errorStream)
                 ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: ""
-            HttpOutcome.Success(code, responseText)
+            HttpOutcome.Success(code, responseText, retryAfterMs)
         } catch (e: IOException) {
             HttpOutcome.Failure(
                 "اتصال به سرور برقرار نشد. اینترنت، نشانی سرور و کلید را بررسی کن. " +
@@ -780,10 +796,13 @@ class OpenAiCompatibleProvider @Inject constructor(
         var pixazoPollIntervalMs: Long = 3_000L
 
         /** Automatic retries of a 429/503 before giving up. */
-        const val RATE_LIMIT_RETRIES = 2
+        const val RATE_LIMIT_RETRIES = 3
 
         /** Backoff before each 429/503 retry — a hook lowered by unit tests. */
-        var rateLimitRetryDelaysMs: List<Long> = listOf(2_000L, 5_000L)
+        var rateLimitRetryDelaysMs: List<Long> = listOf(2_000L, 6_000L, 15_000L)
+
+        /** Upper bound for honoring a server Retry-After hint (ms). */
+        const val RATE_LIMIT_MAX_RETRY_WAIT_MS: Long = 30_000L
 
         const val PIXAZO_TEXT_ONLY_FA =
             "این سرویس فقط ساخت تصویر دارد؛ برای گفتگو و تولید پرامپت، در تنظیمات یک سرویس گفتگو (مثل CodeCraft) را فعال کن."
