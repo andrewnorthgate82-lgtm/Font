@@ -48,6 +48,10 @@ class DrawerGraphicsTest {
     val compose = createComposeRule()
 
     private fun openMenuWithBlackScreenBehind() {
+        // Robolectric + the drawer's anchored-draggable keep scheduling frame
+        // callbacks, which starves the default idle-sync. Screenshot recipe:
+        // stop the auto clock, jump past every animation, capture as-is.
+        compose.mainClock.autoAdvance = false
         compose.setContent {
             PromptSazTheme(themeMode = ThemeMode.DARK) {
                 ModalNavigationDrawer(
@@ -79,7 +83,8 @@ class DrawerGraphicsTest {
                 }
             }
         }
-        compose.waitForIdle()
+        // one jump past all slide/spring/settle animations
+        compose.mainClock.advanceTimeBy(5_000)
     }
 
     @Test
