@@ -35,6 +35,7 @@ import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -110,9 +111,15 @@ fun AppMenuDrawer(
         selectedIds = emptySet()
     }
 
+    // ModalDrawerSheet = the opaque surface of the menu (fixes the
+    // see-through drawer) + it pads its content below the status bar and
+    // above the navigation bar by default (DrawerDefaults.windowInsets).
+    ModalDrawerSheet(
+        modifier = Modifier.fillMaxWidth(0.88f),
+    ) {
     Column(
         modifier = Modifier
-            .fillMaxWidth(0.88f)
+            .fillMaxWidth()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp),
     ) {
@@ -325,6 +332,7 @@ fun AppMenuDrawer(
 
         Spacer(Modifier.height(28.dp))
     }
+    } // ModalDrawerSheet
 }
 
 private const val SECTION_CHAT = "chat"

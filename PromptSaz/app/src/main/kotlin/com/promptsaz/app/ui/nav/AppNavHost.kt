@@ -7,7 +7,14 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -16,7 +23,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
@@ -133,10 +139,21 @@ fun AppNavHost(
             return from in sectionRoutes && to in sectionRoutes
         }
 
+        // Edge-to-edge: one central place where the whole app content is
+        // pushed INSIDE the system bars — below the clock/battery and above
+        // the home/back gestures — while the window background still paints
+        // the full screen so the bars sit on the app's own canvas color.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+        ) {
         NavHost(
             navController = navController,
             startDestination = Routes.CHAT,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing),
             enterTransition = {
                 if (isSectionSwitch(initialState, targetState)) {
                     fadeIn(tween(220))
@@ -250,6 +267,7 @@ fun AppNavHost(
                 AboutScreen(onBack = { navController.popBackStack() })
             }
         }
+        } // Box(insets)
     }
 }
 
