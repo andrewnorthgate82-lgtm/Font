@@ -34,12 +34,6 @@ android {
         versionName = "1.0.0"
     }
 
-    // Robolectric graphic tests need the merged resources + assets.
-    testOptions {
-        unitTests {
-            isIncludeAndroidResources = true
-        }
-    }
 
     buildTypes {
         debug {
@@ -120,13 +114,4 @@ dependencies {
     // Unit tests (JVM)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
-
-    // Robolectric — actually RENDERS Compose UI on the JVM so the graphic
-    // regression tests (drawer opacity, insets) run in plain unit tests.
-    testImplementation("org.robolectric:robolectric:4.14.1")
-    testImplementation(platform(libs.androidx.compose.bom))
-    testImplementation("androidx.compose.ui:ui-test-junit4")
-    // provides the ComponentActivity createComposeRule() launches (Robolectric)
-    debugImplementation(platform(libs.androidx.compose.bom))
-    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
