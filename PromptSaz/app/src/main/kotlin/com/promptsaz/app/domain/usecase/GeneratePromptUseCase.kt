@@ -101,22 +101,26 @@ class GeneratePromptUseCase @Inject constructor(
         if (!provider.isConfigured(serviceId)) {
             return AiAttempt(null, "حالت هوش مصنوعی فعال است اما کلید یا مدل تنظیم نشده؛ با موتور آفلاین ساخته شد.")
         }
-        return when (val generation = provider.generatePrompt(spec, kb, serviceId)) {
-            is Result.success ->
-                AiAttempt(
-                    result = GeneratedPrompt(
-                        spec = spec,
-                        title = generation.value.title.trim().take(40),
-                        text = generation.value.prompt.trim(),
-                        sections = emptyList(),
-                        score = scorer.scoreText(generation.value.prompt, spec),
-                        variantStyle = VariantStyle.STANDARD,
-                        isAiGenerated = true,
-                    ),
-                    errorFa = null,
-                )
-            is Result.failure ->
-                AiAttempt(null, generation.exceptionOrNull()?.message ?: "ارتباط با سرور هوش مصنوعی برقرار نشد.")
+        val generation = provider.generatePrompt(spec, kb, serviceId)
+        val generated = generation.getOrNull()
+        return if (generated != null) {
+            AiAttempt(
+                result = GeneratedPrompt(
+                    spec = spec,
+                    title = generated.title.trim().take(40),
+                    text = generated.prompt.trim(),
+                    sections = emptyList(),
+                    score = scorer.scoreText(generated.prompt, spec),
+                    variantStyle = VariantStyle.STANDARD,
+                    isAiGenerated = true,
+                ),
+                errorFa = null,
+            )
+        } else {
+            AiAttempt(
+                null,
+                generation.exceptionOrNull()?.message ?: "ارتباط با سرور هوش مصنوعی برقرار نشد.",
+            )
         }
     }
 
