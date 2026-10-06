@@ -7,6 +7,7 @@ import com.promptsaz.app.domain.model.OutputLanguage
 import com.promptsaz.app.domain.model.PromptMode
 import com.promptsaz.app.domain.model.PromptSpec
 import com.promptsaz.app.domain.model.AiService
+import com.promptsaz.app.domain.provider.PromptRefinement
 import com.promptsaz.app.domain.model.ChatTurn
 import com.promptsaz.app.domain.model.GeneratedImage
 import com.promptsaz.app.domain.provider.AiModePrompts
