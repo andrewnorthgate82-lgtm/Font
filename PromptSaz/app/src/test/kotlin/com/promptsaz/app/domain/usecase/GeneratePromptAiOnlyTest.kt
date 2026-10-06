@@ -16,6 +16,7 @@ import com.promptsaz.app.domain.model.PromptSpec
 import com.promptsaz.app.domain.model.TargetAi
 import com.promptsaz.app.domain.model.ThemeMode
 import com.promptsaz.app.domain.provider.PromptProvider
+import com.promptsaz.app.domain.provider.PromptRefinement
 import com.promptsaz.app.domain.provider.ProviderGeneration
 import com.promptsaz.app.domain.provider.ProviderHealth
 import com.promptsaz.app.domain.provider.ProviderRegistry
@@ -95,6 +96,7 @@ class GeneratePromptAiOnlyTest {
         override val id = "openai_compatible"
         override val displayNameFa = "تست"
         var generateCalls = 0
+        var lastRefinement: PromptRefinement? = null
         override suspend fun isConfigured(serviceId: String?): Boolean = true
         override suspend fun testConnection(serviceId: String?): ProviderHealth = ProviderHealth.Ok()
         override suspend fun listModels(serviceId: String?): Result<List<String>> = Result.success(emptyList())
@@ -102,8 +104,10 @@ class GeneratePromptAiOnlyTest {
             spec: PromptSpec,
             kb: DomainKnowledge?,
             serviceId: String?,
+            refinement: PromptRefinement?,
         ): Result<ProviderGeneration> {
             generateCalls++
+            lastRefinement = refinement
             return if (quotaMessageFa != null) {
                 Result.failure(IllegalStateException(quotaMessageFa))
             } else {
@@ -202,6 +206,21 @@ class GeneratePromptAiOnlyTest {
         assertEquals("حالت هوش مصنوعی فعال نیست؛ در تنظیمات روشن کن.", (regeneration as Regeneration.Failed).messageFa)
         assertEquals(0, provider.generateCalls)
         assertEquals(0, repository.savedCount)
+    }
+
+    @Test
+    fun `improve sends the previous prompt and the evaluator suggestions to the model`() = runTest {
+        val repository = CountingPromptRepository()
+        val provider = FakeProvider(quotaMessageFa = null)
+        val useCase = useCaseWith(provider, repository)
+
+        val refinement = PromptRefinement(
+            previousPrompt = "پرامپت قبلی مدل",
+            suggestionsFa = listOf("مخاطب هدف مشخص نشده", "نمونه خروجی ندارد"),
+        )
+        useCase.regenerateAiOnly(spec, refinement)
+
+        assertEquals(refinement, provider.lastRefinement)
     }
 
     @Test

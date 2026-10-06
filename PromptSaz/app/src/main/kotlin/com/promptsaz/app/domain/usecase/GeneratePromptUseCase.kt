@@ -8,6 +8,7 @@ import com.promptsaz.app.domain.model.DomainKnowledge
 import com.promptsaz.app.domain.model.GeneratedPrompt
 import com.promptsaz.app.domain.model.PromptSpec
 import com.promptsaz.app.domain.model.VariantStyle
+import com.promptsaz.app.domain.provider.PromptRefinement
 import com.promptsaz.app.domain.provider.ProviderRegistry
 import com.promptsaz.app.domain.repository.KbRepository
 import com.promptsaz.app.domain.repository.PromptRepository
@@ -61,11 +62,14 @@ class GeneratePromptUseCase @Inject constructor(
      * rewrite. Nothing is saved on failure; the Persian reason comes back so
      * the user knows exactly what happened and can retry later.
      */
-    suspend fun regenerateAiOnly(spec: PromptSpec): Regeneration {
+    suspend fun regenerateAiOnly(
+        spec: PromptSpec,
+        refinement: PromptRefinement? = null,
+    ): Regeneration {
         val kb = kbRepository.getDomain(spec.domainId)
         val settings = settingsRepository.settings.first()
 
-        val attempt = tryAi(spec, kb, settings)
+        val attempt = tryAi(spec, kb, settings, refinement)
         val result = attempt.result
             ?: return Regeneration.Failed(
                 attempt.errorFa ?: "حالت هوش مصنوعی فعال نیست؛ در تنظیمات روشن کن.",
@@ -87,6 +91,7 @@ class GeneratePromptUseCase @Inject constructor(
         spec: PromptSpec,
         kb: DomainKnowledge?,
         settings: AppSettings,
+        refinement: PromptRefinement? = null,
     ): AiAttempt {
         if (!settings.aiEnabled) return AiAttempt(null, null)
         val provider = providerRegistry.active()
@@ -101,7 +106,7 @@ class GeneratePromptUseCase @Inject constructor(
         if (!provider.isConfigured(serviceId)) {
             return AiAttempt(null, "حالت هوش مصنوعی فعال است اما کلید یا مدل تنظیم نشده؛ با موتور آفلاین ساخته شد.")
         }
-        val generation = provider.generatePrompt(spec, kb, serviceId)
+        val generation = provider.generatePrompt(spec, kb, serviceId, refinement)
         val generated = generation.getOrNull()
         return if (generated != null) {
             AiAttempt(

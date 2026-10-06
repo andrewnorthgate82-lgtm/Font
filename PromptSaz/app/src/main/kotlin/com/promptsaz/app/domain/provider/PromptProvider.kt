@@ -1,6 +1,5 @@
 package com.promptsaz.app.domain.provider
 
-import com.promptsaz.app.domain.model.ClarifyingQuestion
 import com.promptsaz.app.domain.model.DomainKnowledge
 import com.promptsaz.app.domain.model.PromptSpec
 
@@ -31,13 +30,24 @@ interface PromptProvider {
     /** Model ids for the picker; falls back to a manual entry on failure. */
     suspend fun listModels(serviceId: String? = null): Result<List<String>>
 
-    /** Generates one prompt for the spec, following AiModePrompts.SYSTEM_PROMPT. */
+    /**
+     * Generates one prompt for the spec, following AiModePrompts.SYSTEM_PROMPT.
+     * [refinement] (بهبود ساختار) asks the model to fix a PREVIOUS output
+     * based on the quality evaluator's suggestions instead of starting blind.
+     */
     suspend fun generatePrompt(
         spec: PromptSpec,
         kb: DomainKnowledge?,
         serviceId: String? = null,
+        refinement: PromptRefinement? = null,
     ): Result<ProviderGeneration>
 }
+
+/** What the «بهبود ساختار» button sends up: the previous prompt + its weaknesses. */
+data class PromptRefinement(
+    val previousPrompt: String,
+    val suggestionsFa: List<String>,
+)
 
 /** Successful generation from a provider. */
 data class ProviderGeneration(

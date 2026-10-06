@@ -7,6 +7,7 @@ import com.promptsaz.app.domain.model.DetailLevel
 import com.promptsaz.app.domain.model.GeneratedPrompt
 import com.promptsaz.app.domain.model.ImprovementFinding
 import com.promptsaz.app.domain.model.VariantStyle
+import com.promptsaz.app.domain.provider.PromptRefinement
 import com.promptsaz.app.domain.usecase.GeneratePromptUseCase
 import com.promptsaz.app.domain.usecase.Regeneration
 import com.promptsaz.app.ui.session.GenerationSession
@@ -89,10 +90,17 @@ class ResultViewModel @Inject constructor(
             DetailLevel.QUICK -> DetailLevel.STANDARD
             else -> DetailLevel.EXPERT
         }
+        // What actually goes to the model now: the CURRENT prompt + the
+        // evaluator's suggestions, so it rewrites ITS OWN output instead of
+        // starting blind from the original idea.
+        val refinement = PromptRefinement(
+            previousPrompt = base.text,
+            suggestionsFa = base.score.suggestionsFa,
+        )
         _uiState.update { it.copy(working = true, errorFa = null) }
         viewModelScope.launch {
             runCatching {
-                generateUseCase.regenerateAiOnly(base.spec.copy(detailLevel = nextLevel))
+                generateUseCase.regenerateAiOnly(base.spec.copy(detailLevel = nextLevel), refinement)
             }.onSuccess { regeneration ->
                 when (regeneration) {
                     is Regeneration.Saved -> {

@@ -134,6 +134,7 @@ class OpenAiCompatibleProvider @Inject constructor(
         spec: PromptSpec,
         kb: DomainKnowledge?,
         serviceId: String?,
+        refinement: PromptRefinement?,
     ): Result<ProviderGeneration> = withContext(ioDispatcher) {
         val config = readGenerationConfig(serviceId)
             ?: return@withContext Result.failure(IllegalStateException(configGapFa(requireModel = true, serviceId)))
@@ -146,7 +147,7 @@ class OpenAiCompatibleProvider @Inject constructor(
                 model = config.model,
                 turns = listOf(
                     ChatTurn(role = "system", text = AiModePrompts.SYSTEM_PROMPT),
-                    ChatTurn(role = "user", text = buildUserPrompt(spec, kb)),
+                    ChatTurn(role = "user", text = buildUserPrompt(spec, kb, refinement)),
                 ),
             ) { content -> parseGeneration(content) }
         }
@@ -154,7 +155,7 @@ class OpenAiCompatibleProvider @Inject constructor(
             model = config.model,
             messages = listOf(
                 ChatMessageDto(role = "system", content = AiModePrompts.SYSTEM_PROMPT),
-                ChatMessageDto(role = "user", content = buildUserPrompt(spec, kb)),
+                ChatMessageDto(role = "user", content = buildUserPrompt(spec, kb, refinement)),
             ),
             maxTokens = DEFAULT_MAX_TOKENS,
         )
@@ -359,7 +360,11 @@ class OpenAiCompatibleProvider @Inject constructor(
 
     // --- user prompt construction -------------------------------------------------
 
-    private fun buildUserPrompt(spec: PromptSpec, kb: DomainKnowledge?): String = buildString {
+    private fun buildUserPrompt(
+        spec: PromptSpec,
+        kb: DomainKnowledge?,
+        refinement: PromptRefinement? = null,
+    ): String = buildString {
         appendLine("ایده کاربر (خام):")
         appendLine(spec.idea.trim())
         appendLine()
@@ -390,6 +395,18 @@ class OpenAiCompatibleProvider @Inject constructor(
             knowledge.guardrails.take(4).forEach { guardrail ->
                 appendLine("نگه‌داشت: ${guardrail.doFa}؛ ${guardrail.dontFa}.")
             }
+        }
+        if (refinement != null) {
+            appendLine()
+            appendLine("— بهبود نسخهٔ قبلی —")
+            appendLine("پرامپت ساخته‌شده در تولید قبلی:")
+            appendLine(refinement.previousPrompt.trim())
+            appendLine()
+            appendLine("ارزیاب کیفیت این نقاط ضعف را در همان نسخه پیدا کرده است؛ در نسخهٔ جدید تک‌تک آن‌ها را برطرف کن:")
+            refinement.suggestionsFa.forEach { suggestion ->
+                appendLine("• $suggestion")
+            }
+            appendLine("کل پرامپت را بر اساس همین نسخهٔ قبلی بازنویسی و قوی‌تر کن؛ از صفر نساز.")
         }
         appendLine()
         appendLine("فقط همان JSON خواسته‌شده را برگردان.")
