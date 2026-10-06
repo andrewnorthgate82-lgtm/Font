@@ -30,18 +30,33 @@ android {
         applicationId = "com.promptsaz.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
     }
 
+    // One dedicated signing key for EVERY build (debug + release). CI runners
+    // come and go and their auto-generated debug keys change — which broke
+    // in-place updates with "package conflicts with an existing package".
+    // Committing our own keystore makes every APK signature-stable forever.
+    signingConfigs {
+        create("stable") {
+            storeFile = rootProject.file("gradle/chista-signing.p12")
+            storeType = "PKCS12"
+            storePassword = System.getenv("CHISTA_KEYSTORE_PASSWORD") ?: "Chista!PromptSaz#2026"
+            keyAlias = System.getenv("CHISTA_KEY_ALIAS") ?: "chista"
+            keyPassword = System.getenv("CHISTA_KEY_PASSWORD") ?: "Chista!PromptSaz#2026"
+        }
+    }
 
     buildTypes {
         debug {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("stable")
         }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            signingConfig = signingConfigs.getByName("stable")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
