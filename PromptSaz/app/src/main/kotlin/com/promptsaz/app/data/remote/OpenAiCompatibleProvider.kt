@@ -147,7 +147,7 @@ class OpenAiCompatibleProvider @Inject constructor(
                 config,
                 model = config.model,
                 turns = listOf(
-                    ChatTurn(role = "system", text = AiModePrompts.SYSTEM_PROMPT),
+                    ChatTurn(role = "system", text = systemTextFor(refinement)),
                     ChatTurn(role = "user", text = buildUserPrompt(spec, kb, refinement)),
                 ),
             ) { content -> parseGeneration(content) }
@@ -155,7 +155,7 @@ class OpenAiCompatibleProvider @Inject constructor(
         val request = ChatCompletionRequestDto(
             model = config.model,
             messages = listOf(
-                ChatMessageDto(role = "system", content = AiModePrompts.SYSTEM_PROMPT),
+                ChatMessageDto(role = "system", content = systemTextFor(refinement)),
                 ChatMessageDto(role = "user", content = buildUserPrompt(spec, kb, refinement)),
             ),
             maxTokens = DEFAULT_MAX_TOKENS,
@@ -361,11 +361,34 @@ class OpenAiCompatibleProvider @Inject constructor(
 
     // --- user prompt construction -------------------------------------------------
 
+    /** System text of a generation: the base meta-prompt (+ rewrite add-on). */
+    private fun systemTextFor(refinement: PromptRefinement?): String =
+        if (refinement == null) {
+            AiModePrompts.SYSTEM_PROMPT
+        } else {
+            AiModePrompts.SYSTEM_PROMPT + "\n\n" + AiModePrompts.REFINEMENT_ADDON_EN
+        }
+
     private fun buildUserPrompt(
         spec: PromptSpec,
         kb: DomainKnowledge?,
         refinement: PromptRefinement? = null,
     ): String = buildString {
+        if (refinement != null) {
+            // Lead with the task: this is a REWRITE, and the bar is visible change.
+            appendLine("این یک درخواست بازنویسی و تقویت است، نه ساخت از صفر.")
+            appendLine()
+            appendLine("پرامپت نسخهٔ قبلی (خروجی تولید قبلی):")
+            appendLine(refinement.previousPrompt.trim())
+            appendLine()
+            appendLine("نقاط ضعف نسخهٔ قبلی که ارزیاب کیفیت پیدا کرده — تک‌تک این‌ها باید در نسخهٔ جدید برطرف شده باشند:")
+            refinement.suggestionsFa.forEachIndexed { index, suggestion ->
+                appendLine("${index + 1}. $suggestion")
+            }
+            appendLine()
+            appendLine("الزام: نسخهٔ جدید باید محسوساً کامل‌تر و متفاوت باشد؛ تکرار تقریبی همان متن قبلی خطاست. بخش‌های غایب را اضافه و بخش‌های کم‌محتوا را گسترش بده. زیرساخت ایده و تنظیمات همان‌هاست:")
+            appendLine()
+        }
         appendLine("ایده کاربر (خام):")
         appendLine(spec.idea.trim())
         appendLine()
@@ -396,18 +419,6 @@ class OpenAiCompatibleProvider @Inject constructor(
             knowledge.guardrails.take(4).forEach { guardrail ->
                 appendLine("نگه‌داشت: ${guardrail.doFa}؛ ${guardrail.dontFa}.")
             }
-        }
-        if (refinement != null) {
-            appendLine()
-            appendLine("— بهبود نسخهٔ قبلی —")
-            appendLine("پرامپت ساخته‌شده در تولید قبلی:")
-            appendLine(refinement.previousPrompt.trim())
-            appendLine()
-            appendLine("ارزیاب کیفیت این نقاط ضعف را در همان نسخه پیدا کرده است؛ در نسخهٔ جدید تک‌تک آن‌ها را برطرف کن:")
-            refinement.suggestionsFa.forEach { suggestion ->
-                appendLine("• $suggestion")
-            }
-            appendLine("کل پرامپت را بر اساس همین نسخهٔ قبلی بازنویسی و قوی‌تر کن؛ از صفر نساز.")
         }
         appendLine()
         appendLine("فقط همان JSON خواسته‌شده را برگردان.")

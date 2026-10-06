@@ -14,6 +14,17 @@ package com.promptsaz.app.domain.provider
  */
 object AiModePrompts {
 
+    /**
+     * Appended to SYSTEM_PROMPT when the user pressed «بهبود ساختار»: this is
+     * a REWRITE request — the reply must visibly fix the listed weaknesses,
+     * not echo the previous prompt with cosmetic edits.
+     */
+    const val REFINEMENT_ADDON_EN: String =
+        "REWRITE TASK: the user already has a previous version of this prompt. " +
+            "Your output must be a materially stronger rewrite that fixes EVERY listed " +
+            "weakness: add the missing parts, expand the thin ones. Returning the previous " +
+            "text (or a near-identical copy) is a failure."
+
     /** Persian assistant persona for the گفتگو (chat) tab — including image analysis. */
     const val CHAT_SYSTEM_PROMPT_FA: String =
         "تو دستیار هوشمند فارسی‌زبان اپلیکیشن چیستا هستی. " +

@@ -131,6 +131,16 @@ class ProviderRefinementTest {
         assertTrue("suggestion 1 not sent!", body.contains("مخاطب هدف مشخص نشده"))
         assertTrue("suggestion 2 not sent!", body.contains("نمونه خروجی ندارد"))
         assertTrue("suggestion 3 not sent!", body.contains("لحن برند تعریف نشده"))
+
+        // the rewrite brief must LEAD the user message, not trail behind the idea
+        val briefAt = body.indexOf("این یک درخواست بازنویسی و تقویت است")
+        val ideaAt = body.indexOf("ایده کاربر (خام)")
+        assertTrue("rewrite brief missing!", briefAt >= 0)
+        assertTrue("rewrite brief must come BEFORE the idea (briefAt=$briefAt, ideaAt=$ideaAt)", briefAt in 0 until ideaAt)
+        // the model must be obligated to a visible change
+        assertTrue("no difference obligation!", body.contains("تکرار تقریبی همان متن قبلی خطاست"))
+        // and the system prompt must declare the rewrite task
+        assertTrue("system add-on missing!", body.contains("REWRITE TASK"))
     }
 
     @Test
@@ -140,6 +150,7 @@ class ProviderRefinementTest {
         assertTrue(result.isSuccess)
         val body = capturedBody.get().orEmpty()
         assertTrue("idea must be sent", body.contains("یک پست اینستاگرام برای کافه"))
-        assertTrue("refinement block must be absent", !body.contains("بهبود نسخهٔ قبلی"))
+        assertTrue("refinement brief must be absent", !body.contains("این یک درخواست بازنویسی و تقویت است"))
+        assertTrue("rewrite system add-on must be absent", !body.contains("REWRITE TASK"))
     }
 }
