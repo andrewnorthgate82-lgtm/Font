@@ -220,7 +220,7 @@ fun rememberAttachmentPicker(
             runCatching {
                 val name = queryDisplayName(context, uri) ?: uri.lastPathSegment ?: "فایل"
                 val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                if (bytes.isNullOrEmpty()) return@runCatching
+                if (bytes == null || bytes.isEmpty()) return@runCatching
                 if (bytes.size > UserAttachment.MAX_FILE_BYTES) {
                     onNotice("«$name» بزرگ‌تر از ۱۵ مگابایت است و ارسال نشد.")
                     return@runCatching

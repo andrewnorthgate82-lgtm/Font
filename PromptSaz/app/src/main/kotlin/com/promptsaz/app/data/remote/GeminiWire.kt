@@ -1,5 +1,6 @@
 package com.promptsaz.app.data.remote
 
+import com.promptsaz.app.domain.model.UserAttachment
 import com.promptsaz.app.domain.model.ChatTurn
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -102,21 +103,21 @@ object GeminiWire {
                             add(GeminiPart(inlineData = GeminiInlineData(mimeType = mime, data = data)))
                         }
                     }
-                }
-                turn.attachments.forEach { attachment ->
-                    val fileText = attachment.textContent()
-                    if (fileText != null) {
-                        // text-like files travel as text — universally supported
-                        add(GeminiPart(text = "فایل پیوست‌شده «${attachment.displayName}»:\n$fileText"))
-                    } else {
-                        add(
-                            GeminiPart(
-                                inlineData = GeminiInlineData(
-                                    mimeType = attachment.mimeType,
-                                    data = encodeBase64(attachment.bytes),
+                    turn.attachments.forEach { attachment ->
+                        val fileText = attachment.textContent()
+                        if (fileText != null) {
+                            // text-like files travel as text — universally supported
+                            add(GeminiPart(text = "فایل پیوست‌شده «${attachment.displayName}»:\n$fileText"))
+                        } else {
+                            add(
+                                GeminiPart(
+                                    inlineData = GeminiInlineData(
+                                        mimeType = attachment.mimeType,
+                                        data = encodeBase64(attachment.bytes),
+                                    ),
                                 ),
-                            ),
-                        )
+                            )
+                        }
                     }
                 }
                 GeminiContent(
