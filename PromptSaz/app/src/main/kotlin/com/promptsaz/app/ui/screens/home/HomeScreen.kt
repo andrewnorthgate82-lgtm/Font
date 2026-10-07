@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
@@ -270,7 +271,7 @@ fun HomeScreen(
                     .padding(horizontal = 12.dp, vertical = 10.dp),
             ) {
                 SoftIconButton(
-                    icon = androidx.compose.material.icons.Icons.Rounded.Add,
+                    icon = Icons.Rounded.Add,
                     contentDescription = "پیوست فایل (هر نوعی)",
                     onClick = pickFiles,
                     iconPadding = 16.dp,

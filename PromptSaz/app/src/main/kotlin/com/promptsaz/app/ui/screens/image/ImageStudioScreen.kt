@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
+import android.widget.Toast
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
@@ -26,6 +27,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AddCircle
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
@@ -434,7 +436,7 @@ fun ImageStudioScreen(
                             .padding(horizontal = 12.dp, vertical = 10.dp),
                     ) {
                         SoftIconButton(
-                            icon = androidx.compose.material.icons.Icons.Rounded.Add,
+                            icon = Icons.Rounded.Add,
                             contentDescription = "پیوست فایل (هر نوعی)",
                             onClick = pickReferenceFiles,
                             iconPadding = 16.dp,

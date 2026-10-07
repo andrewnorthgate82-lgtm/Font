@@ -45,6 +45,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -443,7 +444,7 @@ private fun MessageBubble(
                     Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                         ChatAttachmentChips(
                             attachments = message.attachments,
-                            readImage = viewModel::readImageFile,
+                            readImage = readImage,
                         )
                         message.imageFileName?.takeIf { message.attachments.isEmpty() }?.let { fileName ->
                             val bitmap = remember(fileName) {
