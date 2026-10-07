@@ -298,30 +298,56 @@ def main() -> None:
 
     domains: list[dict] = []
     errors: list[str] = []
+    warnings: list[str] = []
     seen_in: dict[str, str] = {}
     for md_path in paths:
         if not md_path.exists():
             print(f"✗ file not found: {md_path}")
             sys.exit(2)
         p = Parse(md_path)
+        if not any(l.startswith("## دامنه:") for l in p.lines):
+            continue  # plain README / non-KB markdown — nothing to import
+        local: list[dict] = []
         while p.peek() is not None and not p.peek().startswith("## دامنه:"):
             p.i += 1
         while p.peek() is not None:
             d = parse_domain(p)
             if d:
-                if d["id"] in seen_in:
-                    errors.append(
-                        f"{md_path.name}: domain {d['id']} already came from {seen_in[d['id']]}"
-                    )
-                seen_in[d["id"]] = md_path.name
-                domains.append(d)
-        errors += p.errors
+                local.append(d)
+
+        # Truncation guard: every hand-off file ends with a «پایان فایل»
+        # marker line. A missing marker (or tail parse errors) means the
+        # model's answer was cut mid-domain → keep every COMPLETE domain and
+        # drop only that file's last one, with a loud warning.
+        last_line = next((l.strip() for l in reversed(p.lines) if l.strip()), "")
+        complete = "پایان فایل" in last_line
+        if complete and not p.errors:
+            kept = local
+        elif complete:
+            errors += p.errors
+            kept = local
+        else:
+            dropped = local.pop() if local else None
+            kept = local
+            note = f"({len(p.errors)} parse errors)" if p.errors else "(marker missing)"
+            warnings.append(
+                f"{md_path.name}: ناتمام به نظر می‌رسد {note} — آخرین حوزهٔ این فایل "
+                f"({dropped['id'] if dropped else '—'}) نادیده گرفته شد؛ بقیه سالم نگه داشته شدند"
+            )
+
+        for d in kept:
+            if d["id"] in seen_in:
+                errors.append(f"{md_path.name}: domain {d['id']} already came from {seen_in[d['id']]}")
+            seen_in[d["id"]] = md_path.name
+            domains.append(d)
 
     if errors:
         print("PARSE ERRORS:")
         for e in errors[:40]:
             print("  ✗", e)
         sys.exit(1)
+    for w in warnings:
+        print("  ⚠", w)
 
     registry = json.loads((KB_DIR / "_registry.json").read_text(encoding="utf-8"))
     by_id = {e["id"]: e for e in registry["domains"]}

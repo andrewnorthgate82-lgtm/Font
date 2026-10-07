@@ -5,6 +5,9 @@ Export the PromptSaz/چیستا knowledge base to editable Markdown.
   python3 tools/export_kb_to_md.py            → docs/chista-knowledge-base.md (all 13 domains, one file)
   python3 tools/export_kb_to_md.py --split    → docs/kb-domains/{domain-id}.md (one file per domain)
                                                  + docs/kb-domains/README.md
+  python3 tools/export_kb_to_md.py --parts 3  → docs/kb-parts/chista-kb-{i}of{n}.md
+                                                 (balanced whole-domain groups that each
+                                                 fit in ONE model response)
 
 Both forms carry the same editing contract in their header and both are read
 back by tools/import_kb_from_md.py (which accepts any number of files/dirs).
@@ -87,10 +90,9 @@ HEADER_ALL = f"""# دانش‌نامهٔ حوزه‌های چیستا — نسخ
 {RULES}
 ## نحوهٔ تحویل خروجی
 
-کل فایل را با همین قالب برگردان. اگر طولانی شد، از یک حوزهٔ کامل تمام‌شده
-پایان بده و در پیام بعدی از سرِ همان حوزهٔ بعدی ادامه بده — هر بخشِ
-تمام‌شدهٔ حوزه، مستقلاً معتبر است و جایگزین همان حوزه در برنامه می‌شود.
-دامنه‌هایی که در خروجی نیایند، دست‌نخورده باقی می‌مانند.
+این فایل برای «مرور یکجا» است. برای ویرایش با هوش مصنوعی از نسخهٔ
+سه‌بخشی (chista-kb-1of3.md تا chista-kb-3of3.md) استفاده کن که هر بخشش
+کم‌حجم‌تر است و در یک پاسخ کامل برمی‌گردد.
 
 ---
 """
@@ -104,8 +106,54 @@ SPLIT_HEADER = """# دانش‌نامهٔ چیستا — حوزهٔ «{name_fa}�
 {rules}
 ## نحوهٔ تحویل خروجی
 
-همین فایل را کامل و با همان قالب برگردان — فقط همین یک حوزه. بخش‌ها را
-کم نکن؛ فقط محتوا را قوی‌تر کن.
+کل همین فایل را در «یک پاسخ» و داخل «یک بلوک کد» برگردان — بدون هیچ
+توضیح یا مقدمه‌ای قبل و بعدش. بخش‌ها را کم نکن؛ فقط محتوا را قوی‌تر کن.
+خط پایانی «پایان فایل» را هم عیناً در انتهای خروجی نگه دار.
+"""
+
+PART_HEADER = """# دانش‌نامهٔ چیستا — بخش {i} از {n}
+
+این فایل، بخش {i} از {n} بخش دانش‌نامهٔ اپلیکیشن «چیستا» (ساخت پرامپت)
+است و شامل این حوزه‌هاست: {domain_list}.
+می‌خواهیم محتوای آن حرفه‌ای‌تر و کامل‌تر شود. شما فایل را ویرایش کنید و
+**دقیقاً همین قالب** را در خروجی برگردانید.
+
+{rules}
+## نحوهٔ تحویل خروجی
+
+کل همین فایل را در «یک پاسخ» و داخل «یک بلوک کد» کامل برگردان — بدون
+هیچ توضیح یا مقدمه‌ای قبل و بعدش. حوزه‌های بخش‌های دیگر را اینجا نیاور.
+اگر پاسخ در میانه بریده شد، در پیام بعدی دقیقاً از همان خط ادامه بده و
+چیزی را تکرار نکن. خط پایانی «پایان فایل» را هم عیناً در انتهای خروجی
+نگه دار.
+"""
+
+END_MARKER = "<!-- پایان فایل: {label} — این خط باید آخرین خط خروجی باشد -->"
+
+PARTS_README = """# دانش‌نامهٔ چیستا — نسخهٔ سه‌بخشی برای ویرایش با هوش مصنوعی
+
+هر فایل شامل چند حوزهٔ کامل است و به‌گونه‌ای متعادل شده که مدل بتواند
+کل آن را در «یک پاسخ» برگرداند.
+
+| فایل | حوزه‌ها |
+|------|---------|
+{table}
+
+## طرز کار
+
+1. فایل بخش ۱ را در گفتگو ضمیمه کن و بنویس:
+   «این فایل را طبق راهنمای ابتدای خودش کامل‌تر و حرفه‌ای‌تر کن و کل آن
+   را در یک پاسخ و داخل یک بلوک کد برگردان.»
+2. کل بلوک کدِ خروجی را کپی کن و در یک فایل متنی با همان نام ذخیره کن
+   (`chista-kb-1of3.md`). اگر Gemini فایل Canvas ساخت، همان را دانلود کن.
+3. همین کار را برای بخش ۲ و ۳ تکرار کن — اگر لازم شد هر بخش در گفتگوی
+   جداگانه.
+4. هر تعداد فایل که آماده شد را برگردان. حوزه‌هایی که برنگردند، همان
+   نسخهٔ فعلی‌شان می‌مانند.
+
+**اگر خروجی وسط راه بریده شد، جای نگرانی نیست:** برنامهٔ ما فقط
+حوزه‌های کامل را می‌خواند و حوزهٔ ناقص را خودکار کنار می‌گذارد. همان
+بخش را دوباره از مدل بخواه یا ادامهٔش را بگیر.
 """
 
 README_MD = """# فایل‌های دانش‌نامهٔ چیستا — یک فایل برای هر حوزه
@@ -219,16 +267,63 @@ def load_domains() -> list[tuple[dict, str]]:
     return result
 
 
+def balanced_parts(domains: list[tuple[dict, str]], n: int) -> list[list[tuple[dict, str]]]:
+    """Whole domains into n bins, size-balanced (longest-processing-time)."""
+    bins: list[list[tuple[dict, str]]] = [[] for _ in range(n)]
+    totals = [0] * n
+    for domain, description in sorted(domains, key=lambda x: -len(domain_to_md(x[0], x[1]))):
+        i = totals.index(min(totals))
+        bins[i].append((domain, description))
+        totals[i] += len(domain_to_md(domain, description))
+    # keep the registry order inside each bin; drop empty bins
+    order = {d[0]["id"]: i for i, d in enumerate(domains)}
+    return [sorted(b, key=lambda x: order[x[0]["id"]]) for b in bins if b]
+
+
 def main() -> None:
     split = "--split" in sys.argv
+    parts_mode = "--parts" in sys.argv
     domains = load_domains()
+
+    if parts_mode:
+        idx = sys.argv.index("--parts")
+        n = int(sys.argv[idx + 1]) if idx + 1 < len(sys.argv) and sys.argv[idx + 1].isdigit() else 3
+        out_dir = ROOT / "docs" / "kb-parts"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        for old in out_dir.glob("*.md"):
+            old.unlink()
+        groups = balanced_parts(domains, n)
+        table = "\n".join(
+            f"| `chista-kb-{i}of{len(groups)}.md` | " +
+            "، ".join(d[0]["nameFa"] for d in group) + " |"
+            for i, group in enumerate(groups, start=1)
+        )
+        (out_dir / "README.md").write_text(PARTS_README.format(table=table), encoding="utf-8")
+        for i, group in enumerate(groups, start=1):
+            header = PART_HEADER.format(
+                i=i, n=len(groups),
+                domain_list="، ".join(d[0]["nameFa"] for d in group),
+                rules=RULES,
+            )
+            body = "\n\n".join(domain_to_md(d, description) for d, description in group)
+            path = out_dir / f"chista-kb-{i}of{len(groups)}.md"
+            path.write_text(
+                header + "\n---\n\n" + body + "\n---\n\n" +
+                END_MARKER.format(label=f"بخش {i} از {len(groups)}") + "\n",
+                encoding="utf-8",
+            )
+            print(f"OK — {path.name} ({path.stat().st_size:,} bytes, {len(group)} domains)")
+        return
 
     if not split:
         parts = [HEADER_ALL]
         for domain, description in domains:
             parts.append(domain_to_md(domain, description))
         OUT_ALL.parent.mkdir(parents=True, exist_ok=True)
-        OUT_ALL.write_text("\n".join(parts), encoding="utf-8")
+        OUT_ALL.write_text(
+            "\n".join(parts) + "\n---\n\n" + END_MARKER.format(label="دانش‌نامهٔ کامل") + "\n",
+            encoding="utf-8",
+        )
         print(f"OK — wrote {OUT_ALL} ({OUT_ALL.stat().st_size:,} bytes, {len(domains)} domains)")
         return
 
@@ -243,7 +338,11 @@ def main() -> None:
     for domain, description in domains:
         header = SPLIT_HEADER.format(name_fa=domain["nameFa"], rules=RULES)
         path = OUT_SPLIT_DIR / f"{domain['id']}.md"
-        path.write_text(header + "\n---\n\n" + domain_to_md(domain, description), encoding="utf-8")
+        path.write_text(
+            header + "\n---\n\n" + domain_to_md(domain, description) + "\n---\n\n" +
+            END_MARKER.format(label=f"حوزهٔ {domain['nameFa']}") + "\n",
+            encoding="utf-8",
+        )
         print(f"OK — {path.name} ({path.stat().st_size:,} bytes)")
 
 
