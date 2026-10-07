@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """
-Export the whole PromptSaz/چیستا knowledge base into ONE editable Markdown
-file (docs/chista-knowledge-base.md) that can be handed to an LLM
-(Gemini Pro, …) for improvement, then brought back with
-tools/import_kb_from_md.py — a strict parser that regenerates the JSONs.
+Export the PromptSaz/چیستا knowledge base to editable Markdown.
+
+  python3 tools/export_kb_to_md.py            → docs/chista-knowledge-base.md (all 13 domains, one file)
+  python3 tools/export_kb_to_md.py --split    → docs/kb-domains/{domain-id}.md (one file per domain)
+                                                 + docs/kb-domains/README.md
+
+Both forms carry the same editing contract in their header and both are read
+back by tools/import_kb_from_md.py (which accepts any number of files/dirs).
 
 Format contract (do not change one side without the other!):
   ## دامنه: {id} — {nameFa}
@@ -27,15 +31,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 KB_DIR = ROOT / "app" / "src" / "main" / "assets" / "knowledge"
-OUT = ROOT / "docs" / "chista-knowledge-base.md"
+OUT_ALL = ROOT / "docs" / "chista-knowledge-base.md"
+OUT_SPLIT_DIR = ROOT / "docs" / "kb-domains"
 
-HEADER = """# دانش‌نامهٔ حوزه‌های چیستا — نسخهٔ قابل‌ویرایش برای هوش مصنوعی
-
-این فایل، کل دانش‌نامهٔ ۱۳ حوزهٔ اپلیکیشن «چیستا» (ساخت پرامپت) است.
-می‌خواهیم محتوای آن حرفه‌ای‌تر و کامل‌تر شود. شما فایل را ویرایش کنید و
-**دقیقاً همین قالب** را در خروجی برگردانید.
-
-## قوانین طلایی (تخطی = بی‌اعتبار شدن فایل)
+RULES = """## قوانین طلایی (تخطی = بی‌اعتبار شدن فایل)
 
 1. **ساختار عنوان‌ها را دقیقاً حفظ کن**: `## دامنه:`، `### شناسنامه`،
    `### نقش‌ها`، `#### نقش:`، `### واژه‌نامه`، `#### واژه:`،
@@ -77,7 +76,15 @@ HEADER = """# دانش‌نامهٔ حوزه‌های چیستا — نسخهٔ 
 - سؤال‌های شفاف‌سازی: پرسش‌های واقعاً لازم برای کامل‌کردن پرامپت؛ گزینه‌ها
   (chips) کوتاه و مفهومی؛ کلیدواژه‌های خلأ = واژه‌هایی که اگر در ایدهٔ کاربر
   بودند، یعنی این سؤال باید پرسیده شود.
+"""
 
+HEADER_ALL = f"""# دانش‌نامهٔ حوزه‌های چیستا — نسخهٔ قابل‌ویرایش برای هوش مصنوعی
+
+این فایل، کل دانش‌نامهٔ ۱۳ حوزهٔ اپلیکیشن «چیستا» (ساخت پرامپت) است.
+می‌خواهیم محتوای آن حرفه‌ای‌تر و کامل‌تر شود. شما فایل را ویرایش کنید و
+**دقیقاً همین قالب** را در خروجی برگردانید.
+
+{RULES}
 ## نحوهٔ تحویل خروجی
 
 کل فایل را با همین قالب برگردان. اگر طولانی شد، از یک حوزهٔ کامل تمام‌شده
@@ -86,7 +93,37 @@ HEADER = """# دانش‌نامهٔ حوزه‌های چیستا — نسخهٔ 
 دامنه‌هایی که در خروجی نیایند، دست‌نخورده باقی می‌مانند.
 
 ---
+"""
 
+SPLIT_HEADER = """# دانش‌نامهٔ چیستا — حوزهٔ «{name_fa}»
+
+این فایل، دانش‌نامهٔ حوزهٔ «{name_fa}» اپلیکیشن «چیستا» (ساخت پرامپت) است.
+می‌خواهیم محتوای آن حرفه‌ای‌تر و کامل‌تر شود. شما فایل را ویرایش کنید و
+**دقیقاً همین قالب** را در خروجی برگردانید.
+
+{rules}
+## نحوهٔ تحویل خروجی
+
+همین فایل را کامل و با همان قالب برگردان — فقط همین یک حوزه. بخش‌ها را
+کم نکن؛ فقط محتوا را قوی‌تر کن.
+"""
+
+README_MD = """# فایل‌های دانش‌نامهٔ چیستا — یک فایل برای هر حوزه
+
+هر فایل `{{id}}.md` دانش‌نامهٔ کامل یک حوزه است و مستقلاً قابل‌ویرایش و
+جایگزینی است. راهنمای ویرایش داخل خود هر فایل آمده است.
+
+| فایل | حوزه |
+|------|------|
+{table}
+
+## طرز کار
+
+1. فایل یک حوزه را به هوش مصنوعی بده و بگو: «این فایل را طبق راهنمای
+   ابتدای خودش کامل‌تر و حرفه‌ای‌تر کن و با همان قالب برگردان.»
+2. خروجی را ذخیره کن (نام فایل مهم نیست، محتوا مهم است).
+3. فایل‌های ویرایش‌شده را برگردان — هر تعداد که بود. هر حوزه‌ای که برنگردد،
+   همان نسخهٔ فعلی می‌ماند. حوزهٔ جدید هم می‌توانی اضافه کنی.
 """
 
 
@@ -98,8 +135,7 @@ def field(label: str, value: str) -> str:
 
 
 def fence(tag: str, text: str) -> str:
-    body = text.strip("\n")
-    return f"```{tag}\n{body}\n```"
+    return f"```{tag}\n{text.strip(chr(10))}\n```"
 
 
 def domain_to_md(domain: dict, description: str) -> str:
@@ -173,17 +209,42 @@ def domain_to_md(domain: dict, description: str) -> str:
     return "\n".join(lines)
 
 
-def main() -> None:
+def load_domains() -> list[tuple[dict, str]]:
     registry = json.loads((KB_DIR / "_registry.json").read_text(encoding="utf-8"))
-    parts = [HEADER]
+    result = []
     for entry in registry["domains"]:
-        kb_file = KB_DIR / entry["kbFile"]
-        domain = json.loads(kb_file.read_text(encoding="utf-8"))
+        domain = json.loads((KB_DIR / entry["kbFile"]).read_text(encoding="utf-8"))
         assert domain["id"] == entry["id"], f"id mismatch: {domain['id']} vs {entry['id']}"
-        parts.append(domain_to_md(domain, entry["descriptionFa"]))
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text("\n".join(parts), encoding="utf-8")
-    print(f"OK — wrote {OUT} ({OUT.stat().st_size:,} bytes, {len(registry['domains'])} domains)")
+        result.append((domain, entry["descriptionFa"]))
+    return result
+
+
+def main() -> None:
+    split = "--split" in sys.argv
+    domains = load_domains()
+
+    if not split:
+        parts = [HEADER_ALL]
+        for domain, description in domains:
+            parts.append(domain_to_md(domain, description))
+        OUT_ALL.parent.mkdir(parents=True, exist_ok=True)
+        OUT_ALL.write_text("\n".join(parts), encoding="utf-8")
+        print(f"OK — wrote {OUT_ALL} ({OUT_ALL.stat().st_size:,} bytes, {len(domains)} domains)")
+        return
+
+    OUT_SPLIT_DIR.mkdir(parents=True, exist_ok=True)
+    for old in OUT_SPLIT_DIR.glob("*.md"):
+        old.unlink()
+    table = "\n".join(
+        f"| `{entry['id']}.md` | {entry['nameFa']} |"
+        for entry in json.loads((KB_DIR / "_registry.json").read_text(encoding="utf-8"))["domains"]
+    )
+    (OUT_SPLIT_DIR / "README.md").write_text(README_MD.format(table=table), encoding="utf-8")
+    for domain, description in domains:
+        header = SPLIT_HEADER.format(name_fa=domain["nameFa"], rules=RULES)
+        path = OUT_SPLIT_DIR / f"{domain['id']}.md"
+        path.write_text(header + "\n---\n\n" + domain_to_md(domain, description), encoding="utf-8")
+        print(f"OK — {path.name} ({path.stat().st_size:,} bytes)")
 
 
 if __name__ == "__main__":

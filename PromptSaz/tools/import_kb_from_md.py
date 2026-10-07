@@ -8,13 +8,15 @@ Merge semantics (the round-trip contract):
   - domains absent from the file stay untouched;
   - new domain ids are added (JSON + registry entry with the file's توضیح).
 
-Usage:
+Usage (any number of files and/or directories; a directory contributes
+all its *.md files):
   python3 tools/import_kb_from_md.py docs/chista-knowledge-base.md --check
-  python3 tools/import_kb_from_md.py path/to/edited.md --apply
+  python3 tools/import_kb_from_md.py docs/kb-domains --check
+  python3 tools/import_kb_from_md.py a.md b.md c.md --apply
 
 --check only parses + compares against the current JSONs and prints a report.
-Round-trip guarantee: export_kb_to_md.py → this tool --check must report
-every domain identical.
+Round-trip guarantee: export_kb_to_md.py (both modes) → this tool --check must
+report every domain identical. The same domain in two input files is an error.
 """
 
 import json
@@ -272,25 +274,52 @@ def normalize(obj):
     return obj
 
 
+def collect_paths(args: list[str]) -> list[Path]:
+    paths: list[Path] = []
+    for a in args:
+        p = Path(a)
+        if p.is_dir():
+            paths += sorted(p.glob("*.md"))
+        else:
+            paths.append(p)
+    return paths
+
+
 def main() -> None:
-    if len(sys.argv) < 3 or sys.argv[2] not in ("--check", "--apply"):
+    args = sys.argv[1:]
+    if not args or args[-1] not in ("--check", "--apply"):
         print(__doc__)
         sys.exit(2)
-    md_path = Path(sys.argv[1])
-    apply = sys.argv[2] == "--apply"
+    apply = args[-1] == "--apply"
+    paths = collect_paths(args[:-1])
+    if not paths:
+        print("no input files")
+        sys.exit(2)
 
-    p = Parse(md_path)
-    while p.peek() is not None and not p.peek().startswith("## دامنه:"):
-        p.i += 1
     domains: list[dict] = []
-    while p.peek() is not None:
-        d = parse_domain(p)
-        if d:
-            domains.append(d)
+    errors: list[str] = []
+    seen_in: dict[str, str] = {}
+    for md_path in paths:
+        if not md_path.exists():
+            print(f"✗ file not found: {md_path}")
+            sys.exit(2)
+        p = Parse(md_path)
+        while p.peek() is not None and not p.peek().startswith("## دامنه:"):
+            p.i += 1
+        while p.peek() is not None:
+            d = parse_domain(p)
+            if d:
+                if d["id"] in seen_in:
+                    errors.append(
+                        f"{md_path.name}: domain {d['id']} already came from {seen_in[d['id']]}"
+                    )
+                seen_in[d["id"]] = md_path.name
+                domains.append(d)
+        errors += p.errors
 
-    if p.errors:
+    if errors:
         print("PARSE ERRORS:")
-        for e in p.errors[:40]:
+        for e in errors[:40]:
             print("  ✗", e)
         sys.exit(1)
 
