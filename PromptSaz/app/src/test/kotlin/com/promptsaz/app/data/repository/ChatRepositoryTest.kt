@@ -9,6 +9,7 @@ import com.promptsaz.app.data.db.ImageGenerationEntity
 import com.promptsaz.app.data.files.ImageFileStore
 import com.promptsaz.app.domain.model.ChatMessage
 import com.promptsaz.app.domain.model.ChatTurn
+import com.promptsaz.app.domain.model.UserAttachment
 import com.promptsaz.app.domain.provider.ChatAiProvider
 import com.promptsaz.app.domain.model.AppSettings
 import com.promptsaz.app.domain.model.DetailLevel
@@ -17,7 +18,6 @@ import com.promptsaz.app.domain.model.OutputLanguage
 import com.promptsaz.app.domain.model.TargetAi
 import com.promptsaz.app.domain.model.ThemeMode
 import com.promptsaz.app.domain.repository.SettingsRepository
-import java.io.ByteArrayInputStream
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -104,7 +104,13 @@ class ChatRepositoryTest {
             return Result.success(reply)
         }
 
-        override suspend fun generateImage(model: String, prompt: String, size: String, serviceId: String?): Result<GeneratedImage> =
+        override suspend fun generateImage(
+            model: String,
+            prompt: String,
+            size: String,
+            serviceId: String?,
+            attachments: List<UserAttachment>,
+        ): Result<GeneratedImage> =
             Result.failure(IllegalStateException("not used"))
 
         override suspend fun fetchImageBytes(url: String): Result<ByteArray> =
@@ -198,7 +204,7 @@ class ChatRepositoryTest {
     fun `send persists user message and reply, and sends system prompt + model`() = runBlocking {
         val (dao, provider, repo) = repository()
 
-        val result = repo.sendMessage(0L, "سلام، چه خبر؟", image = null, imageExtension = null)
+        val result = repo.sendMessage(0L, "سلام، چه خبر؟")
 
         assertTrue("send failed: ${result.exceptionOrNull()?.message}", result.isSuccess)
         // conversation created + titled from the first message
@@ -222,29 +228,39 @@ class ChatRepositoryTest {
         val (dao, provider, repo) = repository()
         val imageBytes = "FAKEJPG".toByteArray()
 
-        repo.sendMessage(0L, "این تصویر را تحلیل کن", ByteArrayInputStream(imageBytes), "jpg")
+        repo.sendMessage(
+            0L,
+            "این تصویر را تحلیل کن",
+            listOf(UserAttachment("photo.jpg", "image/jpeg", imageBytes)),
+        )
         val firstUserTurn = provider.lastTurns.last()
         assertEquals("user", firstUserTurn.role)
-        assertNotNull(firstUserTurn.imageDataUrl)
-        assertTrue(firstUserTurn.imageDataUrl!!.startsWith("data:image/jpeg;base64,"))
-        // the image file was persisted on the message row
-        assertNotNull(dao.messages.first { it.role == "user" }.imageFileName)
+        assertEquals(1, firstUserTurn.attachments.size)
+        assertEquals("image/jpeg", firstUserTurn.attachments.single().mimeType)
+        // the image file + its metadata were persisted on the message row
+        val userRow = dao.messages.first { it.role == "user" }
+        assertNotNull(userRow.imageFileName)
+        assertNotNull(userRow.attachmentsJson)
 
         // second send with another image: the FIRST image must degrade to a placeholder
-        repo.sendMessage(dao.conversations.single().id, "حالا این یکی چی؟", ByteArrayInputStream("SECOND".toByteArray()), "jpg")
+        repo.sendMessage(
+            dao.conversations.single().id,
+            "حالا این یکی چی؟",
+            listOf(UserAttachment("second.png", "image/png", "SECOND".toByteArray())),
+        )
 
         val turns = provider.lastTurns
         val userTurns = turns.filter { it.role == "user" }
         assertEquals(2, userTurns.size)
         // oldest user turn: no image, placeholder text appended
-        assertTrue("old image should not re-upload", userTurns[0].imageDataUrl == null)
+        assertTrue("old image should not re-upload", userTurns[0].attachments.isEmpty())
         assertTrue(
             "placeholder expected on old turn: ${userTurns[0].text}",
-            userTurns[0].text.contains(ChatRepositoryImpl.IMAGE_PLACEHOLDER_FA),
+            userTurns[0].text.contains(ChatRepositoryImpl.ATTACHMENT_PLACEHOLDER_FA.dropLast(1)),
         )
-        // newest user turn: carries the new data URL
-        assertNotNull(userTurns[1].imageDataUrl)
-        assertTrue(userTurns[1].imageDataUrl!!.contains("SECOND"))
+        // newest user turn: carries the new attachment
+        assertEquals(1, userTurns[1].attachments.size)
+        assertEquals("image/png", userTurns[1].attachments.single().mimeType)
         // history keeps growing in Room
         assertEquals(4, dao.messages.size)
     }
@@ -269,7 +285,7 @@ class ChatRepositoryTest {
             ),
         )
 
-        val result = repo.sendMessage(0L, "سلام", image = null, imageExtension = null)
+        val result = repo.sendMessage(0L, "سلام")
 
         assertTrue(result.isSuccess)
         // the message went through the service bound to گفتگو — not the default
@@ -279,7 +295,7 @@ class ChatRepositoryTest {
     @Test
     fun `setFeedback persists the rating on the message`() = runBlocking {
         val (dao, _, repo) = repository()
-        repo.sendMessage(0L, "سلام", image = null, imageExtension = null)
+        repo.sendMessage(0L, "سلام")
         val assistant = dao.messages(1L).first { it.role == "assistant" }
 
         repo.setFeedback(assistant.id, ChatMessage.FEEDBACK_DISLIKE)
@@ -294,11 +310,11 @@ class ChatRepositoryTest {
     fun `rated replies are annotated in the next request so the model adapts`() = runBlocking {
         val (dao, provider, repo) = repository()
 
-        repo.sendMessage(0L, "سؤال اول", image = null, imageExtension = null)
+        repo.sendMessage(0L, "سؤال اول")
         val firstReply = dao.messages(1L).first { it.role == "assistant" }
         repo.setFeedback(firstReply.id, ChatMessage.FEEDBACK_DISLIKE)
 
-        repo.sendMessage(1L, "سؤال دوم", image = null, imageExtension = null)
+        repo.sendMessage(1L, "سؤال دوم")
 
         // the disliked reply is followed by its feedback note
         val turns = provider.lastTurns
@@ -312,7 +328,7 @@ class ChatRepositoryTest {
         // a like gets its own note too
         val secondReply = dao.messages(1L).filter { it.role == "assistant" }[1]
         repo.setFeedback(secondReply.id, ChatMessage.FEEDBACK_LIKE)
-        repo.sendMessage(1L, "سؤال سوم", image = null, imageExtension = null)
+        repo.sendMessage(1L, "سؤال سوم")
 
         assertTrue(
             "like note missing",
@@ -329,7 +345,7 @@ class ChatRepositoryTest {
         }
         val repo = ChatRepositoryImpl(dao, provider, FakeImageStore(), FakeSettingsRepository())
 
-        val result = repo.sendMessage(0L, "سلام", null, null)
+        val result = repo.sendMessage(0L, "سلام")
 
         assertTrue(result.isFailure)
         assertEquals("کلید API نامعتبر است.", result.exceptionOrNull()?.message)

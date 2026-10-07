@@ -64,7 +64,9 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.promptsaz.app.domain.model.ImageGeneration
 import com.promptsaz.app.ui.components.ModelPickerSheet
+import com.promptsaz.app.ui.components.AttachmentChipsRow
 import com.promptsaz.app.ui.components.SoftIconButton
+import com.promptsaz.app.ui.components.rememberAttachmentPicker
 import com.promptsaz.app.ui.theme.BrandGradient
 import com.promptsaz.app.util.PlatformUtils
 import java.io.File
@@ -84,6 +86,12 @@ fun ImageStudioScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+    // تصویر مرجع / فایل متنی برای ساخت تصویر — چندتایی، بدون محدودیت تعداد
+    val pickReferenceFiles = rememberAttachmentPicker(
+        onPicked = viewModel::addAttachments,
+        onNotice = { message -> Toast.makeText(context, message, Toast.LENGTH_SHORT).show() },
+    )
     var saveMessage by remember { mutableStateOf<String?>(null) }
 
     Column(
@@ -414,6 +422,10 @@ fun ImageStudioScreen(
                             }
                         }
                     }
+                    AttachmentChipsRow(
+                        attachments = state.attachments,
+                        onRemove = viewModel::removeAttachment,
+                    )
                     Row(
                         verticalAlignment = Alignment.Bottom,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -421,6 +433,12 @@ fun ImageStudioScreen(
                             .fillMaxWidth()
                             .padding(horizontal = 12.dp, vertical = 10.dp),
                     ) {
+                        SoftIconButton(
+                            icon = androidx.compose.material.icons.Icons.Rounded.Add,
+                            contentDescription = "پیوست فایل (هر نوعی)",
+                            onClick = pickReferenceFiles,
+                            iconPadding = 16.dp,
+                        )
                         OutlinedTextField(
                             value = state.prompt,
                             onValueChange = viewModel::updatePrompt,

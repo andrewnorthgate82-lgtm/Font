@@ -52,7 +52,9 @@ import com.promptsaz.app.ui.components.ModelPickerSheet
 import com.promptsaz.app.ui.components.SectionLabel
 import com.promptsaz.app.ui.components.SegmentedControl
 import com.promptsaz.app.ui.components.SelectChipRow
+import com.promptsaz.app.ui.components.AttachmentChipsRow
 import com.promptsaz.app.ui.components.SoftIconButton
+import com.promptsaz.app.ui.components.rememberAttachmentPicker
 import com.promptsaz.app.ui.theme.BrandGradient
 import com.promptsaz.app.util.toPersianDigits
 
@@ -71,6 +73,13 @@ fun HomeScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var optionsExpanded by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    // پیوست هر نوع فایلی به ایدهٔ پرامپت — چندتایی، بدون محدودیت تعداد
+    val pickFiles = rememberAttachmentPicker(
+        onPicked = viewModel::addAttachments,
+        onNotice = { message -> android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show() },
+    )
 
     Column(
         modifier = Modifier
@@ -220,6 +229,13 @@ fun HomeScreen(
                 }
             }
 
+            if (state.attachments.isNotEmpty()) {
+                AttachmentChipsRow(
+                    attachments = state.attachments,
+                    onRemove = viewModel::removeAttachment,
+                )
+            }
+
             Spacer(Modifier.height(20.dp))
 
             Row(
@@ -253,6 +269,12 @@ fun HomeScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 10.dp),
             ) {
+                SoftIconButton(
+                    icon = androidx.compose.material.icons.Icons.Rounded.Add,
+                    contentDescription = "پیوست فایل (هر نوعی)",
+                    onClick = pickFiles,
+                    iconPadding = 16.dp,
+                )
                 OutlinedTextField(
                     value = state.idea,
                     onValueChange = viewModel::setIdea,

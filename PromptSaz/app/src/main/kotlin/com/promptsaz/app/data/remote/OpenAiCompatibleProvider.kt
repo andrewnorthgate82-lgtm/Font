@@ -8,6 +8,7 @@ import com.promptsaz.app.domain.model.PromptMode
 import com.promptsaz.app.domain.model.PromptSpec
 import com.promptsaz.app.domain.model.AiService
 import com.promptsaz.app.domain.provider.PromptRefinement
+import com.promptsaz.app.domain.model.UserAttachment
 import com.promptsaz.app.domain.model.ChatTurn
 import com.promptsaz.app.domain.model.GeneratedImage
 import com.promptsaz.app.domain.provider.AiModePrompts
@@ -142,29 +143,34 @@ class OpenAiCompatibleProvider @Inject constructor(
         if (config.isPixazo) {
             return@withContext Result.failure(IllegalStateException(PIXAZO_TEXT_ONLY_FA))
         }
+        val promptTurns = listOf(
+            ChatTurn(role = "system", text = systemTextFor(refinement)),
+            ChatTurn(
+                role = "user",
+                text = buildUserPrompt(spec, kb, refinement),
+                attachments = spec.attachments,
+            ),
+        )
+        attachmentBudgetErrorOrNull(promptTurns)?.let {
+            return@withContext Result.failure(IllegalStateException(it))
+        }
         if (config.isGemini) {
             return@withContext geminiCall(
                 config,
                 model = config.model,
-                turns = listOf(
-                    ChatTurn(role = "system", text = systemTextFor(refinement)),
-                    ChatTurn(role = "user", text = buildUserPrompt(spec, kb, refinement)),
-                ),
+                turns = promptTurns,
             ) { content -> parseGeneration(content) }
         }
-        val request = ChatCompletionRequestDto(
+        val request = ChatCompletionChatRequestDto(
             model = config.model,
-            messages = listOf(
-                ChatMessageDto(role = "system", content = systemTextFor(refinement)),
-                ChatMessageDto(role = "user", content = buildUserPrompt(spec, kb, refinement)),
-            ),
+            messages = promptTurns.map { turn -> turn.toContentMessage() },
             maxTokens = DEFAULT_MAX_TOKENS,
         )
         when (
             val response = postChatWithTokenRetry(
                 config,
                 request,
-                ChatCompletionRequestDto.serializer(),
+                ChatCompletionChatRequestDto.serializer(),
             ) { req, cap -> req.copy(maxTokens = cap) }
         ) {
             is HttpOutcome.Success -> {
@@ -205,6 +211,9 @@ class OpenAiCompatibleProvider @Inject constructor(
         if (config.isPixazo) {
             return@withContext Result.failure(IllegalStateException(PIXAZO_TEXT_ONLY_FA))
         }
+        attachmentBudgetErrorOrNull(turns)?.let {
+            return@withContext Result.failure(IllegalStateException(it))
+        }
         if (config.isGemini) {
             return@withContext geminiCall(config, model = selectedModel, turns = turns) { it }
         }
@@ -242,6 +251,7 @@ class OpenAiCompatibleProvider @Inject constructor(
         prompt: String,
         size: String,
         serviceId: String?,
+        attachments: List<UserAttachment>,
     ): Result<GeneratedImage> =
         withContext(ioDispatcher) {
             val config = readConnectionConfig(serviceId)
@@ -250,15 +260,42 @@ class OpenAiCompatibleProvider @Inject constructor(
             if (selectedModel.isBlank()) {
                 return@withContext Result.failure(IllegalStateException(NO_MODEL_FA))
             }
+            if (attachments.sumOf { it.bytes.size } > UserAttachment.MAX_TOTAL_BYTES) {
+                return@withContext Result.failure(IllegalStateException(ATTACHMENT_BUDGET_FA))
+            }
+            // text-like files enrich the prompt on every protocol
+            val textFiles = attachments.mapNotNull { a ->
+                a.textContent()?.let { "«${a.displayName}»:\n$it" }
+            }
+            val enrichedPrompt = if (textFiles.isEmpty()) {
+                prompt
+            } else {
+                prompt + "\n\n— فایل‌های متنی پیوست‌شده —\n" + textFiles.joinToString("\n")
+            }
+            val referenceImages = attachments.filter { it.isImage }
+            val binaryNonImages = attachments.filter { !it.isImage && !it.isTextLike }
             if (config.isPixazo) {
+                if (attachments.isNotEmpty()) {
+                    return@withContext Result.failure(IllegalStateException(ATTACHMENTS_IMAGE_ONLY_FA))
+                }
                 return@withContext pixazoGenerate(config, prompt, size)
             }
             if (config.isGemini) {
                 // Native Gemini image generation (nano-banana / gemini-*-image):
                 // generateContent with TEXT+IMAGE modalities → inlineData part.
-                return@withContext geminiGenerateImage(config, selectedModel, prompt)
+                // Attached images become reference/input images (editing).
+                if (binaryNonImages.isNotEmpty()) {
+                    return@withContext Result.failure(
+                        IllegalStateException(ATTACHMENTS_IMAGE_INPUT_BINARY_FA),
+                    )
+                }
+                return@withContext geminiGenerateImage(config, selectedModel, enrichedPrompt, referenceImages)
             }
-            val request = ImageGenerationRequestDto(model = selectedModel, prompt = prompt, size = size)
+            if (referenceImages.isNotEmpty() || binaryNonImages.isNotEmpty()) {
+                // /images/generations has no input-file channel
+                return@withContext Result.failure(IllegalStateException(ATTACHMENTS_IMAGE_ONLY_FA))
+            }
+            val request = ImageGenerationRequestDto(model = selectedModel, prompt = enrichedPrompt, size = size)
             val body = json.encodeToString(ImageGenerationRequestDto.serializer(), request)
             when (val response = httpCallWithRetry("POST", config.imagesUrl, config, body)) {
                 is HttpOutcome.Success -> {
@@ -300,8 +337,9 @@ class OpenAiCompatibleProvider @Inject constructor(
         config: ProviderConfig,
         model: String,
         prompt: String,
+        referenceImages: List<UserAttachment> = emptyList(),
     ): Result<GeneratedImage> = withContext(ioDispatcher) {
-        val request = GeminiWire.imageRequest(prompt)
+        val request = GeminiWire.imageRequest(prompt, referenceImages)
         val body = json.encodeToString(GeminiWire.GeminiGenerateRequest.serializer(), request)
         when (val response = httpCallWithRetry("POST", GeminiWire.generateContentUrl(config.baseUrl, model), config, body)) {
             is HttpOutcome.Success -> {
@@ -337,26 +375,79 @@ class OpenAiCompatibleProvider @Inject constructor(
         }
     }
 
+    /**
+     * Multimodal mapping for OpenAI-compatible services: images become
+     * image_url parts; text-like files are embedded into the text; binaries
+     * this protocol cannot carry (audio/video/pdf/…) are listed honestly so
+     * the model — and the user reading the chat — know they were not sent.
+     */
     private fun ChatTurn.toContentMessage(): ChatContentMessageDto {
-        val content: JsonElement = if (imageDataUrl == null) {
-            JsonPrimitive(text)
+        val textFiles = attachments.mapNotNull { a ->
+            a.textContent()?.let { "«${a.displayName}»:\n$it" }
+        }
+        val unsupported = attachments.filter { !it.isImage && !it.isTextLike }
+        val fullText = buildString {
+            append(text)
+            if (textFiles.isNotEmpty()) {
+                append("\n\n— محتوای فایل‌های متنی پیوست‌شده —\n")
+                textFiles.forEachIndexed { index, fileText ->
+                    append("${index + 1}) $fileText\n")
+                }
+            }
+            if (unsupported.isNotEmpty()) {
+                append("\n(این سرویس فقط تصویر و متن را می‌فهمد؛ این پیوست‌ها ارسال نشدند: ")
+                append(unsupported.joinToString("، ") { it.displayName })
+                append(")")
+            }
+        }
+        val content: JsonElement = if (imageDataUrl == null && attachments.none { it.isImage }) {
+            JsonPrimitive(fullText)
         } else {
             buildJsonArray {
                 add(
                     buildJsonObject {
                         put("type", "text")
-                        put("text", text)
+                        put("text", fullText)
                     },
                 )
-                add(
-                    buildJsonObject {
-                        put("type", "image_url")
-                        put("image_url", buildJsonObject { put("url", imageDataUrl) })
-                    },
-                )
+                imageDataUrl?.let { url ->
+                    add(
+                        buildJsonObject {
+                            put("type", "image_url")
+                            put("image_url", buildJsonObject { put("url", url) })
+                        },
+                    )
+                }
+                attachments.filter { it.isImage }.forEach { image ->
+                    add(
+                        buildJsonObject {
+                            put("type", "image_url")
+                            put(
+                                "image_url",
+                                buildJsonObject {
+                                    put("url", "data:${image.mimeType};base64,${encodeBase64(image.bytes)}")
+                                },
+                            )
+                        },
+                    )
+                }
             }
         }
         return ChatContentMessageDto(role = role, content = content)
+    }
+
+    /** Base64 for request payloads; JVM (tests) and all Android levels. */
+    private fun encodeBase64(bytes: ByteArray): String =
+        try {
+            java.util.Base64.getEncoder().encodeToString(bytes)
+        } catch (_: Throwable) {
+            android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+        }
+
+    /** Persian failure when the attachment payload would exceed the API limit. */
+    private fun attachmentBudgetErrorOrNull(turns: List<ChatTurn>): String? {
+        val total = turns.sumOf { turn -> turn.attachments.sumOf { it.bytes.size } }
+        return if (total > UserAttachment.MAX_TOTAL_BYTES) ATTACHMENT_BUDGET_FA else null
     }
 
     // --- user prompt construction -------------------------------------------------
@@ -832,6 +923,13 @@ class OpenAiCompatibleProvider @Inject constructor(
 
         /** Upper bound for honoring a server Retry-After hint (ms). */
         const val RATE_LIMIT_MAX_RETRY_WAIT_MS: Long = 30_000L
+
+        const val ATTACHMENT_BUDGET_FA =
+            "حجم کل پیوست‌ها بیشتر از حد مجاز API (۲۰ مگابایت) است؛ تعدادی از فایل‌ها را حذف کن یا فایل‌های سبک‌تری بفرست."
+        const val ATTACHMENTS_IMAGE_ONLY_FA =
+            "این سرویس ساخت تصویر، پیوست قبول نمی‌کند؛ فقط متن می‌فهمد. برای استفاده از تصویر مرجع یا فایل، در تنظیمات سرویس Gemini را به این بخش وصل کن."
+        const val ATTACHMENTS_IMAGE_INPUT_BINARY_FA =
+            "مدل‌های ساخت تصویر فقط تصویر مرجع و متن را می‌فهمند؛ فایل‌های صوتی/ویدیویی/PDF را برای ساخت تصویر پیوست نکن."
 
         const val PIXAZO_TEXT_ONLY_FA =
             "این سرویس فقط ساخت تصویر دارد؛ برای گفتگو و تولید پرامپت، در تنظیمات یک سرویس گفتگو (مثل CodeCraft) را فعال کن."

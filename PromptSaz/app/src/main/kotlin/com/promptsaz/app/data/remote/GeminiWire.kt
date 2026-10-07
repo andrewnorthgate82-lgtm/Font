@@ -103,6 +103,22 @@ object GeminiWire {
                         }
                     }
                 }
+                turn.attachments.forEach { attachment ->
+                    val fileText = attachment.textContent()
+                    if (fileText != null) {
+                        // text-like files travel as text — universally supported
+                        add(GeminiPart(text = "فایل پیوست‌شده «${attachment.displayName}»:\n$fileText"))
+                    } else {
+                        add(
+                            GeminiPart(
+                                inlineData = GeminiInlineData(
+                                    mimeType = attachment.mimeType,
+                                    data = encodeBase64(attachment.bytes),
+                                ),
+                            ),
+                        )
+                    }
+                }
                 GeminiContent(
                     role = if (turn.role == "assistant") "model" else "user",
                     parts = parts,
@@ -125,13 +141,37 @@ object GeminiWire {
     }
 
     /** Image-generation request (nano-banana): one text part + IMAGE modality. */
-    fun imageRequest(prompt: String): GeminiGenerateRequest =
+    fun imageRequest(prompt: String, attachments: List<UserAttachment> = emptyList()): GeminiGenerateRequest =
         GeminiGenerateRequest(
             contents = listOf(
-                GeminiContent(role = "user", parts = listOf(GeminiPart(text = prompt))),
+                GeminiContent(
+                    role = "user",
+                    parts = buildList {
+                        add(GeminiPart(text = prompt))
+                        attachments.forEach { attachment ->
+                            add(
+                                GeminiPart(
+                                    inlineData = GeminiInlineData(
+                                        mimeType = attachment.mimeType,
+                                        data = encodeBase64(attachment.bytes),
+                                    ),
+                                ),
+                            )
+                        }
+                    },
+                ),
             ),
             generationConfig = GeminiGenerationConfig(responseModalities = listOf("TEXT", "IMAGE")),
         )
+
+    /** Base64 for request payloads; works on JVM (tests) and all Android levels. */
+    private fun encodeBase64(bytes: ByteArray): String =
+        try {
+            java.util.Base64.getEncoder().encodeToString(bytes)
+        } catch (_: Throwable) {
+            // API 24/25: java.util.Base64 is missing — fall back to android.util
+            android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+        }
 
     /** Base64 of the first inlineData part; null when the reply is text-only. */
     fun imageBase64(body: String, json: Json): String? = runCatching {

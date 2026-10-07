@@ -4,6 +4,16 @@ package com.promptsaz.app.domain.model
  * Chat-mode domain models (the ChatGPT-like "گفتگوی جدید" tab).
  */
 
+/**
+ * Persisted metadata of one chat attachment; the bytes live in the chat
+ * file store under [fileName].
+ */
+data class ChatAttachmentMeta(
+    val displayName: String,
+    val fileName: String,
+    val mimeType: String,
+)
+
 /** One conversation in the chat list. */
 data class ChatConversation(
     val id: Long = 0L,
@@ -22,6 +32,8 @@ data class ChatMessage(
     val createdAt: Long,
     /** User rating of this message: [FEEDBACK_NONE], [FEEDBACK_LIKE] or [FEEDBACK_DISLIKE]. */
     val feedback: Int = FEEDBACK_NONE,
+    /** Metadata of every attached file (any type) stored for this message. */
+    val attachments: List<ChatAttachmentMeta> = emptyList(),
 ) {
     val isFromUser: Boolean get() = role == ROLE_USER
 
@@ -43,6 +55,8 @@ data class ChatTurn(
     val role: String,
     val text: String,
     val imageDataUrl: String? = null,
+    /** Any-type attachments of this turn; the provider maps them per protocol. */
+    val attachments: List<UserAttachment> = emptyList(),
 )
 
 /** Result of an image-generation call: either a remote URL or inline base64. */

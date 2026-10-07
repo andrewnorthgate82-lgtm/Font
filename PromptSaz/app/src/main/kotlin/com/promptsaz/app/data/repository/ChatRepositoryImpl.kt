@@ -3,17 +3,20 @@ package com.promptsaz.app.data.repository
 import com.promptsaz.app.data.db.ChatDao
 import com.promptsaz.app.data.db.ChatConversationEntity
 import com.promptsaz.app.data.db.ChatMessageEntity
+import com.promptsaz.app.data.db.decodeAttachments
+import com.promptsaz.app.data.db.encodeAttachments
 import com.promptsaz.app.data.db.toDomain
 import com.promptsaz.app.data.files.ImageFileStore
 import com.promptsaz.app.domain.model.AppSettings
+import com.promptsaz.app.domain.model.ChatAttachmentMeta
 import com.promptsaz.app.domain.model.ChatConversation
 import com.promptsaz.app.domain.model.ChatMessage
 import com.promptsaz.app.domain.model.ChatTurn
+import com.promptsaz.app.domain.model.UserAttachment
 import com.promptsaz.app.domain.provider.AiModePrompts
 import com.promptsaz.app.domain.provider.ChatAiProvider
 import com.promptsaz.app.domain.repository.ChatRepository
 import com.promptsaz.app.domain.repository.SettingsRepository
-import java.io.InputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
@@ -67,30 +70,40 @@ class ChatRepositoryImpl @Inject constructor(
     override suspend fun sendMessage(
         conversationId: Long,
         text: String,
-        image: InputStream?,
-        imageExtension: String?,
+        attachments: List<UserAttachment>,
     ): Result<Long> {
         val now = System.currentTimeMillis()
         val id = if (conversationId == 0L) createConversation() else conversationId
 
-        // 1) persist the user's message; the image is compressed and stored locally
-        var uploadDataUrl: String? = null
-        val savedImageName = image?.use { stream ->
-            val raw = stream.readBytes()
-            if (raw.isEmpty()) {
-                null
-            } else {
-                val compressed = imageStore.compressForUpload(raw)
-                uploadDataUrl = imageStore.toDataUrl(compressed)
-                imageStore.saveChatImage(compressed, imageExtension ?: "jpg")
-            }
+        if (attachments.sumOf { it.bytes.size } > UserAttachment.MAX_TOTAL_BYTES) {
+            return Result.failure(IllegalStateException(ATTACHMENT_BUDGET_FA))
         }
+
+        // 1) store every attachment locally; images travel compressed
+        data class Stored(val upload: UserAttachment, val meta: ChatAttachmentMeta)
+        val stored = attachments.mapNotNull { attachment ->
+            val upload = if (attachment.isImage) {
+                attachment.copy(bytes = imageStore.compressForUpload(attachment.bytes))
+            } else {
+                attachment
+            }
+            if (upload.bytes.isEmpty()) return@mapNotNull null
+            val extension = if (attachment.isImage) {
+                attachment.mimeType.substringAfterLast('/').ifBlank { "jpg" }
+            } else {
+                UserAttachment.extensionOf(attachment.displayName).ifBlank { "bin" }
+            }
+            val fileName = imageStore.saveChatImage(upload.bytes, extension)
+            Stored(upload, ChatAttachmentMeta(attachment.displayName, fileName, attachment.mimeType))
+        }
+        val firstImageName = stored.firstOrNull()?.takeIf { it.upload.isImage }?.meta?.fileName
         val userMessageId = chatDao.insertMessage(
             ChatMessageEntity(
                 conversationId = id,
                 role = ChatMessage.ROLE_USER,
                 text = text.trim(),
-                imageFileName = savedImageName,
+                imageFileName = firstImageName,
+                attachmentsJson = encodeAttachments(stored.map { it.meta }),
                 createdAt = now,
             ),
         )
@@ -115,9 +128,15 @@ class ChatRepositoryImpl @Inject constructor(
         val turns = buildList {
             add(ChatTurn(role = "system", text = AiModePrompts.CHAT_SYSTEM_PROMPT_FA))
             history.forEach { message ->
-                val isLatestUserImage = message.id == userMessageId
+                val isLatestUserMessage = message.id == userMessageId
                 val turnText = when {
-                    isLatestUserImage -> message.text
+                    isLatestUserMessage -> message.text
+                    message.attachmentsJson != null -> {
+                        val names = decodeAttachments(message.attachmentsJson)
+                            .joinToString("، ") { it.displayName }
+                        message.text.ifBlank { IMAGE_PLACEHOLDER_FA } +
+                            " $ATTACHMENT_PLACEHOLDER_FA$names]"
+                    }
                     message.imageFileName != null ->
                         message.text.ifBlank { IMAGE_PLACEHOLDER_FA } + " $IMAGE_PLACEHOLDER_FA"
                     else -> message.text
@@ -126,7 +145,7 @@ class ChatRepositoryImpl @Inject constructor(
                     ChatTurn(
                         role = message.role,
                         text = turnText,
-                        imageDataUrl = if (isLatestUserImage) uploadDataUrl else null,
+                        attachments = if (isLatestUserMessage) stored.map { it.upload } else emptyList(),
                     ),
                 )
                 // The user rated this reply — feed the rating back into the
@@ -170,6 +189,9 @@ class ChatRepositoryImpl @Inject constructor(
         const val UNTITLED_FA = "گفتگوی جدید"
         const val NO_CHAT_SERVICE_FA = "اول سرویس گفتگو را در تنظیمات انتخاب کن."
         const val IMAGE_PLACEHOLDER_FA = "[تصویر پیوست‌شده]"
+        const val ATTACHMENT_PLACEHOLDER_FA = "[پیوست‌ها: "
+        const val ATTACHMENT_BUDGET_FA =
+            "حجم کل پیوست‌ها بیشتر از حد مجاز API (۲۰ مگابایت) است؛ تعدادی از فایل‌ها را حذف کن یا سبک‌ترشان کن."
         const val FEEDBACK_LIKE_NOTE_FA =
             "(بازخورد کاربر به پاسخ بالا: این پاسخ را پسندید؛ پاسخ‌های بعدی به همین سبک و کیفیت باشند.)"
         const val FEEDBACK_DISLIKE_NOTE_FA =

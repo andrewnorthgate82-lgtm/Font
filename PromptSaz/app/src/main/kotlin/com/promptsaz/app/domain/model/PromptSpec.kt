@@ -12,6 +12,8 @@ data class PromptSpec(
     val detailLevel: DetailLevel,
     val mode: PromptMode = PromptMode.NEW,
     val answers: List<ClarifyingAnswer> = emptyList(),
+    /** Any-type files attached on the prompt tab; travel to the model, never persisted. */
+    val attachments: List<UserAttachment> = emptyList(),
 ) {
     fun answerFor(questionId: String): ClarifyingAnswer? = answers.firstOrNull { it.questionId == questionId }
 }

@@ -7,6 +7,7 @@ import com.promptsaz.app.data.settings.ApiKeyStore
 import com.promptsaz.app.domain.model.ChatConversation
 import com.promptsaz.app.domain.model.ChatMessage
 import com.promptsaz.app.domain.provider.ProviderRegistry
+import com.promptsaz.app.domain.model.UserAttachment
 import com.promptsaz.app.domain.repository.ChatRepository
 import com.promptsaz.app.domain.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -163,10 +164,10 @@ class ChatViewModel @Inject constructor(
         _uiState.update { it.copy(errorFa = null) }
     }
 
-    /** Sends the user's text (+ optional attached image) and shows the reply. */
-    fun send(text: String, imageBytes: ByteArray?, imageExtension: String?) {
+    /** Sends the user's text (+ any-type attached files) and shows the reply. */
+    fun send(text: String, attachments: List<UserAttachment> = emptyList()) {
         val trimmed = text.trim()
-        if (trimmed.isEmpty() && imageBytes == null) return
+        if (trimmed.isEmpty() && attachments.isEmpty()) return
         if (!_uiState.value.canSend) return
 
         viewModelScope.launch {
@@ -174,9 +175,8 @@ class ChatViewModel @Inject constructor(
             val conversationId = _uiState.value.conversationId
             val result = chatRepository.sendMessage(
                 conversationId = conversationId,
-                text = trimmed.ifBlank { "این تصویر را تحلیل کن." },
-                image = imageBytes?.inputStream(),
-                imageExtension = imageExtension,
+                text = trimmed.ifBlank { "این فایل‌ها را تحلیل کن." },
+                attachments = attachments,
             )
             // A new conversation row exists after the send (even on failure),
             // so attach this screen to it to show the saved user message.

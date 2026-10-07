@@ -3,6 +3,7 @@ package com.promptsaz.app.ui.screens.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.promptsaz.app.domain.model.DetailLevel
+import com.promptsaz.app.domain.model.UserAttachment
 import com.promptsaz.app.domain.model.KbDomainEntry
 import com.promptsaz.app.domain.model.OutputLanguage
 import com.promptsaz.app.domain.model.PromptMode
@@ -32,6 +33,8 @@ class HomeViewModel @Inject constructor(
     data class UiState(
         val idea: String = "",
         val improveMode: Boolean = false,
+        /** Any-type files the user attached — travel to the model with the spec. */
+        val attachments: List<UserAttachment> = emptyList(),
         val domainId: String = "general",
         val targetAi: TargetAi = TargetAi.ANY,
         val outputLanguage: OutputLanguage = OutputLanguage.SAME_AS_INPUT,
@@ -88,6 +91,15 @@ class HomeViewModel @Inject constructor(
         if (value.length <= MAX_IDEA_CHARS) {
             _uiState.update { it.copy(idea = value, errorFa = null) }
         }
+    }
+
+    /** Adds picked files (any type, any count) to the prompt spec. */
+    fun addAttachments(files: List<UserAttachment>) = _uiState.update {
+        it.copy(attachments = it.attachments + files)
+    }
+
+    fun removeAttachment(index: Int) = _uiState.update {
+        it.copy(attachments = it.attachments.filterIndexed { i, _ -> i != index })
     }
 
     fun setImproveMode(enabled: Boolean) = _uiState.update { it.copy(improveMode = enabled, errorFa = null) }
@@ -179,6 +191,7 @@ class HomeViewModel @Inject constructor(
                     outputLanguage = state.outputLanguage,
                     detailLevel = state.detailLevel,
                     mode = if (state.improveMode) PromptMode.IMPROVE else PromptMode.NEW,
+                    attachments = state.attachments,
                 )
                 true
             }

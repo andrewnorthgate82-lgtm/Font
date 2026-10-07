@@ -1,9 +1,7 @@
 package com.promptsaz.app.ui.screens.chat
 
 import android.graphics.BitmapFactory
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
+import android.widget.Toast
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
@@ -63,8 +61,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.promptsaz.app.domain.model.ChatMessage
+import com.promptsaz.app.domain.model.UserAttachment
 import com.promptsaz.app.ui.components.ModelPickerSheet
+import com.promptsaz.app.ui.components.AttachmentChipsRow
+import com.promptsaz.app.ui.components.ChatAttachmentChips
 import com.promptsaz.app.ui.components.SoftIconButton
+import com.promptsaz.app.ui.components.rememberAttachmentPicker
 import com.promptsaz.app.ui.theme.BrandGradient
 import com.promptsaz.app.util.PlatformUtils
 
@@ -84,25 +86,14 @@ fun ChatScreen(
     val context = LocalContext.current
 
     var input by remember { mutableStateOf("") }
-    var pendingImage by remember { mutableStateOf<Pair<ByteArray, String>?>(null) }
+    val pendingFiles = remember { mutableStateListOf<UserAttachment>() }
     val listState = rememberLazyListState()
 
-    val pickImage = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia(),
-    ) { uri ->
-        if (uri != null) {
-            runCatching {
-                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                if (bytes != null && bytes.isNotEmpty()) {
-                    val extension = context.contentResolver.getType(uri)
-                        ?.substringAfterLast('/')
-                        ?.takeIf { it in setOf("jpeg", "jpg", "png", "webp") }
-                        ?: "jpg"
-                    pendingImage = bytes to extension
-                }
-            }
-        }
-    }
+    // هر نوع فایلی، چندتایی، بدون محدودیت تعداد
+    val pickFiles = rememberAttachmentPicker(
+        onPicked = { files -> pendingFiles.addAll(files) },
+        onNotice = { message -> Toast.makeText(context, message, Toast.LENGTH_SHORT).show() },
+    )
 
     // auto-scroll to the newest message
     LaunchedEffect(state.messages.size, state.sending) {
@@ -294,43 +285,10 @@ fun ChatScreen(
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             Surface(color = MaterialTheme.colorScheme.surface) {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    pendingImage?.let { (bytes, extension) ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 6.dp),
-                        ) {
-                            val bitmap = remember(bytes) {
-                                runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }.getOrNull()
-                            }
-                            bitmap?.let {
-                                Image(
-                                    bitmap = it.asImageBitmap(),
-                                    contentDescription = "تصویر پیوست‌شده",
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .size(46.dp)
-                                        .clip(RoundedCornerShape(10.dp)),
-                                )
-                            }
-                            Text(
-                                text = "تصویر پیوست می‌شود",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Icon(
-                                Icons.Rounded.Close,
-                                contentDescription = "حذف تصویر",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier
-                                    .size(18.dp)
-                                    .clickable { pendingImage = null },
-                            )
-                        }
-                    }
+                    AttachmentChipsRow(
+                        attachments = pendingFiles,
+                        onRemove = { index -> pendingFiles.removeAt(index) },
+                    )
                     Row(
                         verticalAlignment = Alignment.Bottom,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -339,13 +297,9 @@ fun ChatScreen(
                             .padding(horizontal = 12.dp, vertical = 10.dp),
                     ) {
                         SoftIconButton(
-                            icon = Icons.Rounded.Image,
-                            contentDescription = "پیوست تصویر",
-                            onClick = {
-                                pickImage.launch(
-                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                                )
-                            },
+                            icon = Icons.Rounded.AddCircle,
+                            contentDescription = "پیوست فایل (هر نوعی)",
+                            onClick = pickFiles,
                             iconPadding = 16.dp,
                         )
                         OutlinedTextField(
@@ -360,15 +314,15 @@ fun ChatScreen(
                             enabled = !state.sending,
                             modifier = Modifier.weight(1f),
                         )
-                        val canSend = (input.isNotBlank() || pendingImage != null) && !state.sending
+                        val canSend = (input.isNotBlank() || pendingFiles.isNotEmpty()) && !state.sending
                         Surface(
                             shape = RoundedCornerShape(24.dp),
                             color = Color.Transparent,
                             onClick = {
                                 if (canSend) {
-                                    viewModel.send(input, pendingImage?.first, pendingImage?.second)
+                                    viewModel.send(input, pendingFiles.toList())
                                     input = ""
-                                    pendingImage = null
+                                    pendingFiles.clear()
                                 }
                             },
                             enabled = canSend,
@@ -487,7 +441,11 @@ private fun MessageBubble(
                     modifier = Modifier.widthIn(max = 300.dp),
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                        message.imageFileName?.let { fileName ->
+                        ChatAttachmentChips(
+                            attachments = message.attachments,
+                            readImage = viewModel::readImageFile,
+                        )
+                        message.imageFileName?.takeIf { message.attachments.isEmpty() }?.let { fileName ->
                             val bitmap = remember(fileName) {
                                 readImage(fileName)?.let {
                                     runCatching { BitmapFactory.decodeByteArray(it, 0, it.size) }.getOrNull()

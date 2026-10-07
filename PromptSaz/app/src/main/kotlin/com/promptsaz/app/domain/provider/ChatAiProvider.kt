@@ -2,6 +2,7 @@ package com.promptsaz.app.domain.provider
 
 import com.promptsaz.app.domain.model.ChatTurn
 import com.promptsaz.app.domain.model.GeneratedImage
+import com.promptsaz.app.domain.model.UserAttachment
 
 /**
  * Conversational + image-generation capabilities on top of the
@@ -16,12 +17,16 @@ interface ChatAiProvider {
      */
     suspend fun chat(model: String, turns: List<ChatTurn>, serviceId: String? = null): Result<String>
 
-    /** Generates one image from [prompt] via POST {base}/images/generations. */
+    /**
+     * Generates one image from [prompt]. [attachments] may carry reference
+     * images (Gemini image editing) and text files (appended context).
+     */
     suspend fun generateImage(
         model: String,
         prompt: String,
         size: String,
         serviceId: String? = null,
+        attachments: List<UserAttachment> = emptyList(),
     ): Result<GeneratedImage>
 
     /** Downloads raw bytes of a generated-image URL (pre-signed, no auth). */

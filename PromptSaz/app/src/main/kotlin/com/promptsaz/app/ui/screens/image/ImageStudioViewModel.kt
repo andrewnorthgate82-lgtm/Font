@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.promptsaz.app.data.settings.ApiKeyStore
 import com.promptsaz.app.domain.model.ImageGeneration
+import com.promptsaz.app.domain.model.UserAttachment
 import com.promptsaz.app.domain.provider.ImageGenerationUnsupportedException
 import com.promptsaz.app.domain.provider.ProviderRegistry
 import com.promptsaz.app.domain.repository.ImageRepository
@@ -36,6 +37,8 @@ class ImageStudioViewModel @Inject constructor(
     data class UiState(
         val prompt: String = "",
         val size: String = SIZE_SQUARE,
+        /** Any-type attachments — images as references, text files as context. */
+        val attachments: List<UserAttachment> = emptyList(),
         val generating: Boolean = false,
         val errorFa: String? = null,
         val hasKey: Boolean = false,
@@ -186,6 +189,15 @@ class ImageStudioViewModel @Inject constructor(
 
     fun readImage(fileName: String): ByteArray? = imageRepository.readImage(fileName)
 
+    /** Adds picked reference files (any type, any count). */
+    fun addAttachments(files: List<UserAttachment>) = _uiState.update {
+        it.copy(attachments = it.attachments + files)
+    }
+
+    fun removeAttachment(index: Int) = _uiState.update {
+        it.copy(attachments = it.attachments.filterIndexed { i, _ -> i != index })
+    }
+
     /** Generates one image with the selected model and shows it. */
     fun generate() {
         val state = _uiState.value
@@ -196,7 +208,13 @@ class ImageStudioViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _uiState.update { it.copy(generating = true, errorFa = null) }
-            imageRepository.generate(state.prompt, state.selectedModel, state.size, state.serviceId.ifBlank { null })
+            imageRepository.generate(
+                state.prompt,
+                state.selectedModel,
+                state.size,
+                state.serviceId.ifBlank { null },
+                state.attachments,
+            )
                 .onSuccess { generation ->
                     _uiState.update { it.copy(generating = false, current = generation, imageUnsupported = false) }
                 }

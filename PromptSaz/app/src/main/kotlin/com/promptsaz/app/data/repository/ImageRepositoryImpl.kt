@@ -7,6 +7,7 @@ import com.promptsaz.app.data.files.ImageFileStore
 import com.promptsaz.app.domain.model.ChatTurn
 import com.promptsaz.app.domain.model.GeneratedImage
 import com.promptsaz.app.domain.model.ImageGeneration
+import com.promptsaz.app.domain.model.UserAttachment
 import com.promptsaz.app.domain.provider.AiModePrompts
 import com.promptsaz.app.domain.provider.ChatAiProvider
 import com.promptsaz.app.domain.repository.ImageRepository
@@ -34,12 +35,13 @@ class ImageRepositoryImpl @Inject constructor(
         model: String,
         size: String,
         serviceId: String?,
+        attachments: List<UserAttachment>,
     ): Result<ImageGeneration> {
         val trimmedPrompt = prompt.trim()
-        if (trimmedPrompt.isBlank()) {
+        if (trimmedPrompt.isBlank() && attachments.isEmpty()) {
             return Result.failure(IllegalStateException(EMPTY_PROMPT_FA))
         }
-        return provider.generateImage(model, trimmedPrompt, size, serviceId).mapCatching { generated ->
+        return provider.generateImage(model, trimmedPrompt, size, serviceId, attachments).mapCatching { generated ->
             val bytes = when (generated) {
                 is GeneratedImage.FromUrl ->
                     provider.fetchImageBytes(generated.url).getOrElse { error ->
