@@ -75,23 +75,29 @@ class ProviderAttachmentsWireTest {
         OpenAiCompatibleProvider.rateLimitRetryDelaysMs = listOf(10L, 10L, 10L)
 
         server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
-        server!!.createContext("/v1beta/models/gemini-flash-latest:generateContent") { exchange ->
-            geminiHits.incrementAndGet()
-            capturedBody.set(exchange.requestBody.readBytes().toString(Charsets.UTF_8))
-            val wantsImage = exchange.requestURI.path.contains("image")
-            val reply = if (wantsImage) {
-                """{"candidates":[{"content":{"role":"model","parts":[{"inlineData":{"mimeType":"image/png","data":"aWNn"}}]}}]}"""
-            } else {
-                """{"candidates":[{"content":{"role":"model","parts":[{"text":"پاسخ دستیار"}]}}]}"""
+        // one generic handler: prefix contexts cannot match ":generateContent"
+        // per-model paths, so dispatch on the request path instead.
+        server!!.createContext("/") { exchange ->
+            val path = exchange.requestURI.path
+            val reply = when {
+                path.endsWith(":generateContent") -> {
+                    geminiHits.incrementAndGet()
+                    capturedBody.set(exchange.requestBody.readBytes().toString(Charsets.UTF_8))
+                    if (path.contains("image")) {
+                        // an image model answers with an inlineData part
+                        """{"candidates":[{"content":{"role":"model","parts":[{"inlineData":{"mimeType":"image/png","data":"aWNn"}}]}}]}"""
+                    } else {
+                        // a text model answers with the JSON shape parseGeneration() expects
+                        """{"candidates":[{"content":{"role":"model","parts":[{"text":"{\"title\":\"پست کافه\",\"prompt\":\"یک عکس لاته‌آرت روی میز چوبی با نور صبح\"}"}]}}]}"""
+                    }
+                }
+                path.endsWith("/chat/completions") -> {
+                    chatHits.incrementAndGet()
+                    capturedBody.set(exchange.requestBody.readBytes().toString(Charsets.UTF_8))
+                    """{"choices":[{"message":{"role":"assistant","content":"پاسخ دستیار"}}]}"""
+                }
+                else -> "{}"
             }
-            val bytes = reply.toByteArray(Charsets.UTF_8)
-            exchange.sendResponseHeaders(200, bytes.size.toLong())
-            exchange.responseBody.use { it.write(bytes) }
-        }
-        server!!.createContext("/v1/chat/completions") { exchange ->
-            chatHits.incrementAndGet()
-            capturedBody.set(exchange.requestBody.readBytes().toString(Charsets.UTF_8))
-            val reply = """{"choices":[{"message":{"role":"assistant","content":"پاسخ دستیار"}}]}"""
             val bytes = reply.toByteArray(Charsets.UTF_8)
             exchange.sendResponseHeaders(200, bytes.size.toLong())
             exchange.responseBody.use { it.write(bytes) }
@@ -194,7 +200,7 @@ class ProviderAttachmentsWireTest {
     @Test
     fun `gemini image generation sends reference images for editing`() = runBlocking {
         val result = provider(AiService.TYPE_GEMINI).generateImage(
-            model = "gemini-flash-latest",
+            model = "gemini-2.5-flash-image",
             prompt = "این عکس را شب رنگین‌کمانی کن",
             size = "1024x1024",
             attachments = listOf(png),
