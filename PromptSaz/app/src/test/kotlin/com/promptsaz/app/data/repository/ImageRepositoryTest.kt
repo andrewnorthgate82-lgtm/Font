@@ -6,6 +6,7 @@ import com.promptsaz.app.data.files.ImageFileStore
 import com.promptsaz.app.domain.model.ChatTurn
 import com.promptsaz.app.domain.model.GeneratedImage
 import com.promptsaz.app.domain.provider.ChatAiProvider
+import com.promptsaz.app.domain.model.UserAttachment
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
@@ -53,8 +54,13 @@ class ImageRepositoryTest {
             return Result.success(reply)
         }
 
-        override suspend fun generateImage(model: String, prompt: String, size: String, serviceId: String?): Result<GeneratedImage> =
-            Result.failure(IllegalStateException("not used"))
+        override suspend fun generateImage(
+            model: String,
+            prompt: String,
+            size: String,
+            serviceId: String?,
+            attachments: List<UserAttachment>,
+        ): Result<GeneratedImage> = Result.failure(IllegalStateException("not used"))
 
         override suspend fun fetchImageBytes(url: String): Result<ByteArray> =
             Result.failure(IllegalStateException("not used"))
