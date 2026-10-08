@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+output_cards/
+output_cards_3months/
+reports_test/
+reports_backup/
+reports/*.xlsx
+!reports/put_reports_here.txt
+کارنامه_۳ماهه_نواحی_*.xlsx
+کارنامه_نواحی_*.xlsx

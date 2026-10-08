@@ -1,0 +1,828 @@
+# -*- coding: utf-8 -*-
+"""
+====================================================================
+سامانه هوشمند تجمیع خودکار فایل‌های گزارش ماهانه کارمندان نواحی نسرا
+استان اصفهان - سال ۱۴۰۵
+پشتیبانی از تفکیک کامل ماه و سال، پوشه‌بندی اختصاصی هر ماه،
+ثبت صفر برای نواحی بدون فعالیت و صدور تصاویر عمودی ۱۰۸۰×۱۹۲۰ موبایل
+====================================================================
+"""
+
+import sys
+import os
+import re
+import glob
+import shutil
+import subprocess
+
+# Fix Windows console UTF-8 output
+if sys.platform == 'win32':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
+# Ensure working directory is the script folder
+script_dir = os.path.dirname(os.path.abspath(__file__))
+if script_dir:
+    os.chdir(script_dir)
+
+def ensure_dependencies():
+    packages = {
+        'openpyxl': 'openpyxl',
+        'PIL': 'pillow',
+        'arabic_reshaper': 'arabic-reshaper',
+        'bidi': 'python-bidi'
+    }
+    missing = []
+    for mod, pip_name in packages.items():
+        try:
+            __import__(mod)
+        except ImportError:
+            missing.append(pip_name)
+            
+    if missing:
+        print("=" * 75)
+        print(f"📦 Installing required libraries ({', '.join(missing)})...")
+        print("=" * 75)
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing + ["--quiet", "--break-system-packages"])
+            print("✓ Packages installed successfully.\n")
+        except Exception:
+            try:
+                subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing + ["--quiet"])
+                print("✓ Packages installed successfully.\n")
+            except Exception as e:
+                print(f"⚠️ Warning: Could not auto-install packages: {e}\n")
+
+ensure_dependencies()
+
+import openpyxl
+
+MONTH_INFO = [
+    (1, "Farvardin", "فروردین"),
+    (2, "Ordibehesht", "اردیبهشت"),
+    (3, "Khordad", "خرداد"),
+    (4, "Tir", "تیر"),
+    (5, "Mordad", "مرداد"),
+    (6, "Shahrivar", "شهریور"),
+    (7, "Mehr", "مهر"),
+    (8, "Aban", "آبان"),
+    (9, "Azar", "آذر"),
+    (10, "Dey", "دی"),
+    (11, "Bahman", "بهمن"),
+    (12, "Esfand", "اسفند")
+]
+
+MONTH_MAP = {}
+for num, en_name, fa_name in MONTH_INFO:
+    MONTH_MAP[str(num)] = fa_name
+    MONTH_MAP[en_name.lower()] = fa_name
+    MONTH_MAP[fa_name] = fa_name
+
+DISTRICTS = [
+    'آران و بیدگل', 'امام حسین(ع)', 'امام رضا(ع)', 'امام صادق(ع)', 'امام علی(ع)',
+    'اردستان', 'برخوار', 'بویین و میاندشت', 'تیران و کرون', 'جرقویه',
+    'چادگان', 'خمینی شهر', 'خوانسار', 'خور و بیابانک', 'درچه',
+    'دهاقان', 'سمیرم', 'شاهین شهر', 'شهرضا', 'فریدن',
+    'فریدون شهر', 'فلاورجان', 'کاشان', 'کوهپایه', 'گلپایگان',
+    'لنجان', 'مبارکه', 'نایین', 'نجف آباد', 'نطنز',
+    'ورزنه', 'هرند'
+]
+
+DISTRICT_EN_NAMES = {
+    'آران و بیدگل': 'Aran_va_Bidgol',
+    'امام حسین(ع)': 'Emam_Hossein',
+    'امام رضا(ع)': 'Emam_Reza',
+    'امام صادق(ع)': 'Emam_Sadegh',
+    'امام علی(ع)': 'Emam_Ali',
+    'اردستان': 'Ardestan',
+    'برخوار': 'Borkhar',
+    'بویین و میاندشت': 'Boein_Miandasht',
+    'تیران و کرون': 'Tiran_va_Karvan',
+    'جرقویه': 'Jarghooyeh',
+    'چادگان': 'Chadegan',
+    'خمینی شهر': 'Khomeyni_Shahr',
+    'خوانسار': 'Khansar',
+    'خور و بیابانک': 'Khor_Biabanak',
+    'درچه': 'Dorcheh',
+    'دهاقان': 'Dehaghan',
+    'سمیرم': 'Semirom',
+    'شاهین شهر': 'Shahin_Shahr',
+    'شهرضا': 'Shahreza',
+    'فریدن': 'Fereydan',
+    'فریدون شهر': 'Fereydoon_Shahr',
+    'فلاورجان': 'Falavarjan',
+    'کاشان': 'Kashan',
+    'کوهپایه': 'Koohpayeh',
+    'گلپایگان': 'Golpayegan',
+    'لنجان': 'Lenjan',
+    'مبارکه': 'Mobarakeh',
+    'نایین': 'Naeen',
+    'نجف آباد': 'Najaf_Abad',
+    'نطنز': 'Natanz',
+    'ورزنه': 'Varzaneh',
+    'هرند': 'Harand'
+}
+
+DISTRICT_ALIASES = {
+    'آران و بیدگل': ['آران', 'بیدگل', 'aran', 'bidgol'],
+    'اردستان': ['اردستان', 'زوار', 'مهاباد اردستان', 'ardestan', 'ardestn'],
+    'امام حسین(ع)': ['امام حسین', 'حسین ع', 'ناحیه امام حسین', 'emam hossein', 'hosein', 'hossein', 'emam hosein'],
+    'امام رضا(ع)': ['امام رضا', 'رضا ع', 'ناحیه امام رضا', 'emam reza', 'reza'],
+    'امام صادق(ع)': ['امام صادق', 'صادق ع', 'ناحیه امام صادق', 'emam sadegh', 'sadegh', 'sadeq'],
+    'امام علی(ع)': ['امام علی', 'ناحیه امام علی', 'emam ali'],
+    'برخوار': ['برخوار', 'دولت آباد', 'دولت‌آباد', 'دستگرد', 'borkhar', 'barkhar', 'dolatabad'],
+    'بویین و میاندشت': ['بویین', 'میاندشت', 'بوئین', 'boin', 'bouin', 'buin', 'miandasht'],
+    'تیران و کرون': ['تیران', 'کرون', 'تیران کرون', 'tiran', 'karvan', 'koron'],
+    'جرقویه': ['جرقویه', 'نیک آباد', 'jarghooyeh', 'jarghooye', 'jarqavieh'],
+    'چادگان': ['چادگان', 'chadegan'],
+    'خمینی شهر': ['خمینی شهر', 'خمینی‌شهر', 'همایون شهر', 'khomeini', 'khomeinishahr'],
+    'خوانسار': ['خوانسار', 'khansar', 'khwansar'],
+    'خور و بیابانک': ['خور', 'بیابانک', 'خور و بیابانک', 'جندق', 'khoor', 'khur', 'biabanak'],
+    'درچه': ['درچه', 'dorcheh', 'dorche', 'dorce'],
+    'دهاقان': ['دهاقان', 'عطاآباد', 'dehaqan', 'dehaghan'],
+    'سمیرم': ['سمیرم', 'semirom'],
+    'شاهین شهر': ['شاهین شهر', 'شاهین‌شهر', 'شاهین', 'shahin', 'shahinshahr'],
+    'شهرضا': ['شهرضا', 'قمشه', 'shahreza'],
+    'فریدن': ['فریدن', 'داران', 'fereydan', 'fereidan', 'daran'],
+    'فریدون شهر': ['فریدون شهر', 'فریدون‌شهر', 'fereydunshahr', 'fereydoonshahr'],
+    'فلاورجان': ['فلاورجان', 'قاهدریجان', 'falavarjan'],
+    'کاشان': ['کاشان', 'قمصر', 'kashan'],
+    'کوهپایه': ['کوهپایه', 'تودشک', 'koohpayeh', 'kuhpayeh'],
+    'گلپایگان': ['گلپایگان', 'گلپايگان', 'گوگد', 'گلشهر', 'golpayegan', 'golpaygan', 'golpaigan', 'golpaegan', 'golpaygon'],
+    'لنجان': ['لنجان', 'زرین شهر', 'زرین‌شهر', 'سده لنجان', 'lenjan', 'zarrinshahr'],
+    'مبارکه': ['مبارکه', 'دیزیچه', 'mobarakeh', 'mobarake'],
+    'نایین': ['نایین', 'نائین', 'انارک', 'بافران', 'naeen', 'nain', 'naein'],
+    'نجف آباد': ['نجف آباد', 'نجف‌آباد', 'یزدانشهر', 'گلدشت', 'najafabad', 'najaf abad'],
+    'نطنز': ['نطنز', 'بادرود', 'natanz', 'badrood'],
+    'ورزنه': ['ورزنه', 'varzaneh', 'varzane'],
+    'هرند': ['هرند', 'اژیه', 'harand']
+}
+
+def clean_str(s):
+    if s is None:
+        return ""
+    s = unicodedata.normalize('NFKC', str(s)).strip()
+    s = s.replace('ي', 'ی').replace('ك', 'ک').replace('ة', 'ه').replace('ۀ', 'ه')
+    s = s.replace('آ', 'ا').replace('أ', 'ا').replace('إ', 'ا').replace('ئ', 'ی')
+    s = re.sub(r'[\u064B-\u065F\u0670]', '', s)
+    s = re.sub(r'\s*\([عeE]\)|\s*\[[عeE]\]|\s*\([عeE][جjJ]\)|\s*\([رr][هh]\)', '', s)
+    s = re.sub(r'علیه\s*السلام', '', s)
+    prefixes = [
+        'ناحیه مقاومت بسیج', 'ناحیه مقاومت', 'سپاه ناحیه', 'سپاه',
+        'کانون سواد فضای مجازی', 'قرارگاه فضای مجازی', 'فضای مجازی',
+        'کانون', 'دفتر', 'ناحیه', 'شهرستان', 'بسیج'
+    ]
+    for prefix in prefixes:
+        s = s.replace(prefix, '')
+    s = re.sub(r'[\(\)\[\]\{\}\.\_\-\:\/\d\s\u200c\u00a0]+', '', s)
+    return s
+
+def clean_no_vav(s):
+    return clean_str(s).replace('و', '')
+
+def match_district_name(text):
+    if not text:
+        return None
+    s_raw = str(text).strip()
+    if not s_raw:
+        return None
+
+    if s_raw in ['پوشه اصلی برنامه', 'پوشه reports', 'reports', 'گزارش مستقیم', 'گزارش عملکرد']:
+        return None
+
+    c_raw = clean_str(s_raw)
+    c_raw_nv = clean_no_vav(s_raw)
+    s_lower = s_raw.lower()
+
+    # 1. Exact match with canonical list
+    for d in DISTRICTS:
+        cd = clean_str(d)
+        if cd and (cd == c_raw or (len(cd) >= 4 and cd in c_raw)):
+            return d
+
+    # 2. Check Aliases (Persian & English transliterations)
+    for d, aliases in DISTRICT_ALIASES.items():
+        for al in aliases:
+            al_clean = clean_str(al)
+            if al_clean and (al_clean == c_raw or (len(al_clean) >= 4 and al_clean in c_raw)):
+                return d
+            al_low = al.lower()
+            if len(al_low) >= 4 and al_low in s_lower:
+                return d
+
+    # 3. Match without Vav
+    for d in DISTRICTS:
+        cd_nv = clean_no_vav(d)
+        if cd_nv and (cd_nv == c_raw_nv or (len(cd_nv) >= 4 and cd_nv in c_raw_nv)):
+            return d
+
+    return None
+
+def parse_number(val):
+    if val is None:
+        return 0
+    if isinstance(val, (int, float)):
+        return int(val) if isinstance(val, int) or val.is_integer() else val
+    s = str(val).strip()
+    if not s:
+        return 0
+    p_digits = '۰۱۲۳۴۵۶۷۸۹'
+    a_digits = '٠١٢٣٤٥٦٧٨٩'
+    for i in range(10):
+        s = s.replace(p_digits[i], str(i)).replace(a_digits[i], str(i))
+    for sep in [',', '،', '٬', '٫', '\u066c', '\u066b', ' ', '\u00a0', '\u200c', 'نفر', 'مخاطب', 'عدد', 'صفحه', 'بازدید', 'مورد']:
+        s = s.replace(sep, '')
+    match = re.search(r'\d+(\.\d+)?', s)
+    if match:
+        try:
+            num_str = match.group()
+            return float(num_str) if '.' in num_str else int(num_str)
+        except Exception:
+            return 0
+    return 0
+
+def detect_district_from_workbook(wb, fpath, folder_label=''):
+    fname = os.path.basename(fpath)
+    d = match_district_name(fname)
+    if d:
+        return d, "نام فایل"
+
+    if folder_label and folder_label not in ['پوشه اصلی برنامه', 'پوشه reports', 'reports']:
+        for part in folder_label.replace('\\', '/').split('/'):
+            d = match_district_name(part)
+            if d:
+                return d, f"پوشه «{part}»"
+
+    parent_dir = os.path.basename(os.path.dirname(os.path.abspath(fpath)))
+    if parent_dir and parent_dir not in ['Font', 'reports', 'Downloads']:
+        d = match_district_name(parent_dir)
+        if d:
+            return d, f"پوشه والد «{parent_dir}»"
+
+    for sname in wb.sheetnames:
+        d = match_district_name(sname)
+        if d:
+            return d, f"نام شیت «{sname}»"
+
+    try:
+        if wb.properties and wb.properties.title:
+            d = match_district_name(wb.properties.title)
+            if d:
+                return d, "متادیتای عنوان سند"
+    except Exception:
+        pass
+
+    district_counts = Counter()
+    for sname in wb.sheetnames:
+        cn = clean_str(sname)
+        if any(w in cn for w in ['اطلاعاتپایه', 'dropdown', 'base', 'ref', 'لیست', 'پایه', 'پایگاهداده']):
+            continue
+
+        ws = wb[sname]
+        max_r = min(ws.max_row + 1, 80)
+        max_c = min(ws.max_column + 1, 20)
+
+        found_in_sheet = set()
+        sheet_hits = Counter()
+
+        for r in range(1, max_r):
+            for c in range(1, max_c):
+                v = ws.cell(r, c).value
+                if v is not None:
+                    md = match_district_name(v)
+                    if md:
+                        found_in_sheet.add(md)
+                        weight = 5 if r <= 8 else 1
+                        sheet_hits[md] += weight
+
+        if len(found_in_sheet) > 3:
+            continue
+
+        for dist, cnt in sheet_hits.items():
+            district_counts[dist] += cnt
+
+    if district_counts:
+        best_district, count = district_counts.most_common(1)[0]
+        return best_district, f"محتوای سلول‌های شیت ({count} بار مشاهده)"
+
+    return None, "عدم شناسایی"
+
+def extract_sheet_metrics(ws):
+    if ws is None:
+        return {'people_sum': 0, 'classes_count': 0, 'col_name': None}
+    
+    target_col = None
+    target_col_name = None
+    header_keywords_primary = [
+        'نفر', 'بازدید', 'مخاطب', 'شرکت', 'تیراژ', 'مجموع', 'فراگیر',
+        'حاضر', 'دانش', 'بسیج', 'عموم', 'people', 'view', 'participants', 'attendee'
+    ]
+    header_keywords_secondary = [
+        'تعداد', 'صفحه', 'صفحات', 'میزان', 'آمار', 'جمعیت', 'count', 'total', 'number'
+    ]
+
+    header_row = 1
+    for r in range(1, min(ws.max_row + 1, 6)):
+        for c in range(1, ws.max_column + 1):
+            h = str(ws.cell(r, c).value or '').lower()
+            if any(k in h for k in header_keywords_primary):
+                target_col = c
+                target_col_name = h
+                header_row = r
+                break
+        if target_col:
+            break
+
+    if target_col is None:
+        for r in range(1, min(ws.max_row + 1, 6)):
+            for c in range(1, ws.max_column + 1):
+                h = str(ws.cell(r, c).value or '').lower()
+                if any(k in h for k in header_keywords_secondary):
+                    target_col = c
+                    target_col_name = h
+                    header_row = r
+                    break
+            if target_col:
+                break
+
+    total_people = 0
+    active_classes = 0
+    start_row = header_row + 1
+
+    for r in range(start_row, ws.max_row + 1):
+        has_act = any(
+            ws.cell(r, c).value is not None and str(ws.cell(r, c).value).strip() != ''
+            for c in range(2, ws.max_column + 1)
+        )
+        if not has_act and ws.cell(r, 1).value is not None and len(str(ws.cell(r, 1).value).strip()) > 3:
+            has_act = True
+
+        if has_act:
+            active_classes += 1
+            if target_col:
+                v = ws.cell(r, target_col).value
+                total_people += parse_number(v)
+            else:
+                for c in range(2, ws.max_column + 1):
+                    val = ws.cell(r, c).value
+                    p_num = parse_number(val)
+                    if p_num > 0 and p_num != r:
+                        total_people += p_num
+                        break
+
+    return {
+        'people_sum': int(total_people),
+        'classes_count': active_classes,
+        'col_name': target_col_name
+    }
+
+def extract_workbook_indicators(wb):
+    ws_hoz = None
+    ws_tav = None
+    ws_maj = None
+    ws_kha = None
+    ws_tol = None
+
+    for sname in wb.sheetnames:
+        cn = clean_str(sname)
+        if 'حضوری' in cn or 'کارگاه' in cn or 'کلاس' in cn:
+            ws_hoz = wb[sname]
+        elif 'توانمند' in cn:
+            ws_tav = wb[sname]
+        elif 'مجازی' in cn or 'لایو' in cn or 'آنلاین' in cn or 'وبینار' in cn:
+            ws_maj = wb[sname]
+        elif 'خلاق' in cn or 'پویش' in cn or 'مسابقه' in cn or 'ابتکار' in cn:
+            ws_kha = wb[sname]
+        elif 'تولید' in cn or 'رسانه' in cn or 'محتوا' in cn or 'کلیپ' in cn:
+            ws_tol = wb[sname]
+
+    if any([ws_hoz, ws_tav, ws_maj, ws_kha, ws_tol]):
+        m_hoz = extract_sheet_metrics(ws_hoz)
+        m_tav = extract_sheet_metrics(ws_tav)
+        m_maj = extract_sheet_metrics(ws_maj)
+        m_kha = extract_sheet_metrics(ws_kha)
+        m_tol = extract_sheet_metrics(ws_tol)
+
+        hoz_val = (m_hoz['people_sum'] + m_tav['people_sum'])
+        if hoz_val == 0:
+            hoz_val = m_hoz['classes_count'] + m_tav['classes_count']
+
+        maj_val = m_maj['people_sum'] if m_maj['people_sum'] > 0 else m_maj['classes_count']
+        kha_val = m_kha['people_sum'] if m_kha['people_sum'] > 0 else m_kha['classes_count']
+        tol_val = m_tol['people_sum'] if m_tol['people_sum'] > 0 else m_tol['classes_count']
+
+        return hoz_val, maj_val, kha_val, tol_val
+
+    # Fallback for single-sheet summaries
+    ws = wb.active
+    hoz_val, maj_val, kha_val, tol_val = 0, 0, 0, 0
+    for r in range(1, ws.max_row + 1):
+        row_text = ' '.join(str(ws.cell(r, c).value or '') for c in range(1, ws.max_column + 1))
+        row_val = 0
+        for c in range(ws.max_column, 0, -1):
+            val = ws.cell(r, c).value
+            p_num = parse_number(val)
+            if p_num > 0 and p_num != r:
+                row_val = p_num
+                break
+
+        if 'حضوری' in row_text or 'توانمند' in row_text or 'کارگاه' in row_text:
+            hoz_val += row_val
+        elif 'مجازی' in row_text or 'لایو' in row_text or 'وبینار' in row_text or 'آنلاین' in row_text:
+            maj_val += row_val
+        elif 'خلاق' in row_text or 'مسابقه' in row_text or 'پویش' in row_text:
+            kha_val += row_val
+        elif 'تولید' in row_text or 'رسانه' in row_text or 'کلیپ' in row_text:
+            tol_val += row_val
+
+    return hoz_val, maj_val, kha_val, tol_val
+
+def prompt_month_and_year(default_month='شهریور', default_year='1405'):
+    print("=" * 75)
+    print("   NASRA DISTRICT PERFORMANCE MONITORING & SCORECARD SYSTEM")
+    print("   سامانه هوشمند تجمیع عملکرد و صدور کارنامه نواحی نسرا - استان اصفهان")
+    print("=" * 75)
+    print("\nSelect Evaluation Month (Shomare Mah ra entekhab konid):\n")
+    print("  [1] Farvardin   (فروردین)      [7]  Mehr        (مهر)")
+    print("  [2] Ordibehesht (اردیبهشت)     [8]  Aban        (آبان)")
+    print("  [3] Khordad     (خرداد)        [9]  Azar        (آذر)")
+    print("  [4] Tir         (تیر)          [10] Dey         (دی)")
+    print("  [5] Mordad      (مرداد)        [11] Bahman      (بهمن)")
+    print("  [6] Shahrivar   (شهریور)       [12] Esfand      (اسفند)")
+    print("-" * 75)
+    
+    selected_m = default_month
+    try:
+        user_choice = input(f"Enter month number (e.g. 4 for Tir, 5 for Mordad) [Default: 6 = Shahrivar]: ").strip()
+        if user_choice:
+            user_choice_lower = user_choice.lower()
+            if user_choice_lower in MONTH_MAP:
+                selected_m = MONTH_MAP[user_choice_lower]
+            elif user_choice.isdigit() and 1 <= int(user_choice) <= 12:
+                selected_m = MONTH_INFO[int(user_choice) - 1][2]
+    except (EOFError, KeyboardInterrupt):
+        selected_m = default_month
+
+    selected_y = default_year
+    try:
+        user_year = input(f"Enter evaluation year (Sal) [Default: {default_year}]: ").strip()
+        if user_year:
+            selected_y = user_year
+    except (EOFError, KeyboardInterrupt):
+        selected_y = default_year
+        
+    return selected_m, selected_y
+
+def find_reports_folder(month_name, year="1405"):
+    """
+    جستجوی جامع و هوشمند فایل‌های اکسل گزارش برای تجمیع ماهانه:
+    1. پوشه‌های شامل نام ماه در reports (مثلاً reports/شهریور 1405 یا reports/شهریور)
+    2. پوشه reports مستقیم
+    3. پوشه اصلی برنامه (.)
+    """
+    os.makedirs('reports', exist_ok=True)
+    target_folder = os.path.join('reports', f"{month_name} {year}")
+
+    collected = []
+    seen = set()
+
+    # 1. Look for subfolders in reports/ that match month_name
+    for d in sorted(os.listdir('reports')):
+        full_d = os.path.join('reports', d)
+        if os.path.isdir(full_d) and month_name in d:
+            target_folder = full_d
+            for f in sorted(glob.glob(os.path.join(full_d, '*.xlsx'))):
+                if not os.path.basename(f).startswith('~$'):
+                    ap = os.path.abspath(f)
+                    if ap not in seen:
+                        seen.add(ap)
+                        collected.append(f)
+
+    # 2. Also check reports/ root
+    for f in sorted(glob.glob(os.path.join('reports', '*.xlsx'))):
+        if not os.path.basename(f).startswith('~$'):
+            ap = os.path.abspath(f)
+            if ap not in seen:
+                seen.add(ap)
+                collected.append(f)
+
+    # 3. Check current folder for report files
+    excluded = {
+        'تهیه کارنامه نواحی.xlsx', 'تهیه کارنامه ۳ ماهه نواحی.xlsx',
+        'نمرات_نهایی_نواحی.xlsx', 'final_scores.xlsx',
+        'master_monitoring.xlsx', 'monthly_scorecard.xlsx',
+        'گزارش شهریور ماه 1405 ناحیه.xlsx',
+        'نمرات_عملکرد_۲ماهه.xlsx', 'نمرات_عملکرد_۳ماهه.xlsx', 'نمرات_عملکرد_۶ماهه.xlsx'
+    }
+    for f in sorted(os.listdir('.')):
+        if f.endswith('.xlsx') and not f.startswith('~$') and f not in excluded and not f.startswith('کارنامه_'):
+            ap = os.path.abspath(f)
+            if ap not in seen:
+                seen.add(ap)
+                collected.append(f)
+
+    return target_folder, collected
+
+def process_all_reports(master_excel="تهیه کارنامه نواحی.xlsx", selected_month=None, selected_year=None):
+    if not os.path.exists(master_excel):
+        print(f"❌ Error: Master Excel file '{master_excel}' not found!")
+        return False, "شهریور", "1405"
+        
+    wb_master = openpyxl.load_workbook(master_excel)
+    ws_card = wb_master['کارنامه هوشمند']
+    
+    def_month = str(ws_card['C3'].value or 'شهریور').strip()
+    if def_month not in [m[2] for m in MONTH_INFO]:
+        def_month = 'شهریور'
+        
+    def_year = str(ws_card['E3'].value or '1405').strip() if 'E3' in ws_card else '1405'
+
+    if selected_month and selected_year:
+        month = selected_month
+        year = selected_year
+    elif selected_month:
+        month = selected_month
+        year = def_year
+    else:
+        month, year = prompt_month_and_year(default_month=def_month, default_year=def_year)
+        
+    # Update Excel headers
+    ws_card['C3'].value = month
+    ws_card['E3'].value = str(year)
+    
+    print("-" * 75)
+    print(f"✓ Selected Evaluation Period: Month [{month}] - Year [{year}]")
+    
+    folder_name, excel_files = find_reports_folder(month, year)
+    print(f"📁 Reports folder: '{folder_name}' | Received Excel files: {len(excel_files)}")
+    print("-" * 75)
+    
+    if not excel_files:
+        print(f"⚠️ No employee Excel reports found in '{folder_name}'.")
+        print(f"💡 Please copy the monthly report Excel files into folder '{folder_name}'.")
+        wb_master.save(master_excel)
+        return False, month, str(year)
+        
+    extracted = {}
+    
+    for fpath in excel_files:
+        fname = os.path.basename(fpath)
+        try:
+            wb = openpyxl.load_workbook(fpath, data_only=True)
+            detected, detection_reason = detect_district_from_workbook(wb, fpath, folder_name)
+
+            if not detected:
+                print(f"⚠️ Could not detect district for file: '{fname}'")
+                continue
+
+            hoz_val, maj_val, kha_val, tol_val = extract_workbook_indicators(wb)
+            neshast = 1 if (hoz_val + maj_val + kha_val + tol_val) > 0 else 0
+
+            extracted[detected] = {
+                'hozori_total': hoz_val,
+                'majazi': maj_val,
+                'khalagh': kha_val,
+                'tolid': tol_val,
+                'neshast': neshast,
+                'details': f"حضوری: {hoz_val} نفر | مجازی: {maj_val} نفر | خلاقانه: {kha_val} نفر | تولیدات: {tol_val}"
+            }
+            print(f"✓ [{detected}] (شناسایی از: {detection_reason}): {extracted[detected]['details']}")
+
+        except Exception as e:
+            print(f"❌ Error processing file '{fname}': {e}")
+
+    print("-" * 75)
+    print("💾 Updating metrics into master Excel file...")
+    
+    ws_rep = wb_master['گزارش عملکرد ماهانه']
+    row_map = {}
+    for r in range(2, ws_rep.max_row + 1):
+        dname = ws_rep.cell(r, 1).value
+        if dname:
+            row_map[clean_str(dname)] = r
+            row_map[clean_no_vav(dname)] = r
+
+    active_count = 0
+    inactive_count = 0
+    
+    for dname in DISTRICTS:
+        r = row_map.get(clean_str(dname)) or row_map.get(clean_no_vav(dname))
+        if not r:
+            continue
+            
+        if dname in extracted:
+            data = extracted[dname]
+            ws_rep.cell(row=r, column=2, value=data['hozori_total'])
+            ws_rep.cell(row=r, column=3, value=data['majazi'])
+            ws_rep.cell(row=r, column=4, value=data['khalagh'])
+            ws_rep.cell(row=r, column=5, value=data['tolid'])
+            ws_rep.cell(row=r, column=6, value=data['neshast'])
+            active_count += 1
+        else:
+            # District had no file in this month -> zero performance!
+            ws_rep.cell(row=r, column=2, value=0)
+            ws_rep.cell(row=r, column=3, value=0)
+            ws_rep.cell(row=r, column=4, value=0)
+            ws_rep.cell(row=r, column=5, value=0)
+            ws_rep.cell(row=r, column=6, value=0)
+            inactive_count += 1
+            print(f"⭕ [{dname}]: گزارشی ارسال نشده (عملکرد ماه {month} صفر ثبت گردید)")
+
+    wb_master.save(master_excel)
+    
+    # Save a dedicated monthly archive copy
+    archive_name = f"کارنامه_نواحی_{month}_{year}.xlsx"
+    try:
+        shutil.copyfile(master_excel, archive_name)
+        print(f"📁 یک نسخه پشتیبان با نام '{archive_name}' ذخیره شد.")
+    except Exception:
+        pass
+        
+    print(f"🎉 عملیات ثبت در اکسل کامل شد! {active_count} ناحیه فعال و {inactive_count} ناحیه فاقد فعالیت ثبت گردید.")
+    return True, month, str(year)
+
+def generate_all_images_offline(master_excel="تهیه کارنامه نواحی.xlsx", month="شهریور", year="1405"):
+    try:
+        from image_generator import generate_scorecard_png, generate_dashboard_png
+    except Exception as e:
+        print("⚠️ ماژول‌های تولید تصویر در دسترس نیستند:", e)
+        return
+        
+    # Main folder and month-dedicated folder
+    out_dir_main = "output_cards"
+    out_dir_month = os.path.join(out_dir_main, f"{month}_{year}")
+    os.makedirs(out_dir_month, exist_ok=True)
+    
+    print("-" * 75)
+    print(f"📸 Generating mobile scorecards for 32 districts ({month} {year}) in '{out_dir_month}'...")
+    
+    if not os.path.exists(master_excel):
+        print(f"❌ فایل '{master_excel}' یافت نشد.")
+        return
+
+    wb = openpyxl.load_workbook(master_excel, data_only=True)
+    ws_target = wb['پایگاه داده حد انتظار']
+    ws_rep = wb['گزارش عملکرد ماهانه']
+    
+    targets = {}
+    for r in range(2, 34):
+        dn = ws_target.cell(r, 1).value
+        targets[dn] = {
+            'branches': ws_target.cell(r, 2).value or 0,
+            'hozori': ws_target.cell(r, 3).value or 0,
+            'majazi': ws_target.cell(r, 4).value or 0,
+            'khalagh': ws_target.cell(r, 5).value or 0,
+            'tolid': ws_target.cell(r, 6).value or 0,
+            'neshast': ws_target.cell(r, 7).value or 1
+        }
+        
+    actuals = {}
+    for r in range(2, ws_rep.max_row + 1):
+        dn = ws_rep.cell(r, 1).value
+        if dn:
+            actuals[dn] = {
+                'hozori': ws_rep.cell(r, 2).value or 0,
+                'majazi': ws_rep.cell(r, 3).value or 0,
+                'khalagh': ws_rep.cell(r, 4).value or 0,
+                'tolid': ws_rep.cell(r, 5).value or 0,
+                'neshast': ws_rep.cell(r, 6).value or 0
+            }
+            
+    dist_scores = []
+    for dn, t in targets.items():
+        a = actuals.get(dn, {'hozori': 0, 'majazi': 0, 'khalagh': 0, 'tolid': 0, 'neshast': 0})
+        
+        r_hoz = (a['hozori'] / t['hozori']) if t.get('hozori', 0) > 0 else 0.0
+        r_maj = (a['majazi'] / t['majazi']) if t.get('majazi', 0) > 0 else 0.0
+        r_kha = (a['khalagh'] / t['khalagh']) if t.get('khalagh', 0) > 0 else 0.0
+        r_tol = (a['tolid'] / t['tolid']) if t.get('tolid', 0) > 0 else 0.0
+        
+        # 1. Training (10% Hozori + 30% Majazi -> 40% max, surplus to creative)
+        raw_training = (0.10 * r_hoz) + (0.30 * r_maj)
+        training_share = min(0.40, raw_training)
+        surplus_training = max(0.0, raw_training - 0.40)
+        
+        # 2. Creative (50% max with surplus training added)
+        khalagh_share = min(0.50, (0.50 * r_kha) + surplus_training)
+        
+        # 3. Productions (10% max)
+        tolid_share = min(0.10, 0.10 * r_tol)
+        
+        total_realization = training_share + khalagh_share + tolid_share
+        final_score = round(70.0 + 30.0 * total_realization, 1)
+        
+        a['training_share'] = training_share
+        a['khalagh_share'] = khalagh_share
+        a['tolid_share'] = tolid_share
+        a['total_realization'] = total_realization * 100.0
+        a['final_score'] = final_score
+        a['overall_score'] = final_score
+        
+        dist_scores.append((dn, final_score, total_realization))
+        
+    dist_scores.sort(key=lambda x: (x[1], x[2]), reverse=True)
+    
+    rank_map = {}
+    current_rank = 1
+    for dn, sc, real in dist_scores:
+        if sc > 70.0:
+            rank_map[dn] = str(current_rank)
+            current_rank += 1
+        else:
+            rank_map[dn] = "عدم فعالیت"
+    
+    count_img = 0
+    for dn in DISTRICTS:
+        t = targets.get(dn, {})
+        a = actuals.get(dn, {'overall_score': 70.0})
+        sc = a.get('overall_score', 70.0)
+        rk = rank_map.get(dn, "عدم فعالیت")
+        
+        tier = "عالی" if sc >= 90.0 else ("متوسط" if sc >= 80.0 else "ضعیف")
+        en_name = DISTRICT_EN_NAMES.get(dn, dn)
+        
+        out_p_month_fa = os.path.join(out_dir_month, f"کارنامه_{dn}.png")
+        out_p_month_en = os.path.join(out_dir_month, f"Scorecard_{en_name}.png")
+        
+        try:
+            generate_scorecard_png(dn, t, a, rank=rk, tier=tier, month=month, year=str(year), output_path=out_p_month_fa)
+            shutil.copyfile(out_p_month_fa, out_p_month_en)
+            count_img += 1
+        except Exception as err:
+            print(f"Error generating scorecard for {dn}: {err}")
+
+    # Provincial Dashboard
+    sum_t_hoz = sum(targets[d]['hozori'] for d in targets)
+    sum_t_maj = sum(targets[d]['majazi'] for d in targets)
+    sum_t_kha = sum(targets[d]['khalagh'] for d in targets)
+    sum_t_tol = sum(targets[d]['tolid'] for d in targets)
+    sum_t_nes = sum(targets[d]['neshast'] for d in targets)
+    
+    sum_a_hoz = sum(actuals.get(d, {}).get('hozori', 0) for d in targets)
+    sum_a_maj = sum(actuals.get(d, {}).get('majazi', 0) for d in targets)
+    sum_a_kha = sum(actuals.get(d, {}).get('khalagh', 0) for d in targets)
+    sum_a_tol = sum(actuals.get(d, {}).get('tolid', 0) for d in targets)
+    sum_a_nes = sum(actuals.get(d, {}).get('neshast', 0) for d in targets)
+    
+    macro_data = [
+        ('سواد رسانه حضوری و توانمندسازی (ضریب ۳۱)', int(sum_t_hoz), int(sum_a_hoz)),
+        ('سواد رسانه مجازی و لایو (ضریب ۲۱۷)', int(sum_t_maj), int(sum_a_maj)),
+        ('اقدامات و ابتکارات خلاقانه (ضریب ۶۲)', int(sum_t_kha), int(sum_a_kha)),
+        ('تولیدات رسانه‌ای و محتوایی (ضریب ۳)', int(sum_t_tol), int(sum_a_tol)),
+        ('نشست با انجمن مدرسان (۱ نشست)', int(sum_t_nes), int(sum_a_nes))
+    ]
+    
+    active_dists = [x for x in dist_scores if x[1] > 70.0]
+    inactive_dists = [x for x in dist_scores if x[1] <= 70.0]
+    
+    top5 = [(i+1, active_dists[i][0], active_dists[i][1]) for i in range(min(5, len(active_dists)))]
+    all_sorted = active_dists + inactive_dists
+    bot5 = [(i+1, all_sorted[len(all_sorted)-1-i][0], all_sorted[len(all_sorted)-1-i][1]) for i in range(min(5, len(all_sorted)))]
+    
+    avg_sc = sum(x[1] for x in dist_scores) / len(dist_scores) if dist_scores else 70.0
+    top_d = dist_scores[0][0] if dist_scores and dist_scores[0][1] > 70.0 else "در انتظار"
+    rep_c = sum(1 for x in dist_scores if x[1] > 70.0)
+    
+    kpi_d = {'avg_score': avg_sc, 'top_district': top_d, 'reported_count': rep_c}
+    dash_path_fa = os.path.join(out_dir_month, f"تصویر_داشبورد_مدیریتی_استان_{month}_{year}.png")
+    dash_path_en = os.path.join(out_dir_month, f"Dashboard_Provincial_{month}.png")
+    
+    try:
+        generate_dashboard_png(macro_data, top5, bot5, kpi_d, month=month, year=str(year), output_path=dash_path_fa)
+        shutil.copyfile(dash_path_fa, dash_path_en)
+    except Exception as err:
+        print(f"Error generating dashboard: {err}")
+    
+    print("-" * 75)
+    print(f"🎉 32 Mobile Scorecards & Provincial Dashboard saved successfully in:")
+    print(f"   📁 '{os.path.abspath(out_dir_month)}'")
+    print("=" * 75)
+    
+    # Automatically pop up the folder in Windows Explorer
+    if sys.platform == 'win32':
+        try:
+            os.system(f'explorer "{os.path.abspath(out_dir_month)}"')
+        except Exception:
+            pass
+
+if __name__ == '__main__':
+    # Parse month and year from command line if passed:
+    # e.g.: python run_aggregation.py 4 1405
+    # or: python run_aggregation.py tir 1405
+    m_arg = None
+    y_arg = None
+    if len(sys.argv) > 1:
+        raw_m = sys.argv[1].strip().lower()
+        if raw_m in MONTH_MAP:
+            m_arg = MONTH_MAP[raw_m]
+        elif raw_m.isdigit() and 1 <= int(raw_m) <= 12:
+            m_arg = MONTH_INFO[int(raw_m) - 1][2]
+            
+    if len(sys.argv) > 2:
+        y_arg = sys.argv[2].strip()
+        
+    success, sel_month, sel_year = process_all_reports(selected_month=m_arg, selected_year=y_arg)
+    generate_all_images_offline(month=sel_month, year=sel_year)
