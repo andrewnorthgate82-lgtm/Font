@@ -27,6 +27,14 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
+# تنظیم خودکار و ایمن کدگذاری خروجی ترمینال
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+
 # ==============================================================================
 # ۱. تعاریف پایه، مشخصات ۳۲ شهرستان و اوزان ارزیابی مصوب
 # ==============================================================================
@@ -120,9 +128,27 @@ DISTRICT_ALIASES = {
     'هرند': ['هرند', 'harand']
 }
 
-# ==============================================================================
-# ۲. توابع نرمال‌سازی فوق‌پیشرفته و تطبیق هوشمند نام‌ها و ماه‌ها
-# ==============================================================================
+def safe_print(msg):
+    """
+    چاپ فوق‌ایمن در خروجی کنسول با پشتیبانی کامل از ویندوز و سیستم‌های مختلف
+    بدون بروز خطای کدگذاری یونیکد (UnicodeEncodeError)
+    """
+    try:
+        print(msg)
+        sys.stdout.flush()
+    except Exception:
+        try:
+            # پاکسازی کاراکترهای ناسازگار با کنسول در صورت بروز خطا
+            clean_msg = str(msg).encode('utf-8', errors='replace').decode('utf-8', errors='replace')
+            sys.stdout.buffer.write(clean_msg.encode('utf-8') + b'\n')
+            sys.stdout.buffer.flush()
+        except Exception:
+            try:
+                clean_msg = str(msg).encode('ascii', errors='replace').decode('ascii')
+                print(clean_msg)
+                sys.stdout.flush()
+            except Exception:
+                pass
 
 def robust_text_norm(text):
     """
@@ -345,6 +371,15 @@ class GenericSheet:
             return GenericCell(row_cells[col_idx])
         return GenericCell(None)
 
+    def iter_rows(self, min_row=1, max_row=None, min_col=1, max_col=None, values_only=True):
+        if max_row is None:
+            max_row = self.max_row
+        if max_col is None:
+            max_col = self.max_column
+        for r_idx in range(min_row - 1, min(max_row, self.max_row)):
+            row = self._data[r_idx] if r_idx < len(self._data) else []
+            yield tuple((row[c_idx] if c_idx < len(row) else None) for c_idx in range(min_col - 1, max_col))
+
 class GenericWorkbook:
     def __init__(self, sheets_dict, default_sheet=None, title=None):
         self._sheets = sheets_dict
@@ -398,20 +433,26 @@ class HTMLTableExtractor(HTMLParser):
 def load_workbook_robust(fpath):
     """
     بارگذاری بی‌نقص انواع فایل‌های اکسل و خروجی‌های سیستمی:
-    ۱. فایل‌های مدرن XLSX و XLSM
+    ۱. فایل‌های مدرن XLSX و XLSM با حفاظت کامل در برابر پیوندهای خارجی و ماکروها
     ۲. فایل‌های ZIP با پسوند .xls
     ۳. فایل‌های باینری سنتی BIFF8 (.xls) با پشتیبانی از کتابخانه xlrd
     ۴. جداول HTML ذخیره‌شده به عنوان فایل اکسل
     """
+    if not os.path.exists(fpath) or os.path.getsize(fpath) == 0:
+        raise ValueError("فایل خالی است یا وجود ندارد")
+
     with open(fpath, 'rb') as f:
         file_bytes = f.read()
 
     # ۱. فایل استاندارد آفیس زیپ (OpenXML / XLSX / XLSM)
     if file_bytes.startswith(b'PK\x03\x04'):
         try:
-            return openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+            return openpyxl.load_workbook(fpath, data_only=True, keep_links=False)
         except Exception:
-            return openpyxl.load_workbook(fpath, data_only=True, read_only=True)
+            try:
+                return openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True, keep_links=False)
+            except Exception:
+                return openpyxl.load_workbook(fpath, data_only=True, read_only=True, keep_links=False)
 
     # ۲. فایل باینری قدیمی مایکروسافت اکسل (.xls / BIFF8)
     if file_bytes.startswith(b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1'):
@@ -540,15 +581,12 @@ def detect_district_from_workbook(wb, fpath, folder_label=''):
 
 def extract_sheet_metrics(ws):
     """
-    استخراج دقیق تعداد مخاطبان و تعداد برنامه‌ها از یک کاربرگ:
-    - مکان‌یابی دقیق ستون آمار (نفرات / مخاطبان / بازدید / صفحات) بدون اشتباه با سرفصل‌ها و انواع مخاطب
-    - فیلتر سطرهای خلاصه (جمع کل) جهت جلوگیری از شمارش مضاعف
-    - بازیابی مقادیر از سطرهای فعال
+    استخراج سریع، مقیاس‌پذیر و ایمن مخاطبان و برنامه‌ها با استفاده از iter_rows
+    و محدودسازی ابعاد به حداکثر ۳۰۰ سطر و ۲۰ ستون جهت ممانعت از هرگونه توقف یا کندی
     """
     if ws is None:
         return {'people_sum': 0, 'classes_count': 0}
 
-    # کلمات کلیدی استاندارد ستون آمار با اولویت‌بندی دقیق
     exact_stat_keywords = [
         'تعداد نفرات', 'تعداد بازدید', 'تعداد مخاطب', 'تعداد شرکت',
         'تعداد فراگیر', 'تعداد حاضر', 'تعداد صفحه', 'تعداد صفحات', 'تعداد نسخه'
@@ -557,71 +595,79 @@ def extract_sheet_metrics(ws):
         'تعداد نفرات / تعداد بازدید', 'نفرات', 'مخاطبان', 'مخاطبین',
         'تیراژ', 'فراگیران', 'شرکت کنندگان', 'بازدید', 'صفحات'
     ]
-
     disqualifiers = [
         'ردیف', 'تاریخ', 'نام ناحیه', 'نام سخنران', 'مدرس', 'موضوع',
         'مکان', 'بستر', 'لینک', 'نوع کلاس', 'نوع تولید', 'برگزار کننده'
     ]
 
-    target_col = None
-    header_row = 1
+    max_r = min(getattr(ws, 'max_row', 100) or 100, 300)
+    max_c = min(getattr(ws, 'max_column', 20) or 20, 20)
 
-    # جستجوی هوشمند ستون آمار در ۵ ردیف ابتدایی
-    for r in range(1, min(ws.max_row + 1, 6)):
-        for c in range(1, ws.max_column + 1):
-            h_raw = str(ws.cell(r, c).value or '')
-            h_norm = robust_text_norm(h_raw)
+    try:
+        rows = list(ws.iter_rows(min_row=1, max_row=max_r, min_col=1, max_col=max_c, values_only=True))
+    except Exception:
+        rows = []
+        for r in range(1, max_r + 1):
+            rows.append([ws.cell(r, c).value for c in range(1, max_c + 1)])
 
+    if not rows:
+        return {'people_sum': 0, 'classes_count': 0}
+
+    target_col = None  # 1-based index
+    header_row_idx = 0  # 0-based index
+
+    # جستجوی هدر در ۶ ردیف ابتدایی
+    for r_idx in range(min(len(rows), 6)):
+        row = rows[r_idx]
+        for c_idx, val in enumerate(row):
+            h_norm = robust_text_norm(str(val or ''))
             if any(dq in h_norm for dq in disqualifiers):
                 continue
-
             if any(k in h_norm for k in exact_stat_keywords):
-                target_col = c
-                header_row = r
+                target_col = c_idx + 1
+                header_row_idx = r_idx
                 break
         if target_col:
             break
 
     if target_col is None:
-        for r in range(1, min(ws.max_row + 1, 6)):
-            for c in range(1, ws.max_column + 1):
-                h_raw = str(ws.cell(r, c).value or '')
-                h_norm = robust_text_norm(h_raw)
+        for r_idx in range(min(len(rows), 6)):
+            row = rows[r_idx]
+            for c_idx, val in enumerate(row):
+                h_norm = robust_text_norm(str(val or ''))
                 if any(dq in h_norm for dq in disqualifiers):
                     continue
                 if any(k in h_norm for k in secondary_stat_keywords):
-                    target_col = c
-                    header_row = r
+                    target_col = c_idx + 1
+                    header_row_idx = r_idx
                     break
             if target_col:
                 break
 
     total_people = 0
     active_classes = 0
-    start_row = header_row + 1
-
     detail_rows_found = False
+    consecutive_empty = 0
 
-    for r in range(start_row, ws.max_row + 1):
-        # بررسی فعال بودن سطر (ردیف‌های صرفاً دارای شماره ردیف یا کاملاً خالی نادیده گرفته می‌شوند)
-        row_has_content = any(
-            ws.cell(r, c).value is not None and str(ws.cell(r, c).value).strip() != ''
-            for c in range(2, ws.max_column + 1)
-        )
-        if not row_has_content and ws.cell(r, 1).value is not None and len(str(ws.cell(r, 1).value).strip()) > 3:
-            row_has_content = True
+    for r_idx in range(header_row_idx + 1, len(rows)):
+        row = rows[r_idx]
+        has_content = any(v is not None and str(v).strip() != '' for v in row[1:])
+        if not has_content and row[0] is not None and len(str(row[0]).strip()) > 3:
+            has_content = True
 
-        if not row_has_content:
+        if not has_content:
+            consecutive_empty += 1
+            if consecutive_empty >= 8:
+                break
             continue
 
-        # بررسی آیا سطر از نوع سطر جمع کل / مجموع است؟
-        first_few_cells = ' '.join(str(ws.cell(r, c).value or '') for c in range(1, min(ws.max_column + 1, 5)))
-        is_summary_row = any(w in first_few_cells for w in ['جمع کل', 'مجموع', 'جمع:', 'total', 'sum'])
+        consecutive_empty = 0
 
-        if is_summary_row:
-            if not detail_rows_found and target_col:
-                val = ws.cell(r, target_col).value
-                p_num = parse_number(val)
+        # بررسی سطر خلاصه / جمع کل
+        first_few = ' '.join(str(v or '') for v in row[:4])
+        if any(w in first_few for w in ['جمع کل', 'مجموع', 'جمع:', 'total', 'sum']):
+            if not detail_rows_found and target_col and target_col <= len(row):
+                p_num = parse_number(row[target_col - 1])
                 if p_num > 0:
                     total_people = p_num
                     active_classes = max(1, active_classes)
@@ -630,16 +676,13 @@ def extract_sheet_metrics(ws):
         active_classes += 1
         detail_rows_found = True
 
-        if target_col:
-            v = ws.cell(r, target_col).value
-            p_num = parse_number(v)
+        if target_col and target_col <= len(row):
+            p_num = parse_number(row[target_col - 1])
             total_people += p_num
         else:
-            # در صورت عدم تشخیص ستون با هدر، نخستین ستون عددی سطر استخراج می‌شود
-            for c in range(2, ws.max_column + 1):
-                val = ws.cell(r, c).value
-                p_num = parse_number(val)
-                if p_num > 0 and p_num != r:
+            for c_idx in range(1, len(row)):
+                p_num = parse_number(row[c_idx])
+                if p_num > 0 and p_num != (r_idx + 1):
                     total_people += p_num
                     break
 
@@ -689,16 +732,33 @@ def extract_workbook_indicators(wb):
 
         return hoz_val, maj_val, kha_val, tol_val
 
-    # حالت پشتیبان برای فایل‌های تک‌کاربرگ یا خلاصه‌شده
+    # حالت پشتیبان برای فایل‌های تک‌کاربرگ یا خلاصه‌شده با استفاده ایمن از iter_rows
     ws = wb.active
     hoz_val, maj_val, kha_val, tol_val = 0, 0, 0, 0
-    for r in range(1, ws.max_row + 1):
-        row_text = ' '.join(str(ws.cell(r, c).value or '') for c in range(1, ws.max_column + 1))
+    max_c = min(getattr(ws, 'max_column', 20) or 20, 20)
+    max_r = min(getattr(ws, 'max_row', 100) or 100, 200)
+
+    try:
+        rows = list(ws.iter_rows(min_row=1, max_row=max_r, min_col=1, max_col=max_c, values_only=True))
+    except Exception:
+        rows = []
+        for r in range(1, max_r + 1):
+            rows.append([ws.cell(r, c).value for c in range(1, max_c + 1)])
+
+    consecutive_empty = 0
+    for r_idx, row in enumerate(rows):
+        row_text = ' '.join(str(v or '') for v in row)
+        if not row_text.strip():
+            consecutive_empty += 1
+            if consecutive_empty >= 8:
+                break
+            continue
+        consecutive_empty = 0
+
         row_val = 0
-        for c in range(ws.max_column, 0, -1):
-            val = ws.cell(r, c).value
+        for val in reversed(row):
             p_num = parse_number(val)
-            if p_num > 0 and p_num != r:
+            if p_num > 0 and p_num != (r_idx + 1):
                 row_val = p_num
                 break
 
@@ -798,13 +858,13 @@ def scan_reports_directory(reports_dir='reports'):
 
     detected_subdirs = sorted(list({flabel for _, flabel, _ in files_list if flabel and flabel != 'پوشه اصلی برنامه'}))
 
-    print(f"🔍 گزارش جستجوی فایل‌های اکسل در سیستم:")
+    safe_print(f"🔍 گزارش جستجوی فایل‌های اکسل در سیستم:")
     if detected_subdirs:
-        print(f"   📂 پوشه‌های شناسایی‌شده: {len(detected_subdirs)} پوشه ({', '.join(detected_subdirs)})")
-    print(f"   📄 مجموع فایل‌های اکسل کشف شده برای ارزیابی: {len(files_list)} فایل")
+        safe_print(f"   📂 پوشه‌های شناسایی‌شده: {len(detected_subdirs)} پوشه ({', '.join(detected_subdirs)})")
+    safe_print(f"   📄 مجموع فایل‌های اکسل کشف شده برای ارزیابی: {len(files_list)} فایل")
     for fpath, flabel, fname in files_list:
         loc = f"در پوشه «{flabel}»" if flabel else f"مستقیم در پوشه گزارشات"
-        print(f"      • {fname} ({loc})")
+        safe_print(f"      • {fname} ({loc})")
 
     return detected_subdirs, files_list
 
@@ -843,15 +903,15 @@ def run_period_evaluation(selected_months=None, selected_scale=None):
     scale_label_fa = "مقیاس واقعی (۰ تا ۱۰۰)" if scale_mode == '0-100' else "مقیاس استاندارد نسرا (۷۰ تا ۱۰۰)"
     score_header_fa = "نمره واقعی (۰-۱۰۰)" if scale_mode == '0-100' else "نمره نسرا (۷۰-۱۰۰)"
 
-    print("\n" + "=" * 80)
-    print(f"📌 دوره انتخابی: عملکرد {cfg['title']} ({cfg['title_en']})")
-    print(f"📊 مقیاس انتخابی نمره‌دهی: {scale_label_fa}")
-    print(f"🎯 حدانتظارها: ضریب {n_months} برابری اهداف ماهانه")
-    print("⚖️ اوزان ارزیابی: ۱۰٪ حضوری | ۳۰٪ مجازی (سرشکن در سبد ۴۰٪ آموزش) | ۵۰٪ خلاقانه (سقف ۱۰۰٪) | ۱۰٪ تولیدات")
-    print("=" * 80)
+    safe_print("\n" + "=" * 80)
+    safe_print(f"📌 دوره انتخابی: عملکرد {cfg['title']} ({cfg['title_en']})")
+    safe_print(f"📊 مقیاس انتخابی نمره‌دهی: {scale_label_fa}")
+    safe_print(f"🎯 حدانتظارها: ضریب {n_months} برابری اهداف ماهانه")
+    safe_print("⚖️ اوزان ارزیابی: ۱۰٪ حضوری | ۳۰٪ مجازی (سرشکن در سبد ۴۰٪ آموزش) | ۵۰٪ خلاقانه (سقف ۱۰۰٪) | ۱۰٪ تولیدات")
+    safe_print("=" * 80)
 
     subdirs, all_files = scan_reports_directory('reports')
-    print("-" * 80)
+    safe_print("-" * 80)
 
     # مقداردهی اولیه آمار تجمعی ۳۲ شهرستان
     accumulated = {}
@@ -882,13 +942,14 @@ def run_period_evaluation(selected_months=None, selected_scale=None):
             'error_msg': ''
         }
 
+        wb = None
         try:
             wb = load_workbook_robust(fpath)
             detected, detection_reason = detect_district_from_workbook(wb, fpath, folder_label)
 
             if not detected:
                 msg = f"شناسایی ناحیه برای فایل '{fname}' (در پوشه '{folder_label}') ناموفق بود."
-                print(f"⚠️ {msg}")
+                safe_print(f"⚠️ {msg}")
                 audit_entry['status'] = 'اخطار'
                 audit_entry['error_msg'] = 'عدم شناسایی شهرستان'
                 audit_logs.append(audit_entry)
@@ -920,17 +981,24 @@ def run_period_evaluation(selected_months=None, selected_scale=None):
             audit_logs.append(audit_entry)
 
             src_info = f"پوشه «{folder_label}»" if folder_label else "پوشه مستقیم"
-            print(f"✓ [{detected}] (شناسایی از: {detection_reason} | {src_info} | ماه: {month_tag}): +{hoz_val} حضوری | +{maj_val} مجازی | +{kha_val} خلاقانه | +{tol_val} تولید")
+            safe_print(f"✓ [{detected}] (شناسایی از: {detection_reason} | {src_info} | ماه: {month_tag}): +{hoz_val} حضوری | +{maj_val} مجازی | +{kha_val} خلاقانه | +{tol_val} تولید")
 
         except Exception as e:
             msg = f"خطا در پردازش فایل '{fname}': {e}"
-            print(f"❌ {msg}")
+            safe_print(f"❌ {msg}")
             audit_entry['status'] = 'خطا'
             audit_entry['error_msg'] = str(e)
             audit_logs.append(audit_entry)
+        finally:
+            if wb is not None:
+                try:
+                    if hasattr(wb, 'close'):
+                        wb.close()
+                except Exception:
+                    pass
 
-    print("-" * 80)
-    print("📊 محاسبه نمرات بر مبنای اوزان مصوب، سرریز آموزش و سقف ۱۰۰٪...")
+    safe_print("-" * 80)
+    safe_print("📊 محاسبه نمرات بر مبنای اوزان مصوب، سرریز آموزش و سقف ۱۰۰٪...")
 
     results = []
     for dn in DISTRICTS:
@@ -1217,23 +1285,23 @@ def run_period_evaluation(selected_months=None, selected_scale=None):
             pass
 
     # چاپ خروجی در ترمینال
-    print("\n" + "=" * 105)
-    print(f"📋 جدول نمرات دوره {cfg['title']} نواحی نسرا - {scale_label_fa}:")
-    print("=" * 105)
-    print(f"{'ردیف':^6} | {'نام ناحیه (شهرستان)':<20} | {score_header_fa:^18} | {'مقیاس دیگر':^14} | {'سطح کیفی':^10} | {'رتبه':^6} | {'تحقق کل':^10} | {'وضعیت ماه‌های ارسالی':<26}")
-    print("-" * 105)
+    safe_print("\n" + "=" * 105)
+    safe_print(f"📋 جدول نمرات دوره {cfg['title']} نواحی نسرا - {scale_label_fa}:")
+    safe_print("=" * 105)
+    safe_print(f"{'ردیف':^6} | {'نام ناحیه (شهرستان)':<20} | {score_header_fa:^18} | {'مقیاس دیگر':^14} | {'سطح کیفی':^10} | {'رتبه':^6} | {'تحقق کل':^10} | {'وضعیت ماه‌های ارسالی':<26}")
+    safe_print("-" * 105)
     for idx, r in enumerate(results, start=1):
         other_sc = r['score_nasra'] if scale_mode == '0-100' else r['score_real']
         other_lbl = f"{other_sc:.1f} (نسرا)" if scale_mode == '0-100' else f"{other_sc:.1f} (واقعی)"
-        print(f"{idx:^6} | {r['district']:<20} | {r['score']:^18.1f} | {other_lbl:^14} | {r['tier']:^10} | {str(r['rank']):^6} | {r['total_realization_pct']:^8.1f}% | {r['status_desc']:<26}")
-    print("=" * 105)
+        safe_print(f"{idx:^6} | {r['district']:<20} | {r['score']:^18.1f} | {other_lbl:^14} | {r['tier']:^10} | {str(r['rank']):^6} | {r['total_realization_pct']:^8.1f}% | {r['status_desc']:<26}")
+    safe_print("=" * 105)
 
-    print(f"\n🎉 فایل اکسل متمرکز با موفقیت تولید شد:")
-    print(f"   📄 «{out_path}»")
-    print(f"\n💡 در شیت ۱ («فقط نام و نمره (ساده)»)، ستون‌های نام و نمره انتخابی ({score_header_fa}) آماده کپی مستقیم هستند.")
-    print("💡 در شیت ۲، مقایسه همزمان هر دو مقیاس (واقعی ۰-۱۰۰ و نسرا ۷۰-۱۰۰) در کنار هم قرار دارد.")
-    print("💡 در شیت ۳ («پایش فایل‌های ورودی»)، گزارش ردگیری و شناسایی تک‌تک فایل‌های اکسل در دسترس است.")
-    print("=" * 105)
+    safe_print(f"\n🎉 فایل اکسل متمرکز با موفقیت تولید شد:")
+    safe_print(f"   📄 «{out_path}»")
+    safe_print(f"\n💡 در شیت ۱ («فقط نام و نمره (ساده)»)، ستون‌های نام و نمره انتخابی ({score_header_fa}) آماده کپی مستقیم هستند.")
+    safe_print("💡 در شیت ۲، مقایسه همزمان هر دو مقیاس (واقعی ۰-۱۰۰ و نسرا ۷۰-۱۰۰) در کنار هم قرار دارد.")
+    safe_print("💡 در شیت ۳ («پایش فایل‌های ورودی»)، گزارش ردگیری و شناسایی تک‌تک فایل‌های اکسل در دسترس است.")
+    safe_print("=" * 105)
 
     return results
 
@@ -1259,13 +1327,13 @@ if __name__ == '__main__':
 
     # در صورت اجرای تعاملی بدون پارامترهای خط فرمان
     if len(sys.argv) == 1:
-        print("\n=======================================================")
-        print("  سامانه ارزیابی عملکرد دوره‌ای نواحی نسرا (اصفهان)")
-        print("=======================================================")
-        print("لطفاً بازه زمانی ارزیابی را انتخاب فرمایید:")
-        print("  [1] عملکرد ۲ ماهه")
-        print("  [2] عملکرد ۳ ماهه (فصلی - پیش‌فرض)")
-        print("  [3] عملکرد ۶ ماهه")
+        safe_print("\n=======================================================")
+        safe_print("  سامانه ارزیابی عملکرد دوره‌ای نواحی نسرا (اصفهان)")
+        safe_print("=======================================================")
+        safe_print("لطفاً بازه زمانی ارزیابی را انتخاب فرمایید:")
+        safe_print("  [1] عملکرد ۲ ماهه")
+        safe_print("  [2] عملکرد ۳ ماهه (فصلی - پیش‌فرض)")
+        safe_print("  [3] عملکرد ۶ ماهه")
         
         try:
             choice = input("\nشماره گزینه (1 / 2 / 3) [پیش‌فرض 2]: ").strip()
@@ -1278,9 +1346,9 @@ if __name__ == '__main__':
         except (EOFError, KeyboardInterrupt):
             arg_m = 3
 
-        print("\nلطفاً مقیاس نمره‌دهی مورد نظر را انتخاب فرمایید:")
-        print("  [1] مقیاس واقعی (۰ تا ۱۰۰ - پیش‌فرض)")
-        print("  [2] مقیاس استاندارد نسرا (۷۰ تا ۱۰۰)")
+        safe_print("\nلطفاً مقیاس نمره‌دهی مورد نظر را انتخاب فرمایید:")
+        safe_print("  [1] مقیاس واقعی (۰ تا ۱۰۰ - پیش‌فرض)")
+        safe_print("  [2] مقیاس استاندارد نسرا (۷۰ تا ۱۰۰)")
         
         try:
             choice_sc = input("\nشماره گزینه (1 / 2) [پیش‌فرض 1]: ").strip()
