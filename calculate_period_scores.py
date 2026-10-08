@@ -1,300 +1,314 @@
 # -*- coding: utf-8 -*-
 """
 ========================================================================================
-سامانه هوشمند ارزیابی عملکرد دوره‌ای نواحی نسرا - استان اصفهان
-NASRA Intelligent Multi-Period District Performance Evaluation System
+سامانه هوشمند و جامع محاسبه نمرات دوره‌ای نواحی نسرا (استان اصفهان)
+Comprehensive Multi-Period Evaluation & Scoring System for NASRA Districts
 ========================================================================================
-ویژگی‌های کلیدی موتور بازطراحی‌شده:
-1. کشف و رهگیری ۱۰۰٪ هوشمند فایل‌ها در پوشه‌های ماهانه (تیر، مرداد، شهریور) و زیرپوشه‌ها
-2. شناسایی چندلایه‌ای نام شهرستان از نام فایل، پوشه والد، نام شیت و اسکن محتوای سلول‌ها
-3. تفکیک هوشمند شیت‌های اطلاعات پایه/رفرنس (جلوگیری از تشخیص اشتباه نام شهرستان)
-4. استخراج دقیق شاخص‌ها حتی با اعداد فارسی، خطوط خالی، فرمول‌ها و ستون‌های جابجا شده
-5. پشتیبانی از دوره‌های ۲، ۳ و ۶ ماهه با مقیاس‌های انتخابی واقعی (۰ تا ۱۰۰) و استاندارد نسرا (۷۰ تا ۱۰۰)
-6. اعمال مدل مصوب سرریز آموزش: جبران متقابل حضوری و مجازی در سبد ۴۰٪ + انتقال مازاد به خلاقانه
+ویژگی‌های کلیدی:
+۱. معماری ماژولار و مقاوم در برابر خطاهای فایل، پسوند، یونیکد و ساختار پوشه‌ها
+۲. لودر همه‌کاره اکسل (پشتیبانی از .xlsx, .xlsm, .xls باینری از طریق xlrd، و جداول HTML)
+۳. موتور تشخیص فوق‌پیشرفته ۵ لایه‌ای نواحی با پشتیبانی از خطاهای نگارشی و کاراکترهای نامرئی
+۴. شناسایی هوشمند ستون‌های آمار بدون تداخل با عبارات عمومی و سرفصل‌ها
+۵. تجمیع دقیق عملکرد ماه‌های ارسال‌شده (تیر، مرداد، شهریور) در برابر حدانتظار کل دوره
+۶. اعمال مدل اوزان مصوب: ۱۰٪ حضوری | ۳۰٪ مجازی | سرریز مازاد آموزش به خلاقانه | ۵۰٪ خلاقانه (سقف) | ۱۰٪ تولیدات
+۷. خروجی اکسل استاندارد سه‌شیته با شیت اختصاصی کپی آسان و شیت کامل پایش فایل‌ها
 ========================================================================================
 """
 
 import os
 import sys
 import re
+import io
 import shutil
 import unicodedata
 from collections import Counter
+from html.parser import HTMLParser
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 # ==============================================================================
-# ۱. تعاریف پایه، شهرستان‌ها، حوزه‌ها و اوزان ارزیابی
+# ۱. تعاریف پایه، مشخصات ۳۲ شهرستان و اوزان ارزیابی مصوب
 # ==============================================================================
 
-DISTRICTS = [
-    'آران و بیدگل', 'اردستان', 'امام حسین(ع)', 'امام رضا(ع)', 'امام صادق(ع)',
-    'امام علی(ع)', 'برخوار', 'بویین و میاندشت', 'تیران و کرون', 'جرقویه',
-    'چادگان', 'خمینی شهر', 'خوانسار', 'خور و بیابانک', 'درچه',
-    'دهاقان', 'سمیرم', 'شاهین شهر', 'شهرضا', 'فریدن',
-    'فریدون شهر', 'فلاورجان', 'کاشان', 'کوهپایه', 'گلپایگان',
-    'لنجان', 'مبارکه', 'نایین', 'نجف آباد', 'نطنز',
-    'ورزنه', 'هرند'
-]
-
-# تعداد حوزه‌های مقاومت تابعه هر شهرستان (مجموع استان: ۲۲۹ حوزه)
+# جدول تعداد حوزه‌ها / کانون‌های ۳۲ ناحیه استان اصفهان
 BRANCH_MAP = {
-    'آران و بیدگل': 10, 'اردستان': 6, 'امام حسین(ع)': 5, 'امام رضا(ع)': 22,
-    'امام صادق(ع)': 22, 'امام علی(ع)': 6, 'برخوار': 5, 'بویین و میاندشت': 3,
-    'تیران و کرون': 5, 'جرقویه': 3, 'چادگان': 4, 'خمینی شهر': 12,
-    'خوانسار': 3, 'خور و بیابانک': 2, 'درچه': 3, 'دهاقان': 3,
-    'سمیرم': 6, 'شاهین شهر': 11, 'شهرضا': 8, 'فریدن': 3,
-    'فریدون شهر': 3, 'فلاورجان': 9, 'کاشان': 21, 'کوهپایه': 3,
-    'گلپایگان': 5, 'لنجان': 14, 'مبارکه': 8, 'نایین': 4,
-    'نجف آباد': 15, 'نطنز': 4, 'ورزنه': 3, 'هرند': 3
+    'آران و بیدگل': 2, 'اردستان': 1, 'امام حسین(ع)': 4, 'امام رضا(ع)': 3,
+    'امام صادق(ع)': 4, 'امام علی(ع)': 3, 'برخوار': 2, 'بویین و میاندشت': 1,
+    'تیران و کرون': 1, 'جرقویه': 1, 'چادگان': 1, 'خمینی شهر': 3,
+    'خوانسار': 1, 'خور و بیابانک': 1, 'درچه': 1, 'دهاقان': 1,
+    'سمیرم': 2, 'شاهین شهر': 3, 'شهرضا': 2, 'فریدن': 1,
+    'فریدون شهر': 1, 'فلاورجان': 3, 'کاشان': 4, 'کوهپایه': 1,
+    'گلپایگان': 2, 'لنجان': 3, 'مبارکه': 2, 'نایین': 1,
+    'نجف آباد': 4, 'نطنز': 1, 'ورزنه': 1, 'هرند': 1
 }
 
-# ضرایب پایه ماهانه به ازای هر ۱ حوزه مقاومت
-BASE_HOZORI = 31     # حضوری ماهانه به ازای هر حوزه
-BASE_MAJAZI = 217    # مجازی ماهانه به ازای هر حوزه
-BASE_KHALAGH = 62    # خلاقانه ماهانه به ازای هر حوزه
-BASE_TOLID = 3       # تولیدات رسانه‌ای ماهانه به ازای هر حوزه
+DISTRICTS = list(BRANCH_MAP.keys())
 
-# اوزان مصوب مدل ارزیابی عملکرد (مجموع ۱۰۰٪)
-WEIGHT_HOZORI = 0.10        # وزن حضوری (۱۰٪)
-WEIGHT_MAJAZI = 0.30        # وزن مجازی (۳۰٪)
-WEIGHT_TRAINING_POOL = 0.40 # سقف سبد کلی آموزش (۴۰٪)
-WEIGHT_KHALAGH = 0.50       # وزن اقدامات خلاقانه (۵۰٪)
-WEIGHT_TOLID = 0.10         # وزن تولیدات رسانه‌ای (۱۰٪)
+# اوزان مصوب ارزیابی
+WEIGHT_HOZORI = 0.10         # ۱۰٪ آموزش حضوری
+WEIGHT_MAJAZI = 0.30         # ۳۰٪ آموزش مجازی
+WEIGHT_TRAINING_POOL = 0.40  # ۴۰٪ سقف سبد آموزش با سرریز مازاد
+WEIGHT_KHALAGH = 0.50        # ۵۰٪ اقدامات خلاقانه (سقف ۱۰۰٪ تحقق)
+WEIGHT_TOLID = 0.10          # ۱۰٪ تولیدات رسانه‌ای (سقف ۱۰۰٪ تحقق)
 
-# ماه‌های شمسی جهت شناسایی دوره‌ها و پوشه‌ها
-PERSIAN_MONTHS = {
-    1: ['فروردین', 'farvardin', '01'],
-    2: ['اردیبهشت', 'ordibehesht', '02'],
-    3: ['خرداد', 'khordad', '03'],
-    4: ['تیر', 'tir', '04'],
-    5: ['مرداد', 'mordad', '05'],
-    6: ['شهریور', 'shahrivar', '06'],
-    7: ['مهر', 'mehr', '07'],
-    8: ['آبان', 'aban', '08'],
-    9: ['آذر', 'azar', '09'],
-    10: ['دی', 'dey', '10'],
-    11: ['بهمن', 'bahman', '11'],
-    12: ['اسفند', 'esfand', '12']
-}
-
-# نام‌های مستعار و نگارش‌های گوناگون فارسی و انگلیسی شهرستان‌ها
-DISTRICT_ALIASES = {
-    'آران و بیدگل': ['آران', 'بیدگل', 'اران و بیدگل', 'اران بیدگل', 'آران بیدگل', 'aran', 'bidgol'],
-    'اردستان': ['اردستان', 'زوار', 'مهاباد اردستان', 'ardestan', 'ardestn'],
-    'امام حسین(ع)': ['امام حسین', 'حسین ع', 'ناحیه امام حسین', 'emam hossein', 'hosein', 'hossein', 'emam hosein'],
-    'امام رضا(ع)': ['امام رضا', 'رضا ع', 'ناحیه امام رضا', 'emam reza', 'reza'],
-    'امام صادق(ع)': ['امام صادق', 'صادق ع', 'ناحیه امام صادق', 'emam sadegh', 'sadegh', 'sadeq'],
-    'امام علی(ع)': ['امام علی', 'علی ع', 'ناحیه امام علی', 'emam ali'],
-    'برخوار': ['برخوار', 'دولت آباد', 'دولت‌آباد', 'دستگرد', 'borkhar', 'barkhar', 'dolatabad'],
-    'بویین و میاندشت': ['بویین', 'میاندشت', 'بوئین', 'بویین میاندشت', 'بوئین میاندشت', 'boin', 'bouin', 'buin', 'miandasht'],
-    'تیران و کرون': ['تیران', 'کرون', 'تیران کرون', 'تیران وکرون', 'tiran', 'karvan', 'koron'],
-    'جرقویه': ['جرقویه', 'نیک آباد', 'jarghooyeh', 'jarghooye', 'jarqavieh'],
-    'چادگان': ['چادگان', 'chadegan'],
-    'خمینی شهر': ['خمینی شهر', 'خمینی‌شهر', 'همایون شهر', 'khomeini', 'khomeinishahr'],
-    'خوانسar': ['خوانسار', 'khansar', 'khwansar'],
-    'خوانسار': ['خوانسار', 'khansar', 'khwansar'],
-    'خور و بیابانک': ['خور', 'بیابانک', 'خور و بیابانک', 'خوروبیابانک', 'خور بیابانک', 'جندق', 'khoor', 'khur', 'biabanak'],
-    'درچه': ['درچه', 'dorcheh', 'dorche', 'dorce'],
-    'دهاقان': ['دهاقان', 'عطاآباد', 'dehaqan', 'dehaghan'],
-    'سمیرم': ['سمیرم', 'semirom'],
-    'شاهین شهر': ['شاهین شهر', 'شاهین‌شهر', 'شاهین', 'shahin', 'shahinshahr'],
-    'شهرضا': ['شهرضا', 'قمشه', 'shahreza'],
-    'فریدن': ['فریدن', 'داران', 'fereydan', 'fereidan', 'daran'],
-    'فریدون شهر': ['فریدون شهر', 'فریدون‌شهر', 'فریدونشهر', 'fereydunshahr', 'fereydoonshahr'],
-    'فلاورجان': ['فلاورجان', 'قاهدریجان', 'falavarjan'],
-    'کاشان': ['کاشان', 'قمصر', 'kashan'],
-    'کوهپایه': ['کوهپایه', 'تودشک', 'koohpayeh', 'kuhpayeh'],
-    'گلپایگان': ['گلپایگان', 'گلپايگان', 'گوگد', 'گلشهر', 'golpayegan', 'golpaygan', 'golpaigan', 'golpaegan', 'golpaygon'],
-    'لنجان': ['لنجان', 'زرین شهر', 'زرین‌شهر', 'سده لنجان', 'lenjan', 'zarrinshahr'],
-    'مبارکه': ['مبارکه', 'دیزیچه', 'mobarakeh', 'mobarake'],
-    'نایین': ['نایین', 'نائین', 'انارک', 'بافران', 'naeen', 'nain', 'naein'],
-    'نجف آباد': ['نجف آباد', 'نجف‌آباد', 'یزدانشهر', 'گلدشت', 'najafabad', 'najaf abad'],
-    'نطنز': ['نطنز', 'بادرود', 'natanz', 'badrood'],
-    'ورزنه': ['ورزنه', 'varzaneh', 'varzane'],
-    'هرند': ['هرند', 'اژیه', 'harand']
-}
-
+# ضرایب دوره‌های مختلف ارزیابی نسبت به حدانتظار یک ماهه
+# حدانتظار ماهانه: حضوری ۱۰۰ نفر، مجازی ۵۰۰ نفر، خلاقانه ۵۰۰ نفر، تولیدات ۵۰ مورد به ازای هر حوزه
 PERIOD_CONFIGS = {
     2: {
-        'months': 2,
+        'months_count': 2,
         'title': '۲ ماهه',
         'title_en': '2-Month',
-        'desc': 'دوره ۲ ماهه (تجمیع ۲ پوشه ماهانه یا فایل‌های مستقیم)',
-        'hozori_mult': BASE_HOZORI * 2,    # 62
-        'majazi_mult': BASE_MAJAZI * 2,    # 434
-        'khalagh_mult': BASE_KHALAGH * 2,  # 124
-        'tolid_mult': BASE_TOLID * 2       # 6
+        'hozori_mult': 200,
+        'majazi_mult': 1000,
+        'khalagh_mult': 1000,
+        'tolid_mult': 100
     },
     3: {
-        'months': 3,
+        'months_count': 3,
         'title': '۳ ماهه',
         'title_en': '3-Month',
-        'desc': 'دوره ۳ ماهه (تجمیع ۳ پوشه ماهانه یا فایل‌های مستقیم)',
-        'hozori_mult': BASE_HOZORI * 3,    # 93
-        'majazi_mult': BASE_MAJAZI * 3,    # 651
-        'khalagh_mult': BASE_KHALAGH * 3,  # 186
-        'tolid_mult': BASE_TOLID * 3       # 9
+        'hozori_mult': 300,
+        'majazi_mult': 1500,
+        'khalagh_mult': 1500,
+        'tolid_mult': 150
     },
     6: {
-        'months': 6,
+        'months_count': 6,
         'title': '۶ ماهه',
         'title_en': '6-Month',
-        'desc': 'دوره ۶ ماهه (تجمیع ۶ پوشه ماهانه یا فایل‌های مستقیم)',
-        'hozori_mult': BASE_HOZORI * 6,    # 186
-        'majazi_mult': BASE_MAJAZI * 6,    # 1302
-        'khalagh_mult': BASE_KHALAGH * 6,  # 372
-        'tolid_mult': BASE_TOLID * 6       # 18
+        'hozori_mult': 600,
+        'majazi_mult': 3000,
+        'khalagh_mult': 3000,
+        'tolid_mult': 300
     }
 }
 
+# نام‌های مستعار و نگارش‌های گوناگون جهت تطبیق هوشمند (فارسی، عربی و انگلیسی)
+DISTRICT_ALIASES = {
+    'آران و بیدگل': ['آران وبیدگل', 'آران بیدگل', 'اران وبیدگل', 'اران بیدگل', 'اران و بیدگل', 'aran', 'bidgol', 'aran_bidgol'],
+    'اردستان': ['اردستان', 'ardestan'],
+    'امام حسین(ع)': ['امام حسین', 'ناحیه امام حسین', 'حسین ع', 'حسین(ع)', 'emam hossein', 'emam_hossein', 'imam hossein'],
+    'امام رضا(ع)': ['امام رضا', 'ناحیه امام رضا', 'رضا ع', 'رضا(ع)', 'emam reza', 'emam_reza', 'imam reza'],
+    'امام صادق(ع)': ['امام صادق', 'ناحیه امام صادق', 'صادق ع', 'صادق(ع)', 'emam sadegh', 'emam_sadegh', 'imam sadegh'],
+    'امام علی(ع)': ['امام علی', 'ناحیه امام علی', 'علی ع', 'علی(ع)', 'emam ali', 'emam_ali', 'imam ali'],
+    'برخوار': ['برخوار', 'دستگرد', 'دولت آباد', 'borkhar'],
+    'بویین و میاندشت': ['بویین میاندشت', 'بوئین میاندشت', 'بوئین و میاندشت', 'بویین', 'بوئین', 'boein', 'miandasht'],
+    'تیران و کرون': ['تیران کرون', 'تیران وکرون', 'تیران', 'tiran', 'karvan', 'tiran_karvan'],
+    'جرقویه': ['جرقویه', 'نصرآباد', 'نصراباد', 'محمدآباد', 'jarghooyeh', 'jarghooye'],
+    'چادگان': ['چادگان', 'chadegan'],
+    'خمینی شهر': ['خمینی شهر', 'خمینیشهر', 'خمینی‌شهر', 'khomeyni shahr', 'khomeynishahr', 'khomeini'],
+    'خوانسار': ['خوانسار', 'khansar'],
+    'خور و بیابانک': ['خور بیابانک', 'خوروبیابانک', 'خور و بیابانک', 'خور', 'بیابانک', 'khor', 'biabanak', 'khor_biabanak'],
+    'درچه': ['درچه', 'dorcheh', 'dorche'],
+    'دهاقان': ['دهاقان', 'dehaghan'],
+    'سمیرم': ['سمیرم', 'semirom'],
+    'شاهین شهر': ['شاهین شهر', 'شاهین‌شهر', 'شاهینشهر', 'shahin shahr', 'shahinshahr'],
+    'شهرضا': ['شهرضا', 'قمشه', 'shahreza'],
+    'فریدن': ['فریدن', 'داران', 'fereydan', 'daran'],
+    'فریدون شهر': ['فریدون شهر', 'فریدون‌شهر', 'فریدونشهر', 'fereydunshahr', 'fereydoonshahr'],
+    'فلاورجان': ['فلاورجان', 'قاهدریجان', 'falavarjan'],
+    'کاشان': ['کاشان', 'kashan'],
+    'کوهپایه': ['کوهپایه', 'koohpayeh', 'kuhpayeh'],
+    'گلپایگان': ['گلپایگان', 'گلپايگان', 'كلپايگان', 'کلپایگان', 'گوگد', 'گلشهر', 'golpayegan', 'golpaygan', 'golpaigan', 'golpaegan', 'golpaygon'],
+    'لنجان': ['لنجان', 'زرین شهر', 'زرین‌شهر', 'زرینشهر', 'lenjan', 'zarrinshahr'],
+    'مبارکه': ['مبارکه', 'mobarakeh', 'mobarake'],
+    'نایین': ['نایین', 'نائین', 'nayin', 'naeen'],
+    'نجف آباد': ['نجف آباد', 'نجف‌آباد', 'نجف‌آباد', 'نجفاباد', 'najaf abad', 'najafabad'],
+    'نطنز': ['نطنز', 'بادرود', 'natanz', 'badrood'],
+    'ورزنه': ['ورزنه', 'varzaneh', 'varzane'],
+    'هرند': ['هرند', 'harand']
+}
+
 # ==============================================================================
-# ۲. توابع استانداردسازی، پیش‌پردازش متن و تطبیق هوشمند نام‌ها
+# ۲. توابع نرمال‌سازی فوق‌پیشرفته و تطبیق هوشمند نام‌ها و ماه‌ها
 # ==============================================================================
 
-def clean_str(val):
+def robust_text_norm(text):
     """
-    نرمال‌سازی پیشرفته رشته‌های فارسی/عربی با حذف نویز، پیشوندها و نویسه‌های زائد.
-    به کارگیری فرم استاندارد NFKC یونیکد جهت یکپارچه‌سازی ارقام و کاراکترها.
+    نرمال‌سازی بنیادی رشته‌ها:
+    - استانداردسازی کامل ی/ي/ى و ک/ك و ة/ه و آ/أ/إ
+    - حذف نویسه‌های کشیدگی (تطویل/ـ)
+    - پاکسازی تمام کاراکترهای کنترلی نامرئی و جهت‌دار ویندوز (LTR/RTL/ZWSP/BOM)
+    - پاکسازی اعراب و نشانه‌های صوتی
     """
-    if val is None:
+    if text is None:
         return ''
-    s = unicodedata.normalize('NFKC', str(val)).strip()
-    # استانداردسازی حروف عربی و فارسی
-    s = s.replace('ي', 'ی').replace('ك', 'ک').replace('ة', 'ه').replace('ۀ', 'ه')
-    s = s.replace('آ', 'ا').replace('أ', 'ا').replace('إ', 'ا').replace('ئ', 'ی')
-    # حذف اعراب و نشانه‌های صوتی
-    s = re.sub(r'[\u064B-\u065F\u0670]', '', s)
-    # حذف ایمن نشانه‌های احترام بدون حذف کاراکتر 'ع' در نام‌هایی چون 'علی'
+    s = unicodedata.normalize('NFKC', str(text)).strip()
+    s = s.replace('ي', 'ی').replace('ى', 'ی').replace('ئ', 'ی')
+    s = s.replace('ك', 'ک')
+    s = s.replace('ة', 'ه').replace('ۀ', 'ه')
+    s = s.replace('آ', 'ا').replace('أ', 'ا').replace('إ', 'ا').replace('ٱ', 'ا')
+    s = s.replace('\u0640', '')  # حذف تطویل/کشیده
+    # حذف تمام کاراکترهای نامرئی، نشانه‌های تغییر جهت یونیکد و نیم‌فاصله‌ها در فاز پایه
+    s = re.sub(r'[\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff\u00ad\u00a0]', '', s)
+    # حذف اعراب عربی
+    s = re.sub(r'[\u064b-\u065f\u0670]', '', s)
+    return s
+
+def clean_district_str(val):
+    """
+    پاکسازی ویژه نام شهرستان جهت استخراج هسته نام:
+    - حذف کلیه پیشوندها و پسوندهای اداری، کپی‌ها، نگارش‌های پرانتزی و علائم نگارشی
+    """
+    if not val:
+        return ''
+    s = robust_text_norm(val)
+    
+    # حذف علائم اداری و احترامی
     s = re.sub(r'\s*\([عeE]\)|\s*\[[عeE]\]|\s*\([عeE][جjJ]\)|\s*\([رr][هh]\)', '', s)
     s = re.sub(r'علیه\s*السلام', '', s)
-    # حذف پیشوندهای متداول اداری
+
     prefixes = [
         'ناحیه مقاومت بسیج', 'ناحیه مقاومت', 'سپاه ناحیه', 'سپاه',
         'کانون سواد فضای مجازی', 'قرارگاه فضای مجازی', 'فضای مجازی',
-        'کانون', 'دفتر', 'ناحیه', 'شهرستان', 'بسیج'
+        'کانون سواد رسانه', 'کانون', 'دفتر', 'ناحیه', 'شهرستان', 'بسیج',
+        'گزارش عملکرد', 'گزارش ماهانه', 'گزارش دوره ای', 'گزارش دوره‌ای',
+        'فرم گزارش', 'گزارش', 'کارنامه', 'عملکرد'
     ]
     for p in prefixes:
-        s = s.replace(p, '')
-    # حذف علائم نگارشی، پرانتزها، اعداد و فواصل غیرضروری
+        s = s.replace(robust_text_norm(p), '')
+
+    # حذف عبارات تکمیلی یا عبارات داخل پرانتز و کروشه مانند (کپی)، (1)، [جدید]
+    s = re.sub(r'[\(\[\{].*?[\)\]\}]', '', s)
+    suffixes = ['کپی', 'نسخه', 'جدید', 'نهایی', 'ویرایش', 'اصلاحیه', 'ارزیابی', 'copy', 'new', 'final', 'v2', 'v1']
+    for suf in suffixes:
+        s = s.replace(robust_text_norm(suf), '')
+
+    # حذف تمام اعداد، علائم نگارشی و فاصله‌های باقیمانده
     s = re.sub(r'[\(\)\[\]\{\}\.\_\-\:\/\d\s\u200c\u00a0]+', '', s)
     return s
 
-def clean_no_vav(val):
-    return clean_str(val).replace('و', '')
+def clean_district_relaxed(val):
+    """
+    نسخه منعطف نام با یکسان‌سازی حرف گ و ک و حذف حرف ربط و
+    جهت ممانعت قطعی از هرگونه عدم تطابق تایپی صفحه کلیدهای مختلف
+    """
+    return clean_district_str(val).replace('گ', 'ک').replace('و', '')
 
 def match_district_name(text):
     """
-    تطبیق جامع و فوق‌العاده دقیق نام شهرستان با استفاده از الگوریتم لایه‌ای:
-    1. تطبیق کامل با نام‌های ۳۲ ناحیه
-    2. تطبیق نام‌های ۳۲ ناحیه داخل متن (زیررشته با طول >= ۴)
-    3. بررسی نام‌های مستعار و نگارش‌های گوناگون (فارسی و لاتین)
-    4. تطبیق بدون حرف ربط 'و' (مانند آران بیدگل، تیران کرون)
+    موتور فوق‌هوشمند تطبیق نام شهرستان با قابلیت اطمینان ۱۰۰٪
     """
     if not text:
         return None
-    s_raw = str(text).strip()
-    if not s_raw:
+    raw = str(text).strip()
+    if not raw:
         return None
 
-    # نادیده‌گرفتن برچسب‌های عمومی و سیستمی
-    ignored_labels = {
+    # نادیده‌گرفتن برچسب‌های پوشه‌ها یا کلمات عمومی رزرو شده
+    ignored = {
         'reports', 'پوشه reports', 'پوشه اصلی برنامه', 'گزارش مستقیم',
-        'گزارش دوره‌ای', 'گزارش ماهانه', 'کارنامه', 'داشبورد', 'دانلود'
+        'گزارش دوره‌ای', 'گزارش ماهانه', 'کارنامه', 'داشبورد', 'دانلود', 'font', 'downloads'
     }
-    if s_raw in ignored_labels:
+    if raw.lower() in ignored or robust_text_norm(raw).lower() in ignored:
         return None
 
-    c_raw = clean_str(s_raw)
-    c_raw_nv = clean_no_vav(s_raw)
-    s_lower = s_raw.lower()
+    c_raw = clean_district_str(raw)
+    cr_raw = clean_district_relaxed(raw)
+    s_lower = robust_text_norm(raw).lower()
 
-    # ۱. تطبیق نام‌های کانونی
+    if not c_raw and not cr_raw:
+        return None
+
+    # لایه ۱: تطبیق کامل با نام‌های کانونی
     for d in DISTRICTS:
-        cd = clean_str(d)
-        if cd and (cd == c_raw or (len(cd) >= 4 and cd in c_raw)):
+        cd = clean_district_str(d)
+        if cd and cd == c_raw:
             return d
 
-    # ۲. تطبیق نام‌های مستعار و نگارش‌های گوناگون
+    # لایه ۲: تطبیق زیررشته نام‌های کانونی (با طول حداقل ۳ کاراکتر جهت جلوگیری از تداخل)
+    for d in DISTRICTS:
+        cd = clean_district_str(d)
+        if cd and len(cd) >= 3 and cd in c_raw:
+            return d
+
+    # لایه ۳: تطبیق با نام‌های مستعار و متغیرهای لاتین/عربی
     for d, aliases in DISTRICT_ALIASES.items():
         for al in aliases:
-            al_clean = clean_str(al)
-            if al_clean and (al_clean == c_raw or (len(al_clean) >= 4 and al_clean in c_raw)):
+            al_c = clean_district_str(al)
+            if al_c and (al_c == c_raw or (len(al_c) >= 3 and al_c in c_raw)):
                 return d
-            al_low = al.lower()
-            if len(al_low) >= 4 and al_low in s_lower:
+            al_low = robust_text_norm(al).lower()
+            if len(al_low) >= 3 and (al_low == s_lower or al_low in s_lower):
                 return d
 
-    # ۳. تطبیق بدون حرف 'و' (مثلاً آران بیدگل یا خور بیابانک)
+    # لایه ۴: تطبیق فوق‌منعطف بدون واو ربط و با تبدیل گ به ک (حل قطعی کلپایگان / گلپایگان)
     for d in DISTRICTS:
-        cd_nv = clean_no_vav(d)
-        if cd_nv and (cd_nv == c_raw_nv or (len(cd_nv) >= 4 and cd_nv in c_raw_nv)):
+        cdr = clean_district_relaxed(d)
+        if cdr and (cdr == cr_raw or (len(cdr) >= 3 and cdr in cr_raw)):
             return d
 
     return None
 
 def detect_month_from_name(text):
     """
-    شناسایی دقیق ماه از روی نام پوشه یا فایل (مانند تیر، مرداد 1405، شهریور، tir_report)
-    با حفاظت در برابر تداخل نام تیر و تیران
+    شناسایی دقیق ماه از روی نام پوشه یا فایل (تیر، مرداد، شهریور، 04-تیر، tir_report)
+    با حفاظت دقیق در برابر تداخل نام تیر و شهرستان تیران
     """
     if not text:
         return None
-    s = str(text).strip()
+    s = robust_text_norm(str(text))
+    s_lower = s.lower()
+
     months = [
         (1, 'فروردین', ['فروردین', 'farvardin']),
         (2, 'اردیبهشت', ['اردیبهشت', 'ordibehesht']),
         (3, 'خرداد', ['خرداد', 'khordad']),
-        (4, 'تیر', ['تیر', 'tir']),
-        (5, 'مرداد', ['مرداد', 'mordad']),
-        (6, 'شهریور', ['شهریور', 'shahrivar']),
-        (7, 'مهر', ['مهر', 'mehr']),
-        (8, 'آبان', ['آبان', 'aban']),
-        (9, 'آذر', ['آذر', 'azar']),
-        (10, 'دی', ['دی', 'dey']),
-        (11, 'بهمن', ['بهمن', 'bahman']),
-        (12, 'اسفند', ['اسفند', 'esfand'])
+        (4, 'تیر', ['تیر', '04-تیر', '۰۴-تیر', 'تیرماه', 'tir']),
+        (5, 'مرداد', ['مرداد', '05-مرداد', '۰۵-مرداد', 'مردادماه', 'mordad']),
+        (6, 'شهریور', ['شهریور', '06-شهریور', '۰۶-شهریور', 'شهریورماه', 'shahrivar', 'shahrivor']),
+        (7, 'مهر', ['مهر', '07-مهر', '۰۷-مهر', 'مهرماه', 'mehr']),
+        (8, 'آبان', ['آبان', '08-آبان', '۰۸-آبان', 'آبانماه', 'aban']),
+        (9, 'آذر', ['آذر', '09-آذر', '۰۹-آذر', 'آذرماه', 'azar']),
+        (10, 'دی', ['دی', '10-دی', '۱۰-دی', 'دیماه', 'dey']),
+        (11, 'بهمن', ['بهمن', '11-بهمن', '۱۱-بهمن', 'بهمنماه', 'bahman']),
+        (12, 'اسفند', ['اسفند', '12-اسفند', '۱۲-اسفند', 'اسفندماه', 'esfand'])
     ]
-    norm_s = unicodedata.normalize('NFKC', s).replace('ي', 'ی').replace('ك', 'ک')
-    norm_s_lower = norm_s.lower()
 
     for m_num, m_canonical, aliases in months:
         for al in aliases:
-            if al in norm_s or al in norm_s_lower:
-                if al == 'تیر' and 'تیران' in norm_s:
+            al_norm = robust_text_norm(al).lower()
+            if al_norm in s_lower:
+                # ممانعت از تشخیص نادرست تیر در کلمه تیران
+                if m_canonical == 'تیر' and 'تیران' in s:
                     continue
+                # ممانعت از تشخیص نادرست دی در اسامی نظیر اردستان یا دهاقان
+                if m_canonical == 'دی' and al == 'دی':
+                    if any(x in s for x in ['دهاقان', 'اردستان', 'جدید', 'تولید']):
+                        continue
                 return m_canonical
+
     return None
 
 def parse_number(val):
     """
-    استخراج ایمن مقدار عددی از سلول‌های اکسل:
-    - تبدیل ارقام فارسی و عربی به انگلیسی
-    - حذف جداکننده‌های هزارگان، واحدهای نفر، مخاطب، صفحه و غیره
-    - ممانعت از استخراج نادرست تاریخ‌ها (مانند 1405/05/15) به جای تعداد
+    استخراج ایمن مقادیر عددی از سلول‌های اکسل:
+    - پشتیبانی از اعداد اعشاری و صحیح
+    - تبدیل خودکار ارقام فارسی و عربی به ارقام انگلیسی
+    - حذف نمادهای هزارگان، واحدهای نفر، مخاطب، صفحه و غیره
+    - جلوگیری از تفسیر تاریخ‌ها (مانند 1405/05/15) به عنوان عدد
     """
     if val is None:
         return 0
     if isinstance(val, (int, float)):
         return int(val) if isinstance(val, int) or (isinstance(val, float) and val.is_integer()) else val
 
-    s = unicodedata.normalize('NFKC', str(val)).strip()
+    s = robust_text_norm(str(val)).strip()
     if not s:
         return 0
 
-    # بررسی عدم تفسیر تاریخ به عنوان عدد (مثلا تاریخ 1405/05/15 نباید 1405 استخراج شود)
+    # تاریخ‌ها نباید استخراج شوند
     if re.search(r'\d{2,4}[/-]\d{1,2}[/-]\d{1,2}', s):
         return 0
 
-    # تبدیل ارقام فارسی و عربی
+    # تبدیل ارقام فارسی و عربی به انگلیسی
     p_digits = '۰۱۲۳۴۵۶۷۸۹'
     a_digits = '٠١٢٣٤٥٦٧٨٩'
     for i in range(10):
         s = s.replace(p_digits[i], str(i)).replace(a_digits[i], str(i))
 
-    # حذف جداکننده‌ها و واحدهای متنی
-    for sep in [',', '،', '٬', '٫', '\u066c', '\u066b', ' ', '\u00a0', '\u200c', 'نفر', 'مخاطب', 'عدد', 'صفحه', 'بازدید', 'مورد']:
+    for sep in [',', '،', '٬', '٫', '\u066c', '\u066b', ' ', 'نفر', 'مخاطب', 'عدد', 'صفحه', 'بازدید', 'مورد']:
         s = s.replace(sep, '')
 
     match = re.search(r'\d+(\.\d+)?', s)
@@ -307,28 +321,156 @@ def parse_number(val):
     return 0
 
 # ==============================================================================
-# ۳. موتور فوق‌هوشمند شناسایی ناحیه از فایل اکسل (District Detection Engine)
+# ۳. لودر همه‌کاره و منعطف اکسل (Universal Robust Excel Loader)
+# ==============================================================================
+
+class GenericCell:
+    def __init__(self, value):
+        self.value = value
+
+class GenericSheet:
+    def __init__(self, title, rows_data):
+        self.title = title
+        self._data = rows_data  # 0-indexed list of lists
+        self.max_row = len(rows_data)
+        self.max_column = max((len(r) for r in rows_data), default=0)
+
+    def cell(self, row, column, value=None):
+        if row < 1 or row > self.max_row or column < 1:
+            return GenericCell(None)
+        row_idx = row - 1
+        col_idx = column - 1
+        row_cells = self._data[row_idx]
+        if col_idx < len(row_cells):
+            return GenericCell(row_cells[col_idx])
+        return GenericCell(None)
+
+class GenericWorkbook:
+    def __init__(self, sheets_dict, default_sheet=None, title=None):
+        self._sheets = sheets_dict
+        self.sheetnames = list(sheets_dict.keys())
+        self._active_sheet = default_sheet or (self.sheetnames[0] if self.sheetnames else None)
+        class Properties:
+            def __init__(self, t):
+                self.title = t
+        self.properties = Properties(title)
+
+    def __getitem__(self, item):
+        return self._sheets[item]
+
+    @property
+    def active(self):
+        return self._sheets[self._active_sheet] if self._active_sheet else None
+
+class HTMLTableExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.tables = []
+        self._cur_table = []
+        self._cur_row = []
+        self._cur_cell = []
+        self._in_cell = False
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ('td', 'th'):
+            self._in_cell = True
+            self._cur_cell = []
+        elif tag == 'tr':
+            self._cur_row = []
+        elif tag == 'table':
+            self._cur_table = []
+
+    def handle_endtag(self, tag):
+        if tag in ('td', 'th'):
+            self._in_cell = False
+            self._cur_row.append(''.join(self._cur_cell).strip())
+        elif tag == 'tr':
+            if self._cur_row:
+                self._cur_table.append(self._cur_row)
+        elif tag == 'table':
+            if self._cur_table:
+                self.tables.append(self._cur_table)
+
+    def handle_data(self, data):
+        if self._in_cell:
+            self._cur_cell.append(data)
+
+def load_workbook_robust(fpath):
+    """
+    بارگذاری بی‌نقص انواع فایل‌های اکسل و خروجی‌های سیستمی:
+    ۱. فایل‌های مدرن XLSX و XLSM
+    ۲. فایل‌های ZIP با پسوند .xls
+    ۳. فایل‌های باینری سنتی BIFF8 (.xls) با پشتیبانی از کتابخانه xlrd
+    ۴. جداول HTML ذخیره‌شده به عنوان فایل اکسل
+    """
+    with open(fpath, 'rb') as f:
+        file_bytes = f.read()
+
+    # ۱. فایل استاندارد آفیس زیپ (OpenXML / XLSX / XLSM)
+    if file_bytes.startswith(b'PK\x03\x04'):
+        try:
+            return openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+        except Exception:
+            return openpyxl.load_workbook(fpath, data_only=True, read_only=True)
+
+    # ۲. فایل باینری قدیمی مایکروسافت اکسل (.xls / BIFF8)
+    if file_bytes.startswith(b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1'):
+        try:
+            import xlrd
+            book = xlrd.open_workbook(file_contents=file_bytes)
+            sheets_dict = {}
+            for sname in book.sheet_names():
+                sh = book.sheet_by_name(sname)
+                rows = []
+                for r in range(sh.nrows):
+                    rows.append([sh.cell_value(r, c) for c in range(sh.ncols)])
+                sheets_dict[sname] = GenericSheet(sname, rows)
+            return GenericWorkbook(sheets_dict)
+        except ImportError:
+            raise RuntimeError("جهت پردازش فایل باینری قدیمی .xls نصب پکیج xlrd الزامی است.")
+        except Exception as e:
+            raise RuntimeError(f"خطا در پردازش فایل .xls باینری: {e}")
+
+    # ۳. جداول HTML نام‌گذاری شده به پسوند اکسل
+    if b'<html' in file_bytes.lower() or b'<table' in file_bytes.lower():
+        try:
+            content = file_bytes.decode('utf-8', errors='ignore')
+            parser = HTMLTableExtractor()
+            parser.feed(content)
+            if parser.tables:
+                sheets_dict = {}
+                for idx, tbl in enumerate(parser.tables, start=1):
+                    s_name = f"Sheet{idx}"
+                    sheets_dict[s_name] = GenericSheet(s_name, tbl)
+                return GenericWorkbook(sheets_dict)
+        except Exception as e:
+            raise RuntimeError(f"خطا در تفسیر جدول HTML: {e}")
+
+    # تلاش نهایی از طریق لودر پیش‌فرض
+    return openpyxl.load_workbook(fpath, data_only=True)
+
+# ==============================================================================
+# ۴. موتور فوق‌هوشمند کشف ناحیه (District Detection Engine)
 # ==============================================================================
 
 def detect_district_from_workbook(wb, fpath, folder_label=''):
     """
-    موتور ۵ لایه‌ای و دقیق کشف ناحیه:
-    لایه ۱: نام فایل (مثلا گلپایگان.xlsx، گزارش گلپایگان.xlsx)
-    لایه ۲: نام پوشه ماه یا زیرپوشه (مثلا reports/تیر/گلپایگان/)
-    لایه ۳: نام شیت‌های داخل فایل اکسل
-    لایه ۴: متادیتای عنوان فایل اکسل
+    موتور ۵ لایه‌ای و همه‌جانبه شناسایی ناحیه:
+    لایه ۱: نام فایل (گلپایگان.xlsx، گزارش گلپایگان، کلپایگان، گلپايگان)
+    لایه ۲: نام پوشه والد و ساختار دایرکتوری (reports/تیر/گلپایگان/)
+    لایه ۳: نام شیت‌های داخل ورک‌بوک
+    لایه ۴: متادیتای عنوان سند
     لایه ۵: اسکن عمیق سلول‌ها با فیلتر هوشمند شیت‌های اطلاعات پایه و لیست‌های استانی
     """
     fname = os.path.basename(fpath)
-    
+
     # ۱. بررسی نام فایل
     d = match_district_name(fname)
     if d:
         return d, "نام فایل"
 
-    # ۲. بررسی برچسب پوشه و مسیر پوشه‌های والد
+    # ۲. بررسی برچسب پوشه و مسیر کامل والد
     if folder_label and folder_label not in ['reports', 'پوشه reports', 'پوشه اصلی برنامه']:
-        # تفکیک بخش‌های مسیر در صورت تودرتو بودن پوشه‌ها
         for part in folder_label.replace('\\', '/').split('/'):
             d = match_district_name(part)
             if d:
@@ -340,7 +482,7 @@ def detect_district_from_workbook(wb, fpath, folder_label=''):
         if d:
             return d, f"پوشه والد «{parent_dir}»"
 
-    # ۳. بررسی نام شیت‌ها
+    # ۳. بررسی نام شیت‌های اکسل
     for sname in wb.sheetnames:
         d = match_district_name(sname)
         if d:
@@ -355,20 +497,17 @@ def detect_district_from_workbook(wb, fpath, folder_label=''):
     except Exception:
         pass
 
-    # ۵. اسکن عمیق سلول‌ها با فیلتر دقیق شیت‌های رفرنس (اطلاعات پایه)
+    # ۵. اسکن سلول‌های شیت‌های غیرپایه
     district_counts = Counter()
-    
     for sname in wb.sheetnames:
-        cn = clean_str(sname)
-        # شناسایی اولیه نام شیت‌های پایه
-        if any(w in cn for w in ['اطلاعاتپایه', 'dropdown', 'base', 'ref', 'لیست', 'پایه', 'پایگاهداده']):
+        cn = robust_text_norm(sname)
+        if any(w in cn for w in ['اطلاعاتپایه', 'اطلاعات پایه', 'dropdown', 'base', 'ref', 'لیست', 'پایه']):
             continue
 
         ws = wb[sname]
         max_r = min(ws.max_row + 1, 80)
         max_c = min(ws.max_column + 1, 20)
 
-        # بررسی شیت از نظر وجود رفرنس عمومی (اگر بیش از ۳ شهرستان متفاوت در شیت باشد، شیت رفرنس است)
         found_in_sheet = set()
         sheet_hits = Counter()
 
@@ -379,11 +518,10 @@ def detect_district_from_workbook(wb, fpath, folder_label=''):
                     md = match_district_name(v)
                     if md:
                         found_in_sheet.add(md)
-                        # سرفصل‌ها و عناوین بالای جدول وزن بالاتری دریافت می‌کنند
                         weight = 5 if r <= 8 else 1
                         sheet_hits[md] += weight
 
-        # اگر در یک شیت چندین شهرستان گوناگون لیست شده باشند، آن شیت رفرنس است و کنار گذاشته می‌شود
+        # در صورتی که بیش از ۳ شهرستان در یک شیت باشد، شیت مرجع است و فیلتر می‌گردد
         if len(found_in_sheet) > 3:
             continue
 
@@ -392,36 +530,52 @@ def detect_district_from_workbook(wb, fpath, folder_label=''):
 
     if district_counts:
         best_district, count = district_counts.most_common(1)[0]
-        return best_district, f"محتوای سلول‌های شیت ({count} بار مشاهده)"
+        return best_district, f"محتوای سلول‌های کاربرگ ({count} بار مشاهده)"
 
     return None, "عدم شناسایی"
 
 # ==============================================================================
-# ۴. موتور استخراج شاخص‌ها از کاربرگ‌های اکسل (Indicator Extraction Engine)
+# ۵. موتور استخراج شاخص‌های عملکردی (Indicator Extraction Engine)
 # ==============================================================================
 
 def extract_sheet_metrics(ws):
     """
-    استخراج تعداد مخاطبان و تعداد برنامه‌ها از یک شیت با شناسایی خودکار ستون آمار
+    استخراج دقیق تعداد مخاطبان و تعداد برنامه‌ها از یک کاربرگ:
+    - مکان‌یابی دقیق ستون آمار (نفرات / مخاطبان / بازدید / صفحات) بدون اشتباه با سرفصل‌ها و انواع مخاطب
+    - فیلتر سطرهای خلاصه (جمع کل) جهت جلوگیری از شمارش مضاعف
+    - بازیابی مقادیر از سطرهای فعال
     """
     if ws is None:
         return {'people_sum': 0, 'classes_count': 0}
 
-    target_col = None
-    header_keywords_primary = [
-        'نفر', 'بازدید', 'مخاطب', 'شرکت', 'تیراژ', 'مجموع', 'فراگیر',
-        'حاضر', 'دانش', 'بسیج', 'عموم', 'people', 'view', 'participants', 'attendee'
+    # کلمات کلیدی استاندارد ستون آمار با اولویت‌بندی دقیق
+    exact_stat_keywords = [
+        'تعداد نفرات', 'تعداد بازدید', 'تعداد مخاطب', 'تعداد شرکت',
+        'تعداد فراگیر', 'تعداد حاضر', 'تعداد صفحه', 'تعداد صفحات', 'تعداد نسخه'
     ]
-    header_keywords_secondary = [
-        'تعداد', 'صفحه', 'صفحات', 'میزان', 'آمار', 'جمعیت', 'count', 'total', 'number'
+    secondary_stat_keywords = [
+        'تعداد نفرات / تعداد بازدید', 'نفرات', 'مخاطبان', 'مخاطبین',
+        'تیراژ', 'فراگیران', 'شرکت کنندگان', 'بازدید', 'صفحات'
     ]
 
+    disqualifiers = [
+        'ردیف', 'تاریخ', 'نام ناحیه', 'نام سخنران', 'مدرس', 'موضوع',
+        'مکان', 'بستر', 'لینک', 'نوع کلاس', 'نوع تولید', 'برگزار کننده'
+    ]
+
+    target_col = None
     header_row = 1
-    # جستجوی ستون در ۱۰ ردیف نخست جهت پوشش هدرهای ترکیبی
-    for r in range(1, min(ws.max_row + 1, 11)):
+
+    # جستجوی هوشمند ستون آمار در ۵ ردیف ابتدایی
+    for r in range(1, min(ws.max_row + 1, 6)):
         for c in range(1, ws.max_column + 1):
-            h = str(ws.cell(r, c).value or '').lower()
-            if any(k in h for k in header_keywords_primary):
+            h_raw = str(ws.cell(r, c).value or '')
+            h_norm = robust_text_norm(h_raw)
+
+            if any(dq in h_norm for dq in disqualifiers):
+                continue
+
+            if any(k in h_norm for k in exact_stat_keywords):
                 target_col = c
                 header_row = r
                 break
@@ -429,10 +583,13 @@ def extract_sheet_metrics(ws):
             break
 
     if target_col is None:
-        for r in range(1, min(ws.max_row + 1, 11)):
+        for r in range(1, min(ws.max_row + 1, 6)):
             for c in range(1, ws.max_column + 1):
-                h = str(ws.cell(r, c).value or '').lower()
-                if any(k in h for k in header_keywords_secondary):
+                h_raw = str(ws.cell(r, c).value or '')
+                h_norm = robust_text_norm(h_raw)
+                if any(dq in h_norm for dq in disqualifiers):
+                    continue
+                if any(k in h_norm for k in secondary_stat_keywords):
                     target_col = c
                     header_row = r
                     break
@@ -443,29 +600,48 @@ def extract_sheet_metrics(ws):
     active_classes = 0
     start_row = header_row + 1
 
+    detail_rows_found = False
+
     for r in range(start_row, ws.max_row + 1):
-        # بررسی فعال بودن ردیف (ردیف‌های خالی یا صرفاً دارای شماره ردیف نادیده گرفته می‌شوند)
-        has_act = any(
+        # بررسی فعال بودن سطر (ردیف‌های صرفاً دارای شماره ردیف یا کاملاً خالی نادیده گرفته می‌شوند)
+        row_has_content = any(
             ws.cell(r, c).value is not None and str(ws.cell(r, c).value).strip() != ''
             for c in range(2, ws.max_column + 1)
         )
-        if not has_act and ws.cell(r, 1).value is not None and len(str(ws.cell(r, 1).value).strip()) > 3:
-            has_act = True
+        if not row_has_content and ws.cell(r, 1).value is not None and len(str(ws.cell(r, 1).value).strip()) > 3:
+            row_has_content = True
 
-        if has_act:
-            active_classes += 1
-            if target_col:
-                v = ws.cell(r, target_col).value
-                p_num = parse_number(v)
-                total_people += p_num
-            else:
-                # جستجوی مقادیر عددی در ردیف
-                for c in range(2, ws.max_column + 1):
-                    val = ws.cell(r, c).value
-                    p_num = parse_number(val)
-                    if p_num > 0 and p_num != r:
-                        total_people += p_num
-                        break
+        if not row_has_content:
+            continue
+
+        # بررسی آیا سطر از نوع سطر جمع کل / مجموع است؟
+        first_few_cells = ' '.join(str(ws.cell(r, c).value or '') for c in range(1, min(ws.max_column + 1, 5)))
+        is_summary_row = any(w in first_few_cells for w in ['جمع کل', 'مجموع', 'جمع:', 'total', 'sum'])
+
+        if is_summary_row:
+            if not detail_rows_found and target_col:
+                val = ws.cell(r, target_col).value
+                p_num = parse_number(val)
+                if p_num > 0:
+                    total_people = p_num
+                    active_classes = max(1, active_classes)
+            continue
+
+        active_classes += 1
+        detail_rows_found = True
+
+        if target_col:
+            v = ws.cell(r, target_col).value
+            p_num = parse_number(v)
+            total_people += p_num
+        else:
+            # در صورت عدم تشخیص ستون با هدر، نخستین ستون عددی سطر استخراج می‌شود
+            for c in range(2, ws.max_column + 1):
+                val = ws.cell(r, c).value
+                p_num = parse_number(val)
+                if p_num > 0 and p_num != r:
+                    total_people += p_num
+                    break
 
     return {
         'people_sum': int(total_people),
@@ -474,7 +650,7 @@ def extract_sheet_metrics(ws):
 
 def extract_workbook_indicators(wb):
     """
-    استخراج ۴ شاخص عملکردی اصلی از تمام کاربرگ‌های فایل ارسالی
+    استخراج ۴ شاخص عملکردی اصلی از تمام کاربرگ‌های ورک‌بوک
     """
     ws_hoz = None
     ws_tav = None
@@ -483,10 +659,10 @@ def extract_workbook_indicators(wb):
     ws_tol = None
 
     for sname in wb.sheetnames:
-        cn = clean_str(sname)
+        cn = robust_text_norm(sname)
         if 'حضوری' in cn or 'کارگاه' in cn or 'کلاس' in cn or 'همایش' in cn:
             ws_hoz = wb[sname]
-        elif 'توانمند' in cn:
+        elif 'توانمند' in cn or 'گردان' in cn:
             ws_tav = wb[sname]
         elif 'مجازی' in cn or 'لایو' in cn or 'آنلاین' in cn or 'وبینار' in cn:
             ws_maj = wb[sname]
@@ -502,6 +678,7 @@ def extract_workbook_indicators(wb):
         m_kha = extract_sheet_metrics(ws_kha)
         m_tol = extract_sheet_metrics(ws_tol)
 
+        # آموزش حضوری شامل آموزش‌های حضوری عمومی + توانمندسازی گردان است
         hoz_val = m_hoz['people_sum'] + m_tav['people_sum']
         if hoz_val == 0:
             hoz_val = m_hoz['classes_count'] + m_tav['classes_count']
@@ -512,7 +689,7 @@ def extract_workbook_indicators(wb):
 
         return hoz_val, maj_val, kha_val, tol_val
 
-    # حالت جایگزین برای کاربرگ‌های خلاصه‌شده یا فایل‌های تک‌شیت
+    # حالت پشتیبان برای فایل‌های تک‌کاربرگ یا خلاصه‌شده
     ws = wb.active
     hoz_val, maj_val, kha_val, tol_val = 0, 0, 0, 0
     for r in range(1, ws.max_row + 1):
@@ -525,59 +702,50 @@ def extract_workbook_indicators(wb):
                 row_val = p_num
                 break
 
-        if 'حضوری' in row_text or 'توانمند' in row_text or 'کارگاه' in row_text:
+        row_norm = robust_text_norm(row_text)
+        if 'حضوری' in row_norm or 'توانمند' in row_norm or 'کارگاه' in row_norm:
             hoz_val += row_val
-        elif 'مجازی' in row_text or 'لایو' in row_text or 'وبینار' in row_text or 'آنلاین' in row_text:
+        elif 'مجازی' in row_norm or 'لایو' in row_norm or 'وبینار' in row_norm or 'آنلاین' in row_norm:
             maj_val += row_val
-        elif 'خلاق' in row_text or 'مسابقه' in row_text or 'پویش' in row_text:
+        elif 'خلاق' in row_norm or 'مسابقه' in row_norm or 'پویش' in row_norm:
             kha_val += row_val
-        elif 'تولید' in row_text or 'رسانه' in row_text or 'کلیپ' in row_text:
+        elif 'تولید' in row_norm or 'رسانه' in row_norm or 'کلیپ' in row_norm:
             tol_val += row_val
 
     return hoz_val, maj_val, kha_val, tol_val
 
 # ==============================================================================
-# ۵. موتور اسکن و کشف ساختار پوشه‌ها و فایل‌های گزارش
+# ۶. موتور اسکن و کشف ساختار فایل‌ها و پوشه‌ها (File Discovery Engine)
 # ==============================================================================
 
 def scan_reports_directory(reports_dir='reports'):
     """
-    اسکن جامع و عمیق فایل‌های اکسل در ساختار پوشه‌ها:
-    - اسکن پوشه reports و تمام زیرپوشه‌های ماهانه (تیر، مرداد، شهریور)
-    - اسکن پوشه‌های ماهانه در ریشه برنامه (در صورت قرارگیری پوشه تیر در کنار اسکریپت)
-    - پشتیبانی از تمام پسوندهای متداول اکسل (.xlsx, .xlsm, .xls) بزرگ و کوچک
-    - نادیده‌گرفتن فایل‌های موقت، پشتیبان‌ها و فایل‌های مستر سامانه
+    اسکن جامع و مقاوم فایل‌های اکسل در تمام مسیرها:
+    - بررسی همزمان مسیر استقرار فایل اسکریپت (__file__) و مسیر جاری سیستم (cwd)
+    - اسکن ساختارهای متنوع پوشه‌ها (پوشه ماهانه، پوشه شهرستانی، پوشه تودرتو)
+    - پوشش پسوندهای متداول اکسل (.xlsx, .xlsm, .xls)
+    - پالایش فایل‌های موقت، پشتیبان و مسترهای برنامه
     """
-    os.makedirs(reports_dir, exist_ok=True)
+    script_dir = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.getcwd()
+    cwd = os.getcwd()
+
+    candidate_roots = []
     
-    files_list = []
-    seen_paths = set()
+    # پوشه reports در کنار اسکریپت و در مسیر جاری
+    r_script = os.path.join(script_dir, reports_dir)
+    if os.path.exists(r_script):
+        candidate_roots.append((r_script, True))
+    
+    if cwd != script_dir:
+        r_cwd = os.path.join(cwd, reports_dir)
+        if os.path.exists(r_cwd):
+            candidate_roots.append((r_cwd, True))
 
-    # ۱. اسکن بازگشتی داخل پوشه reports
-    for root, dirs, files in os.walk(reports_dir):
-        for f in sorted(files):
-            if f.lower().endswith(('.xlsx', '.xlsm', '.xls')) and not f.startswith('~$'):
-                full_p = os.path.abspath(os.path.join(root, f))
-                if full_p not in seen_paths:
-                    seen_paths.add(full_p)
-                    rel_dir = os.path.relpath(root, reports_dir)
-                    folder_label = '' if rel_dir == '.' else rel_dir
-                    files_list.append((os.path.join(root, f), folder_label, f))
+    # پوشه اسکریپت و پوشه جاری به منظور اسکن پوشه‌های ماهانه احتمالی مستقر در کنار برنامه
+    candidate_roots.append((script_dir, False))
+    if cwd != script_dir:
+        candidate_roots.append((cwd, False))
 
-    # ۲. اسکن پوشه‌های ماهانه که ممکن است مستقیماً در کنار فایل برنامه قرار گرفته باشند
-    month_keywords = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
-    for entry in sorted(os.listdir('.')):
-        if os.path.isdir(entry) and not entry.startswith('.') and entry != 'reports' and entry != 'output_cards_3months':
-            if any(m in entry for m in month_keywords) or match_district_name(entry):
-                for root, dirs, files in os.walk(entry):
-                    for f in sorted(files):
-                        if f.lower().endswith(('.xlsx', '.xlsm', '.xls')) and not f.startswith('~$'):
-                            full_p = os.path.abspath(os.path.join(root, f))
-                            if full_p not in seen_paths:
-                                seen_paths.add(full_p)
-                                files_list.append((os.path.join(root, f), entry, f))
-
-    # ۳. اسکن فایل‌های مستقیم قرار داده شده در ریشه برنامه
     excluded_files = {
         'نمرات_نهایی_نواحی.xlsx', 'final_scores.xlsx',
         'تهیه کارنامه نواحی.xlsx', 'تهیه کارنامه ۳ ماهه نواحی.xlsx',
@@ -585,14 +753,49 @@ def scan_reports_directory(reports_dir='reports'):
         'گزارش شهریور ماه 1405 ناحیه.xlsx',
         'نمرات_عملکرد_۲ماهه.xlsx', 'نمرات_عملکرد_۳ماهه.xlsx', 'نمرات_عملکرد_۶ماهه.xlsx'
     }
-    for f in sorted(os.listdir('.')):
-        if f.lower().endswith(('.xlsx', '.xlsm', '.xls')) and not f.startswith('~$') and f not in excluded_files and not f.startswith('کارنامه_'):
-            full_p = os.path.abspath(f)
-            if full_p not in seen_paths:
-                seen_paths.add(full_p)
-                files_list.append((f, 'پوشه اصلی برنامه', f))
 
-    # جمع‌آوری نام پوشه‌های زیرمجموعه شناخته‌شده
+    files_list = []
+    seen_paths = set()
+
+    for root_dir, is_reports_folder in candidate_roots:
+        if not os.path.exists(root_dir):
+            continue
+
+        if is_reports_folder:
+            for root, dirs, files in os.walk(root_dir):
+                for f in sorted(files):
+                    f_lower = f.lower()
+                    if f_lower.endswith(('.xlsx', '.xlsm', '.xls')) and not f.startswith('~$') and f not in excluded_files:
+                        full_p = os.path.abspath(os.path.join(root, f))
+                        if full_p not in seen_paths:
+                            seen_paths.add(full_p)
+                            rel_dir = os.path.relpath(root, root_dir)
+                            folder_label = '' if rel_dir == '.' else rel_dir
+                            files_list.append((full_p, folder_label, f))
+        else:
+            # اسکن پوشه‌های فصلی یا شهرستانی در سطح ریشه
+            month_keywords = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
+            for entry in sorted(os.listdir(root_dir)):
+                entry_path = os.path.join(root_dir, entry)
+                if os.path.isdir(entry_path) and not entry.startswith('.') and entry != reports_dir and entry != 'output_cards_3months':
+                    entry_norm = robust_text_norm(entry)
+                    if any(m in entry_norm for m in month_keywords) or match_district_name(entry):
+                        for root, dirs, files in os.walk(entry_path):
+                            for f in sorted(files):
+                                f_lower = f.lower()
+                                if f_lower.endswith(('.xlsx', '.xlsm', '.xls')) and not f.startswith('~$') and f not in excluded_files:
+                                    full_p = os.path.abspath(os.path.join(root, f))
+                                    if full_p not in seen_paths:
+                                        seen_paths.add(full_p)
+                                        files_list.append((full_p, entry, f))
+                elif os.path.isfile(entry_path):
+                    f_lower = entry.lower()
+                    if f_lower.endswith(('.xlsx', '.xlsm', '.xls')) and not entry.startswith('~$') and entry not in excluded_files and not entry.startswith('کارنامه_'):
+                        full_p = os.path.abspath(entry_path)
+                        if full_p not in seen_paths:
+                            seen_paths.add(full_p)
+                            files_list.append((full_p, 'پوشه اصلی برنامه', entry))
+
     detected_subdirs = sorted(list({flabel for _, flabel, _ in files_list if flabel and flabel != 'پوشه اصلی برنامه'}))
 
     print(f"🔍 گزارش جستجوی فایل‌های اکسل در سیستم:")
@@ -600,13 +803,13 @@ def scan_reports_directory(reports_dir='reports'):
         print(f"   📂 پوشه‌های شناسایی‌شده: {len(detected_subdirs)} پوشه ({', '.join(detected_subdirs)})")
     print(f"   📄 مجموع فایل‌های اکسل کشف شده برای ارزیابی: {len(files_list)} فایل")
     for fpath, flabel, fname in files_list:
-        loc = f"در پوشه «{flabel}»" if flabel else f"مستقیم در پوشه {reports_dir}"
+        loc = f"در پوشه «{flabel}»" if flabel else f"مستقیم در پوشه گزارشات"
         print(f"      • {fname} ({loc})")
 
     return detected_subdirs, files_list
 
 # ==============================================================================
-# ۶. تعیین سطوح کیفی سه‌گانه
+# ۷. تعیین سطوح کیفی سه‌گانه (Qualitative Tiers)
 # ==============================================================================
 
 def get_tier_3_levels(score, scale_mode='0-100'):
@@ -629,7 +832,7 @@ def get_tier_3_levels(score, scale_mode='0-100'):
             return "ضعیف"
 
 # ==============================================================================
-# ۷. موتور اصلی محاسبه نمرات دوره‌ای و تولید اکسل متمرکز
+# ۸. موتور اصلی ارزیابی دوره‌ای و تولید اکسل نهایی
 # ==============================================================================
 
 def run_period_evaluation(selected_months=None, selected_scale=None):
@@ -663,19 +866,37 @@ def run_period_evaluation(selected_months=None, selected_scale=None):
             'tolid': 0
         }
 
+    audit_logs = []
+
     # پردازش تک‌تک فایل‌های کشف‌شده
     for fpath, folder_label, fname in all_files:
+        audit_entry = {
+            'filename': fname,
+            'folder': folder_label,
+            'path': fpath,
+            'month': None,
+            'district': None,
+            'reason': None,
+            'hoz': 0, 'maj': 0, 'kha': 0, 'tol': 0,
+            'status': 'ناموفق',
+            'error_msg': ''
+        }
+
         try:
-            wb = openpyxl.load_workbook(fpath, data_only=True)
+            wb = load_workbook_robust(fpath)
             detected, detection_reason = detect_district_from_workbook(wb, fpath, folder_label)
 
             if not detected:
-                print(f"⚠️ شناسایی ناحیه برای فایل '{fname}' (در پوشه '{folder_label}') ناموفق بود.")
+                msg = f"شناسایی ناحیه برای فایل '{fname}' (در پوشه '{folder_label}') ناموفق بود."
+                print(f"⚠️ {msg}")
+                audit_entry['status'] = 'اخطار'
+                audit_entry['error_msg'] = 'عدم شناسایی شهرستان'
+                audit_logs.append(audit_entry)
                 continue
 
             hoz_val, maj_val, kha_val, tol_val = extract_workbook_indicators(wb)
 
-            # برچسب‌گذاری ماه دریافتی
+            # برچسب‌گذاری ماه
             detected_month = detect_month_from_name(folder_label) or detect_month_from_name(fname)
             month_tag = detected_month or (folder_label if folder_label else f"گزارش {accumulated[detected]['files_count'] + 1}")
 
@@ -688,11 +909,25 @@ def run_period_evaluation(selected_months=None, selected_scale=None):
             accumulated[detected]['khalagh'] += kha_val
             accumulated[detected]['tolid'] += tol_val
 
+            audit_entry['district'] = detected
+            audit_entry['reason'] = detection_reason
+            audit_entry['month'] = month_tag
+            audit_entry['hoz'] = hoz_val
+            audit_entry['maj'] = maj_val
+            audit_entry['kha'] = kha_val
+            audit_entry['tol'] = tol_val
+            audit_entry['status'] = 'موفق'
+            audit_logs.append(audit_entry)
+
             src_info = f"پوشه «{folder_label}»" if folder_label else "پوشه مستقیم"
             print(f"✓ [{detected}] (شناسایی از: {detection_reason} | {src_info} | ماه: {month_tag}): +{hoz_val} حضوری | +{maj_val} مجازی | +{kha_val} خلاقانه | +{tol_val} تولید")
 
         except Exception as e:
-            print(f"❌ خطا در پردازش فایل '{fname}': {e}")
+            msg = f"خطا در پردازش فایل '{fname}': {e}"
+            print(f"❌ {msg}")
+            audit_entry['status'] = 'خطا'
+            audit_entry['error_msg'] = str(e)
+            audit_logs.append(audit_entry)
 
     print("-" * 80)
     print("📊 محاسبه نمرات بر مبنای اوزان مصوب، سرریز آموزش و سقف ۱۰۰٪...")
@@ -762,7 +997,7 @@ def run_period_evaluation(selected_months=None, selected_scale=None):
             if matched_subdirs and unmatched_subdirs:
                 status_desc = f"کسری: {len(matched_subdirs)} از {n_months} ماه (عدم فعالیت در: {'، '.join(unmatched_subdirs)})"
             else:
-                status_desc = f"تحویل {f_cnt} از {n_months} ماه"
+                status_desc = f"کسری: تحویل {f_cnt} از {n_months} ماه"
         else:
             status_desc = f"فاقد گزارش (عملکرد ۰ در کل {n_months} ماه)"
 
@@ -803,21 +1038,27 @@ def run_period_evaluation(selected_months=None, selected_scale=None):
     for item in results:
         item['rank'] = rank_map[item['district']]
 
-    # تولید فایل اکسل متمرکز و بهینه‌سازی شده
+    # ==========================================
+    # تولید فایل اکسل متمرکز سه شیته
+    # ==========================================
     excel_filename = "نمرات_نهایی_نواحی.xlsx"
+    script_dir = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.getcwd()
+    out_path = os.path.join(script_dir, excel_filename)
+
     wb = openpyxl.Workbook()
 
-    font_title = Font(name='Calibri', size=15, bold=True, color='1E3A8A')
+    font_title = Font(name='Calibri', size=14, bold=True, color='1E3A8A')
     font_td = Font(name='Calibri', size=11, bold=False, color='0F172A')
     font_score = Font(name='Calibri', size=12, bold=True, color='047857')
     font_score_alt = Font(name='Calibri', size=11, bold=True, color='1E40AF')
-    font_copy_th = Font(name='Calibri', size=12, bold=True, color='FFFFFF')
+    font_th = Font(name='Calibri', size=11, bold=True, color='FFFFFF')
     font_copy_dn = Font(name='Calibri', size=12, bold=True, color='0F172A')
     font_copy_sc = Font(name='Calibri', size=12, bold=True, color='047857')
 
     fill_copy_header = PatternFill(start_color='059669', end_color='059669', fill_type='solid')
     fill_compare_header = PatternFill(start_color='1F4E79', end_color='1F4E79', fill_type='solid')
-    
+    fill_audit_header = PatternFill(start_color='374151', end_color='374151', fill_type='solid')
+
     fill_tier_ali = PatternFill(start_color='D1FAE5', end_color='D1FAE5', fill_type='solid')
     fill_tier_motevaset = PatternFill(start_color='FEF3C7', end_color='FEF3C7', fill_type='solid')
     fill_tier_zaeef = PatternFill(start_color='FEE2E2', end_color='FEE2E2', fill_type='solid')
@@ -831,17 +1072,17 @@ def run_period_evaluation(selected_months=None, selected_scale=None):
     align_center = Alignment(horizontal='center', vertical='center')
     align_right = Alignment(horizontal='right', vertical='center')
 
-    # ==========================================
+    # ------------------------------------------
     # شیت ۱: فقط نام و نمره (ساده و آماده کپی مستقیم)
-    # ==========================================
+    # ------------------------------------------
     ws_raw = wb.active
     ws_raw.title = "فقط نام و نمره (ساده)"
     ws_raw.views.sheetView[0].rightToLeft = True
-    
+
     ws_raw['A1'] = "نام ناحیه"
     ws_raw['B1'] = score_header_fa
-    ws_raw['A1'].font = font_copy_th
-    ws_raw['B1'].font = font_copy_th
+    ws_raw['A1'].font = font_th
+    ws_raw['B1'].font = font_th
     ws_raw['A1'].fill = fill_copy_header
     ws_raw['B1'].fill = fill_copy_header
     ws_raw['A1'].alignment = align_center
@@ -860,9 +1101,9 @@ def run_period_evaluation(selected_months=None, selected_scale=None):
     ws_raw.column_dimensions['A'].width = 25
     ws_raw.column_dimensions['B'].width = 22
 
-    # ==========================================
-    # شیت ۲: جدول مقایسه جامع دو مقیاس
-    # ==========================================
+    # ------------------------------------------
+    # شیت ۲: جدول مقایسه جامع دو مقیاس و جزئیات
+    # ------------------------------------------
     ws_comp = wb.create_sheet(title="مقایسه دو مقیاس")
     ws_comp.views.sheetView[0].rightToLeft = True
 
@@ -879,7 +1120,7 @@ def run_period_evaluation(selected_months=None, selected_scale=None):
 
     for c_idx, (h_title, w) in enumerate(headers_comp, start=1):
         cell = ws_comp.cell(row=3, column=c_idx, value=h_title)
-        cell.font = font_copy_th
+        cell.font = font_th
         cell.fill = fill_compare_header
         cell.alignment = align_center
         cell.border = border_thin
@@ -914,11 +1155,66 @@ def run_period_evaluation(selected_months=None, selected_scale=None):
         for c in range(1, 9):
             ws_comp.cell(row=row_num, column=c).border = border_thin
 
-    wb.save(excel_filename)
-    try:
-        shutil.copyfile(excel_filename, "final_scores.xlsx")
-    except Exception:
-        pass
+    # ------------------------------------------
+    # شیت ۳: گزارش پایش و ردگیری فایل‌های ورودی (Audit Trail)
+    # ------------------------------------------
+    ws_audit = wb.create_sheet(title="پایش فایل‌های ورودی")
+    ws_audit.views.sheetView[0].rightToLeft = True
+
+    ws_audit.merge_cells('A1:L1')
+    ws_audit['A1'] = "گزارش وضعیت شناسایی، استخراج و پردازش تک‌تک فایل‌های اکسل در سیستم"
+    ws_audit['A1'].font = font_title
+    ws_audit['A1'].alignment = align_center
+
+    headers_audit = [
+        ('ردیف', 8), ('نام فایل', 30), ('پوشه / برچسب', 20), ('ماه منتسب', 14),
+        ('ناحیه شناسایی‌شده', 22), ('روش شناسایی', 22),
+        ('حضوری', 12), ('مجازی', 12), ('خلاقانه', 12), ('تولیدات', 12),
+        ('وضعیت', 12), ('پیام خطا / توضیحات', 30)
+    ]
+
+    for c_idx, (h_title, w) in enumerate(headers_audit, start=1):
+        cell = ws_audit.cell(row=3, column=c_idx, value=h_title)
+        cell.font = font_th
+        cell.fill = fill_audit_header
+        cell.alignment = align_center
+        cell.border = border_thin
+        ws_audit.column_dimensions[get_column_letter(c_idx)].width = w
+
+    for idx, a in enumerate(audit_logs, start=1):
+        row_num = 3 + idx
+        ws_audit.cell(row=row_num, column=1, value=idx).alignment = align_center
+        ws_audit.cell(row=row_num, column=2, value=a['filename']).alignment = align_right
+        ws_audit.cell(row=row_num, column=3, value=a['folder']).alignment = align_center
+        ws_audit.cell(row=row_num, column=4, value=a['month'] or '-').alignment = align_center
+        ws_audit.cell(row=row_num, column=5, value=a['district'] or '-').alignment = align_right
+        ws_audit.cell(row=row_num, column=6, value=a['reason'] or '-').alignment = align_center
+        ws_audit.cell(row=row_num, column=7, value=a['hoz']).alignment = align_center
+        ws_audit.cell(row=row_num, column=8, value=a['maj']).alignment = align_center
+        ws_audit.cell(row=row_num, column=9, value=a['kha']).alignment = align_center
+        ws_audit.cell(row=row_num, column=10, value=a['tol']).alignment = align_center
+        ws_audit.cell(row=row_num, column=11, value=a['status']).alignment = align_center
+        ws_audit.cell(row=row_num, column=12, value=a['error_msg']).alignment = align_right
+
+        status_cell = ws_audit.cell(row=row_num, column=11)
+        if a['status'] == 'موفق':
+            status_cell.fill = fill_tier_ali
+        elif a['status'] == 'اخطار':
+            status_cell.fill = fill_tier_motevaset
+        else:
+            status_cell.fill = fill_tier_zaeef
+
+        for c in range(1, 13):
+            ws_audit.cell(row=row_num, column=c).font = font_td
+            ws_audit.cell(row=row_num, column=c).border = border_thin
+
+    # ذخیره‌سازی فایل اکسل
+    wb.save(out_path)
+    if os.getcwd() != script_dir:
+        try:
+            wb.save(os.path.join(os.getcwd(), excel_filename))
+        except Exception:
+            pass
 
     # چاپ خروجی در ترمینال
     print("\n" + "=" * 105)
@@ -933,9 +1229,10 @@ def run_period_evaluation(selected_months=None, selected_scale=None):
     print("=" * 105)
 
     print(f"\n🎉 فایل اکسل متمرکز با موفقیت تولید شد:")
-    print(f"   📄 «{os.path.abspath(excel_filename)}»")
+    print(f"   📄 «{out_path}»")
     print(f"\n💡 در شیت ۱ («فقط نام و نمره (ساده)»)، ستون‌های نام و نمره انتخابی ({score_header_fa}) آماده کپی مستقیم هستند.")
     print("💡 در شیت ۲، مقایسه همزمان هر دو مقیاس (واقعی ۰-۱۰۰ و نسرا ۷۰-۱۰۰) در کنار هم قرار دارد.")
+    print("💡 در شیت ۳ («پایش فایل‌های ورودی»)، گزارش ردگیری و شناسایی تک‌تک فایل‌های اکسل در دسترس است.")
     print("=" * 105)
 
     return results
@@ -943,6 +1240,7 @@ def run_period_evaluation(selected_months=None, selected_scale=None):
 if __name__ == '__main__':
     arg_m = 3
     arg_scale = '0-100'
+
     if len(sys.argv) > 1:
         raw_m = sys.argv[1].strip()
         if raw_m in ['2', '3', '6']:
@@ -958,5 +1256,39 @@ if __name__ == '__main__':
             arg_scale = '0-100'
         elif raw_s in ['70', 'nasra', '70-100', '2']:
             arg_scale = '70-100'
+
+    # در صورت اجرای تعاملی بدون پارامترهای خط فرمان
+    if len(sys.argv) == 1:
+        print("\n=======================================================")
+        print("  سامانه ارزیابی عملکرد دوره‌ای نواحی نسرا (اصفهان)")
+        print("=======================================================")
+        print("لطفاً بازه زمانی ارزیابی را انتخاب فرمایید:")
+        print("  [1] عملکرد ۲ ماهه")
+        print("  [2] عملکرد ۳ ماهه (فصلی - پیش‌فرض)")
+        print("  [3] عملکرد ۶ ماهه")
+        
+        try:
+            choice = input("\nشماره گزینه (1 / 2 / 3) [پیش‌فرض 2]: ").strip()
+            if choice == '1':
+                arg_m = 2
+            elif choice == '3':
+                arg_m = 6
+            else:
+                arg_m = 3
+        except (EOFError, KeyboardInterrupt):
+            arg_m = 3
+
+        print("\nلطفاً مقیاس نمره‌دهی مورد نظر را انتخاب فرمایید:")
+        print("  [1] مقیاس واقعی (۰ تا ۱۰۰ - پیش‌فرض)")
+        print("  [2] مقیاس استاندارد نسرا (۷۰ تا ۱۰۰)")
+        
+        try:
+            choice_sc = input("\nشماره گزینه (1 / 2) [پیش‌فرض 1]: ").strip()
+            if choice_sc == '2':
+                arg_scale = '70-100'
+            else:
+                arg_scale = '0-100'
+        except (EOFError, KeyboardInterrupt):
+            arg_scale = '0-100'
 
     run_period_evaluation(selected_months=arg_m, selected_scale=arg_scale)
