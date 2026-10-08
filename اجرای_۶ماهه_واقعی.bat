@@ -1,6 +1,16 @@
 @echo off
 chcp 65001 >nul
-title سنجش عملکرد ۶ ماهه نواحی نسرا - مقیاس واقعی (۰ تا ۱۰۰)
 cd /d "%~dp0"
-python calculate_period_scores.py 6 0
+where python >nul 2>nul
+if %errorlevel% equ 0 (
+    python calculate_period_scores.py 6 0-100
+) else (
+    where py >nul 2>nul
+    if %errorlevel% equ 0 (
+        py calculate_period_scores.py 6 0-100
+    ) else (
+        echo [ERROR] Python is not installed or not added to PATH.
+        echo Please install Python 3 and check "Add Python to PATH".
+    )
+)
 pause

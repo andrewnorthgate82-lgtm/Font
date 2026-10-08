@@ -1,10 +1,16 @@
 @echo off
 chcp 65001 >nul
-title تجمیع هوشمند عملکرد ۳ ماهه نواحی نسرا
 cd /d "%~dp0"
-echo =====================================================================
-echo  سامانه هوشمند تجمیع عملکرد ۳ ماهه (فصلی) نواحی نسرا - استان اصفهان
-echo  تجمیع ۳ فایل اکسل ماهانه برای هر شهرستان - مقیاس نمره ۷۰ تا ۱۰۰
-echo =====================================================================
-python quarterly_aggregation.py
+where python >nul 2>nul
+if %errorlevel% equ 0 (
+    python quarterly_aggregation.py
+) else (
+    where py >nul 2>nul
+    if %errorlevel% equ 0 (
+        py quarterly_aggregation.py
+    ) else (
+        echo [ERROR] Python is not installed or not added to PATH.
+        echo Please install Python 3 and check "Add Python to PATH".
+    )
+)
 pause
