@@ -21,17 +21,31 @@ import re
 import io
 import shutil
 import unicodedata
+import concurrent.futures
 from collections import Counter
 from html.parser import HTMLParser
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-# تنظیم خودکار و ایمن کدگذاری خروجی ترمینال
+# تنظیم خودکار و ایمن کدگذاری خروجی ترمینال و رفع قفل کنسول ویندوز
 if hasattr(sys.stdout, 'reconfigure'):
     try:
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
         sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+
+# غیرفعال‌سازی حالت QuickEdit در ویندوز جهت جلوگیری از فریز شدن کنسول با کلیک ماوس
+if sys.platform == 'win32':
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        hStdin = kernel32.GetStdHandle(-10)  # STD_INPUT_HANDLE
+        mode = ctypes.c_ulong()
+        if kernel32.GetConsoleMode(hStdin, ctypes.byref(mode)):
+            # 0x0040: ENABLE_QUICK_EDIT_MODE, 0x0080: ENABLE_EXTENDED_FLAGS
+            kernel32.SetConsoleMode(hStdin, (mode.value & ~0x0040) | 0x0080)
     except Exception:
         pass
 
@@ -488,7 +502,7 @@ def load_workbook_robust(fpath):
             raise RuntimeError(f"خطا در تفسیر جدول HTML: {e}")
 
     # تلاش نهایی از طریق لودر پیش‌فرض
-    return openpyxl.load_workbook(fpath, data_only=True)
+    return openpyxl.load_workbook(fpath, data_only=True, keep_links=False)
 
 # ==============================================================================
 # ۴. موتور فوق‌هوشمند کشف ناحیه (District Detection Engine)
@@ -774,9 +788,25 @@ def extract_workbook_indicators(wb):
 
     return hoz_val, maj_val, kha_val, tol_val
 
-# ==============================================================================
-# ۶. موتور اسکن و کشف ساختار فایل‌ها و پوشه‌ها (File Discovery Engine)
-# ==============================================================================
+def _load_and_extract_file(fpath, folder_label):
+    """
+    تابع کارگری مجزا جهت اجرای ایمن پردازش هر فایل با قابلیت اعمال Timeout
+    """
+    wb = None
+    try:
+        wb = load_workbook_robust(fpath)
+        detected, detection_reason = detect_district_from_workbook(wb, fpath, folder_label)
+        if not detected:
+            return None, "عدم شناسایی شهرستان", 0, 0, 0, 0
+        hoz_val, maj_val, kha_val, tol_val = extract_workbook_indicators(wb)
+        return detected, detection_reason, hoz_val, maj_val, kha_val, tol_val
+    finally:
+        if wb is not None:
+            try:
+                if hasattr(wb, 'close'):
+                    wb.close()
+            except Exception:
+                pass
 
 def scan_reports_directory(reports_dir='reports'):
     """
@@ -928,74 +958,73 @@ def run_period_evaluation(selected_months=None, selected_scale=None):
 
     audit_logs = []
 
-    # پردازش تک‌تک فایل‌های کشف‌شده
-    for fpath, folder_label, fname in all_files:
-        audit_entry = {
-            'filename': fname,
-            'folder': folder_label,
-            'path': fpath,
-            'month': None,
-            'district': None,
-            'reason': None,
-            'hoz': 0, 'maj': 0, 'kha': 0, 'tol': 0,
-            'status': 'ناموفق',
-            'error_msg': ''
-        }
+    # پردازش تک‌تک فایل‌های کشف‌شده با استفاده از محافظت زمانی (Timeout) جهت جلوگیری قطعی از توقف
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        for fpath, folder_label, fname in all_files:
+            audit_entry = {
+                'filename': fname,
+                'folder': folder_label,
+                'path': fpath,
+                'month': None,
+                'district': None,
+                'reason': None,
+                'hoz': 0, 'maj': 0, 'kha': 0, 'tol': 0,
+                'status': 'ناموفق',
+                'error_msg': ''
+            }
 
-        wb = None
-        try:
-            wb = load_workbook_robust(fpath)
-            detected, detection_reason = detect_district_from_workbook(wb, fpath, folder_label)
+            try:
+                future = executor.submit(_load_and_extract_file, fpath, folder_label)
+                # اعمال محدودیت زمانی ۱۰ ثانیه برای هر فایل اکسل
+                res = future.result(timeout=10.0)
+                detected, detection_reason, hoz_val, maj_val, kha_val, tol_val = res
 
-            if not detected:
-                msg = f"شناسایی ناحیه برای فایل '{fname}' (در پوشه '{folder_label}') ناموفق بود."
+                if not detected:
+                    msg = f"شناسایی ناحیه برای فایل '{fname}' (در پوشه '{folder_label}') ناموفق بود."
+                    safe_print(f"⚠️ {msg}")
+                    audit_entry['status'] = 'اخطار'
+                    audit_entry['error_msg'] = 'عدم شناسایی شهرستان'
+                    audit_logs.append(audit_entry)
+                    continue
+
+                # برچسب‌گذاری ماه
+                detected_month = detect_month_from_name(folder_label) or detect_month_from_name(fname)
+                month_tag = detected_month or (folder_label if folder_label else f"گزارش {accumulated[detected]['files_count'] + 1}")
+
+                accumulated[detected]['files_count'] += 1
+                if month_tag not in accumulated[detected]['months_found']:
+                    accumulated[detected]['months_found'].append(month_tag)
+                accumulated[detected]['files'].append(f"{folder_label}/{fname}" if folder_label else fname)
+                accumulated[detected]['hozori'] += hoz_val
+                accumulated[detected]['majazi'] += maj_val
+                accumulated[detected]['khalagh'] += kha_val
+                accumulated[detected]['tolid'] += tol_val
+
+                audit_entry['district'] = detected
+                audit_entry['reason'] = detection_reason
+                audit_entry['month'] = month_tag
+                audit_entry['hoz'] = hoz_val
+                audit_entry['maj'] = maj_val
+                audit_entry['kha'] = kha_val
+                audit_entry['tol'] = tol_val
+                audit_entry['status'] = 'موفق'
+                audit_logs.append(audit_entry)
+
+                src_info = f"«{folder_label}»" if folder_label else "مستقیم"
+                safe_print(f"✓ [{detected}] ({src_info} | {month_tag}): +{hoz_val} حضوری | +{maj_val} مجازی | +{kha_val} خلاقانه | +{tol_val} تولید")
+
+            except concurrent.futures.TimeoutError:
+                msg = f"زمان پردازش فایل '{fname}' (در پوشه '{folder_label}') طولانی شد و برای حفظ روند برنامه رد شد."
                 safe_print(f"⚠️ {msg}")
                 audit_entry['status'] = 'اخطار'
-                audit_entry['error_msg'] = 'عدم شناسایی شهرستان'
+                audit_entry['error_msg'] = 'توقف به دلیل طولانی شدن زمان (Timeout)'
                 audit_logs.append(audit_entry)
-                continue
-
-            hoz_val, maj_val, kha_val, tol_val = extract_workbook_indicators(wb)
-
-            # برچسب‌گذاری ماه
-            detected_month = detect_month_from_name(folder_label) or detect_month_from_name(fname)
-            month_tag = detected_month or (folder_label if folder_label else f"گزارش {accumulated[detected]['files_count'] + 1}")
-
-            accumulated[detected]['files_count'] += 1
-            if month_tag not in accumulated[detected]['months_found']:
-                accumulated[detected]['months_found'].append(month_tag)
-            accumulated[detected]['files'].append(f"{folder_label}/{fname}" if folder_label else fname)
-            accumulated[detected]['hozori'] += hoz_val
-            accumulated[detected]['majazi'] += maj_val
-            accumulated[detected]['khalagh'] += kha_val
-            accumulated[detected]['tolid'] += tol_val
-
-            audit_entry['district'] = detected
-            audit_entry['reason'] = detection_reason
-            audit_entry['month'] = month_tag
-            audit_entry['hoz'] = hoz_val
-            audit_entry['maj'] = maj_val
-            audit_entry['kha'] = kha_val
-            audit_entry['tol'] = tol_val
-            audit_entry['status'] = 'موفق'
-            audit_logs.append(audit_entry)
-
-            src_info = f"پوشه «{folder_label}»" if folder_label else "پوشه مستقیم"
-            safe_print(f"✓ [{detected}] (شناسایی از: {detection_reason} | {src_info} | ماه: {month_tag}): +{hoz_val} حضوری | +{maj_val} مجازی | +{kha_val} خلاقانه | +{tol_val} تولید")
-
-        except Exception as e:
-            msg = f"خطا در پردازش فایل '{fname}': {e}"
-            safe_print(f"❌ {msg}")
-            audit_entry['status'] = 'خطا'
-            audit_entry['error_msg'] = str(e)
-            audit_logs.append(audit_entry)
-        finally:
-            if wb is not None:
-                try:
-                    if hasattr(wb, 'close'):
-                        wb.close()
-                except Exception:
-                    pass
+            except Exception as e:
+                msg = f"خطا در پردازش فایل '{fname}': {e}"
+                safe_print(f"❌ {msg}")
+                audit_entry['status'] = 'خطا'
+                audit_entry['error_msg'] = str(e)
+                audit_logs.append(audit_entry)
 
     safe_print("-" * 80)
     safe_print("📊 محاسبه نمرات بر مبنای اوزان مصوب، سرریز آموزش و سقف ۱۰۰٪...")
@@ -1302,6 +1331,12 @@ def run_period_evaluation(selected_months=None, selected_scale=None):
     safe_print("💡 در شیت ۲، مقایسه همزمان هر دو مقیاس (واقعی ۰-۱۰۰ و نسرا ۷۰-۱۰۰) در کنار هم قرار دارد.")
     safe_print("💡 در شیت ۳ («پایش فایل‌های ورودی»)، گزارش ردگیری و شناسایی تک‌تک فایل‌های اکسل در دسترس است.")
     safe_print("=" * 105)
+
+    if sys.platform == 'win32':
+        try:
+            os.startfile(out_path)
+        except Exception:
+            pass
 
     return results
 
