@@ -94,55 +94,45 @@ def generate_scorecard_png(district_name, target_dict, actual_dict, rank="۱", t
     score_str = f"{score_val:.1f}" if isinstance(score_val, (int, float)) else str(score_val)
     is_zero = (isinstance(score_val, (int, float)) and score_val <= 70.0)
 
-    # 2. Executive Summary Cards (Y: 255 to 455) - RTL arranged
-    card_w = 306
+    # 2. Executive Summary Cards (Y: 255 to 455) - 2 Balanced Cards (Rank & Tier)
+    card_w = 465
     card_h = 200
     y_cards = 255
     
-    # Right: Score (70 to 100 Scale)
-    c_right_x = 718
-    c1_bg = (248, 249, 250) if is_zero else (235, 245, 251)
-    c1_out = (180, 180, 180) if is_zero else (37, 99, 235)
-    c1_txt = (100, 110, 120) if is_zero else (20, 38, 68)
-    draw.rounded_rectangle([c_right_x, y_cards, c_right_x + card_w, y_cards + card_h], radius=14, fill=c1_bg, outline=c1_out, width=2)
-    draw.text((c_right_x + card_w//2, y_cards + 36), fa("نمره عملکرد (۷۰ تا ۱۰۰)"), fill=c1_out, font=load_font(20), anchor="mm")
-    draw.text((c_right_x + card_w//2, y_cards + 105), fa(score_str), fill=c1_txt, font=load_font(52), anchor="mm")
-    draw.text((c_right_x + card_w//2, y_cards + 165), fa("مبنا: ۷۰ صفر تا ۱۰۰ عالی"), fill=(71, 85, 105), font=load_font(18), anchor="mm")
-
-    # Center: Rank
-    c_mid_x = 387
-    c2_bg = (254, 242, 242) if is_zero else (236, 253, 245)
-    c2_out = (220, 38, 38) if is_zero else (16, 185, 129)
-    c2_txt = (185, 28, 28) if is_zero else (4, 120, 87)
-    draw.rounded_rectangle([c_mid_x, y_cards, c_mid_x + card_w, y_cards + card_h], radius=14, fill=c2_bg, outline=c2_out, width=2)
-    draw.text((c_mid_x + card_w//2, y_cards + 36), fa("رتبه در استان"), fill=c2_out, font=load_font(20), anchor="mm")
+    # Right: Rank in Province (رتبه در استان)
+    c_right_x = 560
+    c_rank_bg = (254, 242, 242) if is_zero else (236, 253, 245)
+    c_rank_out = (220, 38, 38) if is_zero else (16, 185, 129)
+    c_rank_txt = (185, 28, 28) if is_zero else (4, 120, 87)
+    draw.rounded_rectangle([c_right_x, y_cards, c_right_x + card_w, y_cards + card_h], radius=14, fill=c_rank_bg, outline=c_rank_out, width=2)
+    draw.text((c_right_x + card_w//2, y_cards + 36), fa("رتبه در استان"), fill=c_rank_out, font=load_font(22), anchor="mm")
     rank_disp = "عدم فعالیت" if is_zero else (f"رتبه {rank}" if "رتبه" not in str(rank) else str(rank))
-    draw.text((c_mid_x + card_w//2, y_cards + 105), fa(rank_disp), fill=c2_txt, font=load_font(34), anchor="mm")
-    rank_sub = "فاقد گزارش ماهانه" if is_zero else "از میان ۳۲ شهرستان"
-    draw.text((c_mid_x + card_w//2, y_cards + 165), fa(rank_sub), fill=(71, 85, 105), font=load_font(18), anchor="mm")
+    draw.text((c_right_x + card_w//2, y_cards + 105), fa(rank_disp), fill=c_rank_txt, font=load_font(42), anchor="mm")
+    rank_sub = "فاقد گزارش ماهانه" if is_zero else "از میان ۳۲ شهرستان استان"
+    draw.text((c_right_x + card_w//2, y_cards + 165), fa(rank_sub), fill=(71, 85, 105), font=load_font(18), anchor="mm")
 
-    # Left: Qualitative Tier (3 levels: عالی, متوسط, ضعیف)
+    # Left: Qualitative Tier (سطح کیفی عملکرد)
     c_left_x = 55
     if is_zero:
         tier_title = "فاقد عملکرد"
-        tier_sub = "عدم ارسال گزارش (نمره ۷۰)"
-        c3_bg, c3_out, c3_txt = (250, 250, 250), (180, 180, 180), (120, 120, 120)
+        tier_sub = "عدم ارسال گزارش ماهانه"
+        c_tier_bg, c_tier_out, c_tier_txt = (250, 250, 250), (180, 180, 180), (120, 120, 120)
     elif tier == "عالی" or (isinstance(score_val, (int, float)) and score_val >= 90):
         tier_title = "سطح عالی"
-        tier_sub = f"نمره {score_val:.1f} (تحقق درخشان)"
-        c3_bg, c3_out, c3_txt = (254, 252, 232), (234, 179, 8), (161, 98, 7)
+        tier_sub = "تحقق درخشان اهداف (پیشتاز)"
+        c_tier_bg, c_tier_out, c_tier_txt = (254, 252, 232), (234, 179, 8), (161, 98, 7)
     elif tier == "متوسط" or (isinstance(score_val, (int, float)) and score_val >= 80):
         tier_title = "سطح متوسط"
-        tier_sub = f"نمره {score_val:.1f} (تحقق میانی)"
-        c3_bg, c3_out, c3_txt = (255, 251, 235), (245, 158, 11), (180, 83, 9)
+        tier_sub = "تحقق نسبی و میانی اهداف"
+        c_tier_bg, c_tier_out, c_tier_txt = (255, 251, 235), (245, 158, 11), (180, 83, 9)
     else:
         tier_title = "سطح ضعیف"
-        tier_sub = f"نمره {score_val:.1f} (عدم تحقق مطلوب)"
-        c3_bg, c3_out, c3_txt = (254, 242, 242), (239, 68, 68), (185, 28, 28)
+        tier_sub = "عدم تحقق مطلوب (نیازمند تلاش)"
+        c_tier_bg, c_tier_out, c_tier_txt = (254, 242, 242), (239, 68, 68), (185, 28, 28)
 
-    draw.rounded_rectangle([c_left_x, y_cards, c_left_x + card_w, y_cards + card_h], radius=14, fill=c3_bg, outline=c3_out, width=2)
-    draw.text((c_left_x + card_w//2, y_cards + 36), fa("سطح کیفی عملکرد"), fill=c3_out, font=load_font(20), anchor="mm")
-    draw.text((c_left_x + card_w//2, y_cards + 105), fa(tier_title), fill=c3_txt, font=load_font(30), anchor="mm")
+    draw.rounded_rectangle([c_left_x, y_cards, c_left_x + card_w, y_cards + card_h], radius=14, fill=c_tier_bg, outline=c_tier_out, width=2)
+    draw.text((c_left_x + card_w//2, y_cards + 36), fa("سطح کیفی عملکرد"), fill=c_tier_out, font=load_font(22), anchor="mm")
+    draw.text((c_left_x + card_w//2, y_cards + 105), fa(tier_title), fill=c_tier_txt, font=load_font(38), anchor="mm")
     draw.text((c_left_x + card_w//2, y_cards + 165), fa(tier_sub), fill=(71, 85, 105), font=load_font(18), anchor="mm")
 
     # 3. Overall Progress Bar Card (Y: 480 to 585)
@@ -412,64 +402,49 @@ def generate_quarterly_scorecard_png(district_name, target_dict, actual_dict, ra
 
     # Score calculation (70 to 100 scale)
     realization_val = actual_dict.get('overall_realization', 0.0)
-    # Score 70 is zero, 100 is 100%
     score_val = actual_dict.get('score_70_100', 70.0 + 30.0 * min(1.0, max(0.0, realization_val / 100.0)))
     score_str = f"{score_val:.1f}"
     is_zero = (realization_val == 0)
 
-    # 2. Executive Summary Cards (Y: 255 to 455)
-    card_w = 306
+    # 2. Executive Summary Cards (Y: 255 to 455) - 2 Balanced Cards (Rank & Tier)
+    card_w = 465
     card_h = 200
     y_cards = 255
-    
-    # Right: Official Score (70-100)
-    c_right_x = 718
-    c1_bg = (248, 249, 250) if is_zero else (236, 253, 245)
-    c1_out = (180, 180, 180) if is_zero else (16, 185, 129)
-    c1_txt = (100, 110, 120) if is_zero else (4, 120, 87)
-    draw.rounded_rectangle([c_right_x, y_cards, c_right_x + card_w, y_cards + card_h], radius=14, fill=c1_bg, outline=c1_out, width=2)
-    draw.text((c_right_x + card_w//2, y_cards + 36), fa("نمره عملکرد (۷۰ تا ۱۰۰)"), fill=c1_out, font=load_font(20), anchor="mm")
-    draw.text((c_right_x + card_w//2, y_cards + 105), fa(score_str), fill=c1_txt, font=load_font(54), anchor="mm")
-    draw.text((c_right_x + card_w//2, y_cards + 165), fa("مبنا: ۷۰ صفر تا ۱۰۰ عالی"), fill=(71, 85, 105), font=load_font(18), anchor="mm")
 
-    # Center: Rank
-    c_mid_x = 387
-    c2_bg = (254, 242, 242) if is_zero else (235, 245, 251)
-    c2_out = (220, 38, 38) if is_zero else (37, 99, 235)
-    c2_txt = (185, 28, 28) if is_zero else (29, 78, 216)
-    draw.rounded_rectangle([c_mid_x, y_cards, c_mid_x + card_w, y_cards + card_h], radius=14, fill=c2_bg, outline=c2_out, width=2)
-    draw.text((c_mid_x + card_w//2, y_cards + 36), fa("رتبه فصلی در استان"), fill=c2_out, font=load_font(20), anchor="mm")
+    # Right Box: Seasonal Rank in Province (رتبه فصلی در استان)
+    c_right_x = 560
+    c_rank_bg = (254, 242, 242) if is_zero else (235, 245, 251)
+    c_rank_out = (220, 38, 38) if is_zero else (37, 99, 235)
+    c_rank_txt = (185, 28, 28) if is_zero else (29, 78, 216)
+    draw.rounded_rectangle([c_right_x, y_cards, c_right_x + card_w, y_cards + card_h], radius=14, fill=c_rank_bg, outline=c_rank_out, width=2)
+    draw.text((c_right_x + card_w//2, y_cards + 36), fa("رتبه فصلی در استان"), fill=c_rank_out, font=load_font(22), anchor="mm")
     rank_disp = "عدم فعالیت" if is_zero else (f"رتبه {rank}" if "رتبه" not in str(rank) else str(rank))
-    draw.text((c_mid_x + card_w//2, y_cards + 105), fa(rank_disp), fill=c2_txt, font=load_font(34), anchor="mm")
-    rank_sub = "فاقد گزارش ۳ ماهه" if is_zero else "از میان ۳۲ شهرستان"
-    draw.text((c_mid_x + card_w//2, y_cards + 165), fa(rank_sub), fill=(71, 85, 105), font=load_font(18), anchor="mm")
+    draw.text((c_right_x + card_w//2, y_cards + 105), fa(rank_disp), fill=c_rank_txt, font=load_font(42), anchor="mm")
+    rank_sub = "فاقد گزارش ۳ ماهه" if is_zero else "از میان ۳۲ شهرستان استان"
+    draw.text((c_right_x + card_w//2, y_cards + 165), fa(rank_sub), fill=(71, 85, 105), font=load_font(18), anchor="mm")
 
-    # Left: Qualitative Tier
+    # Left Box: 3-Month Qualitative Tier (سطح ارزیابی ۳ ماهه)
     c_left_x = 55
     if is_zero:
         tier_title = "فاقد عملکرد"
-        tier_sub = "نمره ۷۰ (عدم فعالیت)"
-        c3_bg, c3_out, c3_txt = (250, 250, 250), (180, 180, 180), (120, 120, 120)
-    elif score_val >= 99.9:
+        tier_sub = "عدم ارسال گزارش فصلی"
+        c_tier_bg, c_tier_out, c_tier_txt = (250, 250, 250), (180, 180, 180), (120, 120, 120)
+    elif tier == "عالی" or realization_val >= 90.0 or score_val >= 99.0:
         tier_title = "سطح عالی"
-        tier_sub = "نمره کامل ۱۰۰ (پیشتاز)"
-        c3_bg, c3_out, c3_txt = (254, 252, 232), (234, 179, 8), (161, 98, 7)
-    elif score_val >= 92.5:
-        tier_title = "سطح خوب"
-        tier_sub = f"نمره {score_str} (تحقق مطلوب)"
-        c3_bg, c3_out, c3_txt = (239, 246, 255), (59, 130, 246), (29, 78, 216)
-    elif score_val >= 85.0:
+        tier_sub = "تحقق درخشان اهداف (پیشتاز)"
+        c_tier_bg, c_tier_out, c_tier_txt = (254, 252, 232), (234, 179, 8), (161, 98, 7)
+    elif tier == "متوسط" or realization_val >= 50.0 or score_val >= 85.0:
         tier_title = "سطح متوسط"
-        tier_sub = f"نمره {score_str} (متوسط)"
-        c3_bg, c3_out, c3_txt = (255, 251, 235), (245, 158, 11), (180, 83, 9)
+        tier_sub = "تحقق نسبی و میانی اهداف"
+        c_tier_bg, c_tier_out, c_tier_txt = (255, 251, 235), (245, 158, 11), (180, 83, 9)
     else:
         tier_title = "سطح ضعیف"
-        tier_sub = f"نمره {score_str} (نیازمند تلاش)"
-        c3_bg, c3_out, c3_txt = (254, 242, 242), (239, 68, 68), (185, 28, 28)
+        tier_sub = "عدم تحقق اهداف ابلاغی (نیازمند تلاش)"
+        c_tier_bg, c_tier_out, c_tier_txt = (254, 242, 242), (239, 68, 68), (185, 28, 28)
 
-    draw.rounded_rectangle([c_left_x, y_cards, c_left_x + card_w, y_cards + card_h], radius=14, fill=c3_bg, outline=c3_out, width=2)
-    draw.text((c_left_x + card_w//2, y_cards + 36), fa("سطح ارزیابی ۳ ماهه"), fill=c3_out, font=load_font(20), anchor="mm")
-    draw.text((c_left_x + card_w//2, y_cards + 105), fa(tier_title), fill=c3_txt, font=load_font(30), anchor="mm")
+    draw.rounded_rectangle([c_left_x, y_cards, c_left_x + card_w, y_cards + card_h], radius=14, fill=c_tier_bg, outline=c_tier_out, width=2)
+    draw.text((c_left_x + card_w//2, y_cards + 36), fa("سطح ارزیابی ۳ ماهه"), fill=c_tier_out, font=load_font(22), anchor="mm")
+    draw.text((c_left_x + card_w//2, y_cards + 105), fa(tier_title), fill=c_tier_txt, font=load_font(38), anchor="mm")
     draw.text((c_left_x + card_w//2, y_cards + 165), fa(tier_sub), fill=(71, 85, 105), font=load_font(18), anchor="mm")
 
     # 3. Overall Progress Bar Card (Y: 480 to 585)
@@ -541,7 +516,7 @@ def generate_quarterly_scorecard_png(district_name, target_dict, actual_dict, ra
     profile_bullets = [
         f"• تعداد حوزه‌های مقاومت تابعه: {target_dict.get('branches', 0)} حوزه مقاومت",
         f"• حد انتظار ۳ ماهه: محاسبه‌شده با ضریب ۳ برابر اهداف ماهانه ابلاغی",
-        "• فرمول محاسبه نمره: نمره = ۷۰ + (۳۰ × درصد تحقق) | مقیاس رسمی ۷۰ (صفر) تا ۱۰۰ (عالی)",
+        "• مبنای ارزیابی: درصد تحقق تجمعی اهداف ابلاغی در دوره ۳ ماهه",
         f"• وضعیت گزارش‌های دریافتی: {b_status}"
     ]
 
