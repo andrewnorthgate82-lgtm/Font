@@ -447,6 +447,23 @@ class HTMLTableExtractor(HTMLParser):
         if self._in_cell:
             self._cur_cell.append(data)
 
+def repair_xlsx_bytes(file_bytes):
+    try:
+        import zipfile
+        in_buf = io.BytesIO(file_bytes)
+        out_buf = io.BytesIO()
+        with zipfile.ZipFile(in_buf, 'r') as zin:
+            with zipfile.ZipFile(out_buf, 'w', compression=zipfile.ZIP_DEFLATED) as zout:
+                for item in zin.infolist():
+                    data = zin.read(item.filename)
+                    if item.filename.endswith('.xml') or item.filename.endswith('.rels'):
+                        data = re.sub(b'[\x00-\x08\x0B\x0C\x0E-\x1F]', b'', data)
+                    zout.writestr(item, data)
+        out_buf.seek(0)
+        return out_buf.getvalue()
+    except Exception:
+        return file_bytes
+
 def load_workbook_robust(fpath):
     """
     بارگذاری بی‌نقص و فوق‌سریع انواع فایل‌های اکسل و خروجی‌های سیستمی:
@@ -467,9 +484,13 @@ def load_workbook_robust(fpath):
             return openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True, keep_links=False)
         except Exception:
             try:
-                return openpyxl.load_workbook(fpath, data_only=True, read_only=True, keep_links=False)
+                repaired = repair_xlsx_bytes(file_bytes)
+                return openpyxl.load_workbook(io.BytesIO(repaired), data_only=True, read_only=True, keep_links=False)
             except Exception:
-                return openpyxl.load_workbook(fpath, data_only=True, keep_links=False)
+                try:
+                    return openpyxl.load_workbook(fpath, data_only=True, read_only=True, keep_links=False)
+                except Exception:
+                    return openpyxl.load_workbook(fpath, data_only=True, keep_links=False)
 
     # ۲. فایل باینری قدیمی مایکروسافت اکسل (.xls / BIFF8)
     if file_bytes.startswith(b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1'):
@@ -1331,21 +1352,32 @@ if __name__ == '__main__':
     arg_m = 3
     arg_scale = '0-100'
 
+    # بررسی آرگومان‌های نام‌دار یا موقعیتی خط فرمان
     if len(sys.argv) > 1:
-        raw_m = sys.argv[1].strip()
-        if raw_m in ['2', '3', '6']:
-            arg_m = int(raw_m)
-        elif raw_m in ['0', 'real', '0-100']:
-            arg_scale = '0-100'
-        elif raw_m in ['70', 'nasra', '70-100']:
-            arg_scale = '70-100'
+        import argparse
+        parser = argparse.ArgumentParser(description="محاسبه نمرات دوره‌ای نواحی نسرا")
+        parser.add_argument('positional_args', nargs='*', help="ماه و مقیاس")
+        parser.add_argument('-m', '--months', type=int, choices=[2, 3, 6], help="تعداد ماه‌ها (2، 3 یا 6)")
+        parser.add_argument('-s', '--scale', choices=['0-100', '70-100', '0', '70', 'real', 'nasra'], help="مقیاس نمره‌دهی")
+        
+        parsed, _ = parser.parse_known_args()
+        
+        if parsed.months:
+            arg_m = parsed.months
+        if parsed.scale:
+            if parsed.scale in ['70-100', '70', 'nasra']:
+                arg_scale = '70-100'
+            else:
+                arg_scale = '0-100'
 
-    if len(sys.argv) > 2:
-        raw_s = sys.argv[2].strip().lower()
-        if raw_s in ['0', 'real', '0-100', '1']:
-            arg_scale = '0-100'
-        elif raw_s in ['70', 'nasra', '70-100', '2']:
-            arg_scale = '70-100'
+        for pos in parsed.positional_args:
+            pos_str = str(pos).strip().lower()
+            if pos_str in ['2', '3', '6'] and not parsed.months:
+                arg_m = int(pos_str)
+            elif pos_str in ['70-100', '70', 'nasra', '2'] and not parsed.scale:
+                arg_scale = '70-100'
+            elif pos_str in ['0-100', '0', 'real', '1'] and not parsed.scale:
+                arg_scale = '0-100'
 
     # در صورت اجرای تعاملی بدون پارامترهای خط فرمان
     if len(sys.argv) == 1:

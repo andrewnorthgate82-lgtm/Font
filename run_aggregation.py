@@ -11,9 +11,17 @@
 import sys
 import os
 import re
+import io
 import glob
 import shutil
+import unicodedata
 import subprocess
+import warnings
+from collections import Counter
+from html.parser import HTMLParser
+
+# بی‌صدا کردن هشدارهای متداول و بی‌اثر openpyxl
+warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 # Fix Windows console UTF-8 output
 if sys.platform == 'win32':
@@ -23,10 +31,181 @@ if sys.platform == 'win32':
     except Exception:
         pass
 
+# غیرفعال‌سازی حالت QuickEdit در ویندوز جهت جلوگیری از فریز شدن کنسول با کلیک ماوس
+if sys.platform == 'win32':
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        hStdin = kernel32.GetStdHandle(-10)  # STD_INPUT_HANDLE
+        mode = ctypes.c_ulong()
+        if kernel32.GetConsoleMode(hStdin, ctypes.byref(mode)):
+            kernel32.SetConsoleMode(hStdin, (mode.value & ~0x0040) | 0x0080)
+    except Exception:
+        pass
+
 # Ensure working directory is the script folder
 script_dir = os.path.dirname(os.path.abspath(__file__))
 if script_dir:
     os.chdir(script_dir)
+
+class GenericCell:
+    def __init__(self, value):
+        self.value = value
+
+class GenericSheet:
+    def __init__(self, title, rows_data):
+        self.title = title
+        self._data = rows_data
+        self.max_row = len(rows_data)
+        self.max_column = max((len(r) for r in rows_data), default=0)
+
+    def cell(self, row, column, value=None):
+        if row < 1 or row > self.max_row or column < 1:
+            return GenericCell(None)
+        row_idx = row - 1
+        col_idx = column - 1
+        row_cells = self._data[row_idx]
+        if col_idx < len(row_cells):
+            return GenericCell(row_cells[col_idx])
+        return GenericCell(None)
+
+    def iter_rows(self, min_row=1, max_row=None, min_col=1, max_col=None, values_only=True):
+        if max_row is None:
+            max_row = self.max_row
+        if max_col is None:
+            max_col = self.max_column
+        for r_idx in range(min_row - 1, min(max_row, self.max_row)):
+            row = self._data[r_idx] if r_idx < len(self._data) else []
+            yield tuple((row[c_idx] if c_idx < len(row) else None) for c_idx in range(min_col - 1, max_col))
+
+class GenericWorkbook:
+    def __init__(self, sheets_dict, default_sheet=None, title=None):
+        self._sheets = sheets_dict
+        self.sheetnames = list(sheets_dict.keys())
+        self._active_sheet = default_sheet or (self.sheetnames[0] if self.sheetnames else None)
+        class Properties:
+            def __init__(self, t):
+                self.title = t
+        self.properties = Properties(title)
+
+    def __getitem__(self, item):
+        return self._sheets[item]
+
+    @property
+    def active(self):
+        return self._sheets[self._active_sheet] if self._active_sheet else None
+
+    def close(self):
+        pass
+
+class HTMLTableExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.tables = []
+        self._cur_table = []
+        self._cur_row = []
+        self._cur_cell = []
+        self._in_cell = False
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ('td', 'th'):
+            self._in_cell = True
+            self._cur_cell = []
+        elif tag == 'tr':
+            self._cur_row = []
+        elif tag == 'table':
+            self._cur_table = []
+
+    def handle_endtag(self, tag):
+        if tag in ('td', 'th'):
+            self._in_cell = False
+            self._cur_row.append(''.join(self._cur_cell).strip())
+        elif tag == 'tr':
+            if self._cur_row:
+                self._cur_table.append(self._cur_row)
+        elif tag == 'table':
+            if self._cur_table:
+                self.tables.append(self._cur_table)
+
+    def handle_data(self, data):
+        if self._in_cell:
+            self._cur_cell.append(data)
+
+def repair_xlsx_bytes(file_bytes):
+    try:
+        import zipfile
+        in_buf = io.BytesIO(file_bytes)
+        out_buf = io.BytesIO()
+        with zipfile.ZipFile(in_buf, 'r') as zin:
+            with zipfile.ZipFile(out_buf, 'w', compression=zipfile.ZIP_DEFLATED) as zout:
+                for item in zin.infolist():
+                    data = zin.read(item.filename)
+                    if item.filename.endswith('.xml') or item.filename.endswith('.rels'):
+                        data = re.sub(b'[\x00-\x08\x0B\x0C\x0E-\x1F]', b'', data)
+                    zout.writestr(item, data)
+        out_buf.seek(0)
+        return out_buf.getvalue()
+    except Exception:
+        return file_bytes
+
+def load_workbook_robust(fpath):
+    if not os.path.exists(fpath) or os.path.getsize(fpath) == 0:
+        raise ValueError("فایل خالی است یا وجود ندارد")
+
+    with open(fpath, 'rb') as f:
+        file_bytes = f.read()
+
+    # ۱. فایل استاندارد آفیس زیپ (OpenXML / XLSX / XLSM و XLSX با پسوند .xls)
+    if file_bytes.startswith(b'PK\x03\x04'):
+        try:
+            return openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True, keep_links=False)
+        except Exception:
+            try:
+                repaired = repair_xlsx_bytes(file_bytes)
+                return openpyxl.load_workbook(io.BytesIO(repaired), data_only=True, read_only=True, keep_links=False)
+            except Exception:
+                try:
+                    return openpyxl.load_workbook(fpath, data_only=True, read_only=True, keep_links=False)
+                except Exception:
+                    return openpyxl.load_workbook(fpath, data_only=True, keep_links=False)
+
+    # ۲. فایل باینری قدیمی مایکروسافت اکسل (.xls / BIFF8)
+    if file_bytes.startswith(b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1'):
+        try:
+            import xlrd
+            book = xlrd.open_workbook(file_contents=file_bytes)
+            sheets_dict = {}
+            for sname in book.sheet_names():
+                sh = book.sheet_by_name(sname)
+                rows = []
+                for r in range(min(sh.nrows, 200)):
+                    rows.append([sh.cell_value(r, c) for c in range(min(sh.ncols, 20))])
+                sheets_dict[sname] = GenericSheet(sname, rows)
+            return GenericWorkbook(sheets_dict)
+        except ImportError:
+            raise RuntimeError("جهت پردازش فایل باینری قدیمی .xls نصب پکیج xlrd الزامی است (یا فایل را با فرمت .xlsx ذخیره نمایید).")
+        except Exception as e:
+            raise RuntimeError(f"خطا در پردازش فایل .xls باینری: {e}")
+
+    # ۳. جداول HTML نام‌گذاری شده به پسوند اکسل
+    if b'<html' in file_bytes.lower() or b'<table' in file_bytes.lower():
+        try:
+            content = file_bytes.decode('utf-8', errors='ignore')
+            parser = HTMLTableExtractor()
+            parser.feed(content)
+            if parser.tables:
+                sheets_dict = {}
+                for idx, tbl in enumerate(parser.tables, start=1):
+                    s_name = f"Sheet{idx}"
+                    sheets_dict[s_name] = GenericSheet(s_name, tbl)
+                return GenericWorkbook(sheets_dict)
+        except Exception as e:
+            raise RuntimeError(f"خطا در تفسیر جدول HTML: {e}")
+
+    try:
+        return openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True, keep_links=False)
+    except Exception:
+        return openpyxl.load_workbook(fpath, data_only=True, keep_links=False)
 
 def ensure_dependencies():
     packages = {
@@ -268,7 +447,7 @@ def detect_district_from_workbook(wb, fpath, folder_label=''):
             return d, f"نام شیت «{sname}»"
 
     try:
-        if wb.properties and wb.properties.title:
+        if hasattr(wb, 'properties') and wb.properties and wb.properties.title:
             d = match_district_name(wb.properties.title)
             if d:
                 return d, "متادیتای عنوان سند"
@@ -282,21 +461,32 @@ def detect_district_from_workbook(wb, fpath, folder_label=''):
             continue
 
         ws = wb[sname]
-        max_r = min(ws.max_row + 1, 80)
-        max_c = min(ws.max_column + 1, 20)
-
         found_in_sheet = set()
         sheet_hits = Counter()
+        row_limit = 0
+        empty_rows = 0
 
-        for r in range(1, max_r):
-            for c in range(1, max_c):
-                v = ws.cell(r, c).value
-                if v is not None:
-                    md = match_district_name(v)
-                    if md:
-                        found_in_sheet.add(md)
-                        weight = 5 if r <= 8 else 1
-                        sheet_hits[md] += weight
+        try:
+            for row in ws.iter_rows(min_row=1, max_row=40, min_col=1, max_col=15, values_only=True):
+                row_limit += 1
+                if row_limit > 40:
+                    break
+                if not any(row):
+                    empty_rows += 1
+                    if empty_rows >= 6:
+                        break
+                    continue
+                empty_rows = 0
+
+                for val in row:
+                    if val is not None:
+                        md = match_district_name(val)
+                        if md:
+                            found_in_sheet.add(md)
+                            weight = 5 if row_limit <= 8 else 1
+                            sheet_hits[md] += weight
+        except Exception:
+            pass
 
         if len(found_in_sheet) > 3:
             continue
@@ -313,9 +503,7 @@ def detect_district_from_workbook(wb, fpath, folder_label=''):
 def extract_sheet_metrics(ws):
     if ws is None:
         return {'people_sum': 0, 'classes_count': 0, 'col_name': None}
-    
-    target_col = None
-    target_col_name = None
+
     header_keywords_primary = [
         'نفر', 'بازدید', 'مخاطب', 'شرکت', 'تیراژ', 'مجموع', 'فراگیر',
         'حاضر', 'دانش', 'بسیج', 'عموم', 'people', 'view', 'participants', 'attendee'
@@ -324,52 +512,71 @@ def extract_sheet_metrics(ws):
         'تعداد', 'صفحه', 'صفحات', 'میزان', 'آمار', 'جمعیت', 'count', 'total', 'number'
     ]
 
-    header_row = 1
-    for r in range(1, min(ws.max_row + 1, 6)):
-        for c in range(1, ws.max_column + 1):
-            h = str(ws.cell(r, c).value or '').lower()
+    target_col_idx = None  # 0-indexed
+    target_col_name = None
+    header_row_idx = 0     # 0-indexed
+
+    rows = []
+    empty_streak = 0
+    try:
+        for r in ws.iter_rows(min_row=1, max_row=300, min_col=1, max_col=20, values_only=True):
+            if not any(r):
+                empty_streak += 1
+                if empty_streak >= 8:
+                    break
+                continue
+            empty_streak = 0
+            rows.append(r)
+    except Exception:
+        return {'people_sum': 0, 'classes_count': 0, 'col_name': None}
+
+    if not rows:
+        return {'people_sum': 0, 'classes_count': 0, 'col_name': None}
+
+    # Identify header row within first 6 non-empty rows
+    for r_idx in range(min(len(rows), 6)):
+        row = rows[r_idx]
+        for c_idx, cell_val in enumerate(row):
+            h = str(cell_val or '').lower()
             if any(k in h for k in header_keywords_primary):
-                target_col = c
+                target_col_idx = c_idx
                 target_col_name = h
-                header_row = r
+                header_row_idx = r_idx
                 break
-        if target_col:
+        if target_col_idx is not None:
             break
 
-    if target_col is None:
-        for r in range(1, min(ws.max_row + 1, 6)):
-            for c in range(1, ws.max_column + 1):
-                h = str(ws.cell(r, c).value or '').lower()
+    if target_col_idx is None:
+        for r_idx in range(min(len(rows), 6)):
+            row = rows[r_idx]
+            for c_idx, cell_val in enumerate(row):
+                h = str(cell_val or '').lower()
                 if any(k in h for k in header_keywords_secondary):
-                    target_col = c
+                    target_col_idx = c_idx
                     target_col_name = h
-                    header_row = r
+                    header_row_idx = r_idx
                     break
-            if target_col:
+            if target_col_idx is not None:
                 break
 
     total_people = 0
     active_classes = 0
-    start_row = header_row + 1
 
-    for r in range(start_row, ws.max_row + 1):
-        has_act = any(
-            ws.cell(r, c).value is not None and str(ws.cell(r, c).value).strip() != ''
-            for c in range(2, ws.max_column + 1)
-        )
-        if not has_act and ws.cell(r, 1).value is not None and len(str(ws.cell(r, 1).value).strip()) > 3:
+    for r_idx in range(header_row_idx + 1, len(rows)):
+        row = rows[r_idx]
+        has_act = any(cell_val is not None and str(cell_val).strip() != '' for cell_val in row[1:])
+        if not has_act and row[0] is not None and len(str(row[0]).strip()) > 3:
             has_act = True
 
         if has_act:
             active_classes += 1
-            if target_col:
-                v = ws.cell(r, target_col).value
-                total_people += parse_number(v)
+            if target_col_idx is not None and target_col_idx < len(row):
+                val = row[target_col_idx]
+                total_people += parse_number(val)
             else:
-                for c in range(2, ws.max_column + 1):
-                    val = ws.cell(r, c).value
-                    p_num = parse_number(val)
-                    if p_num > 0 and p_num != r:
+                for cell_val in row[1:]:
+                    p_num = parse_number(cell_val)
+                    if p_num > 0 and p_num != (r_idx + 1):
                         total_people += p_num
                         break
 
@@ -419,24 +626,31 @@ def extract_workbook_indicators(wb):
     # Fallback for single-sheet summaries
     ws = wb.active
     hoz_val, maj_val, kha_val, tol_val = 0, 0, 0, 0
-    for r in range(1, ws.max_row + 1):
-        row_text = ' '.join(str(ws.cell(r, c).value or '') for c in range(1, ws.max_column + 1))
-        row_val = 0
-        for c in range(ws.max_column, 0, -1):
-            val = ws.cell(r, c).value
-            p_num = parse_number(val)
-            if p_num > 0 and p_num != r:
-                row_val = p_num
-                break
+    if ws is not None:
+        r_num = 0
+        try:
+            for row in ws.iter_rows(min_row=1, max_row=60, min_col=1, max_col=15, values_only=True):
+                r_num += 1
+                if not any(row):
+                    continue
+                row_text = ' '.join(str(c or '') for c in row)
+                row_val = 0
+                for val in reversed(row):
+                    p_num = parse_number(val)
+                    if p_num > 0 and p_num != r_num:
+                        row_val = p_num
+                        break
 
-        if 'حضوری' in row_text or 'توانمند' in row_text or 'کارگاه' in row_text:
-            hoz_val += row_val
-        elif 'مجازی' in row_text or 'لایو' in row_text or 'وبینار' in row_text or 'آنلاین' in row_text:
-            maj_val += row_val
-        elif 'خلاق' in row_text or 'مسابقه' in row_text or 'پویش' in row_text:
-            kha_val += row_val
-        elif 'تولید' in row_text or 'رسانه' in row_text or 'کلیپ' in row_text:
-            tol_val += row_val
+                if 'حضوری' in row_text or 'توانمند' in row_text or 'کارگاه' in row_text:
+                    hoz_val += row_val
+                elif 'مجازی' in row_text or 'لایو' in row_text or 'وبینار' in row_text or 'آنلاین' in row_text:
+                    maj_val += row_val
+                elif 'خلاق' in row_text or 'مسابقه' in row_text or 'پویش' in row_text:
+                    kha_val += row_val
+                elif 'تولید' in row_text or 'رسانه' in row_text or 'کلیپ' in row_text:
+                    tol_val += row_val
+        except Exception:
+            pass
 
     return hoz_val, maj_val, kha_val, tol_val
 
@@ -488,26 +702,29 @@ def find_reports_folder(month_name, year="1405"):
 
     collected = []
     seen = set()
+    extensions = ('*.xlsx', '*.xlsm', '*.xls')
 
     # 1. Look for subfolders in reports/ that match month_name
     for d in sorted(os.listdir('reports')):
         full_d = os.path.join('reports', d)
         if os.path.isdir(full_d) and month_name in d:
             target_folder = full_d
-            for f in sorted(glob.glob(os.path.join(full_d, '*.xlsx'))):
-                if not os.path.basename(f).startswith('~$'):
-                    ap = os.path.abspath(f)
-                    if ap not in seen:
-                        seen.add(ap)
-                        collected.append(f)
+            for ext in extensions:
+                for f in sorted(glob.glob(os.path.join(full_d, ext))):
+                    if not os.path.basename(f).startswith('~$'):
+                        ap = os.path.abspath(f)
+                        if ap not in seen:
+                            seen.add(ap)
+                            collected.append(f)
 
     # 2. Also check reports/ root
-    for f in sorted(glob.glob(os.path.join('reports', '*.xlsx'))):
-        if not os.path.basename(f).startswith('~$'):
-            ap = os.path.abspath(f)
-            if ap not in seen:
-                seen.add(ap)
-                collected.append(f)
+    for ext in extensions:
+        for f in sorted(glob.glob(os.path.join('reports', ext))):
+            if not os.path.basename(f).startswith('~$'):
+                ap = os.path.abspath(f)
+                if ap not in seen:
+                    seen.add(ap)
+                    collected.append(f)
 
     # 3. Check current folder for report files
     excluded = {
@@ -518,7 +735,7 @@ def find_reports_folder(month_name, year="1405"):
         'نمرات_عملکرد_۲ماهه.xlsx', 'نمرات_عملکرد_۳ماهه.xlsx', 'نمرات_عملکرد_۶ماهه.xlsx'
     }
     for f in sorted(os.listdir('.')):
-        if f.endswith('.xlsx') and not f.startswith('~$') and f not in excluded and not f.startswith('کارنامه_'):
+        if (f.endswith('.xlsx') or f.endswith('.xlsm') or f.endswith('.xls')) and not f.startswith('~$') and f not in excluded and not f.startswith('کارنامه_'):
             ap = os.path.abspath(f)
             if ap not in seen:
                 seen.add(ap)
@@ -570,8 +787,9 @@ def process_all_reports(master_excel="تهیه کارنامه نواحی.xlsx", 
     
     for fpath in excel_files:
         fname = os.path.basename(fpath)
+        wb = None
         try:
-            wb = openpyxl.load_workbook(fpath, data_only=True)
+            wb = load_workbook_robust(fpath)
             detected, detection_reason = detect_district_from_workbook(wb, fpath, folder_name)
 
             if not detected:
@@ -593,6 +811,13 @@ def process_all_reports(master_excel="تهیه کارنامه نواحی.xlsx", 
 
         except Exception as e:
             print(f"❌ Error processing file '{fname}': {e}")
+        finally:
+            if wb is not None:
+                try:
+                    if hasattr(wb, 'close'):
+                        wb.close()
+                except Exception:
+                    pass
 
     print("-" * 75)
     print("💾 Updating metrics into master Excel file...")
