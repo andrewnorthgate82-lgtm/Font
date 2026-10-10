@@ -153,7 +153,7 @@ class ProviderGeminiTest {
         assertTrue("image inlineData missing: $body", body.contains("\"inlineData\""))
         assertTrue("image mime missing: $body", body.contains("image/jpeg"))
         assertTrue("assistant must map to model role: $body", body.contains("\"role\":\"model\""))
-        assertTrue("token cap missing: $body", body.contains("\"maxOutputTokens\":4096"))
+        assertTrue("token cap missing: $body", body.contains("\"maxOutputTokens\":16384"))
     }
 
     @Test

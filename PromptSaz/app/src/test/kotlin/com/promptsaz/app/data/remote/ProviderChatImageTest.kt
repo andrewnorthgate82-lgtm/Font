@@ -239,7 +239,9 @@ class ProviderChatImageTest {
         val result = provider!!.chat(model = "vision-model-x", turns = listOf(ChatTurn(role = "user", text = "سلام")))
 
         assertTrue(result.isSuccess)
-        assertTrue("max_tokens missing: $chatBody", chatBody.orEmpty().contains("\"max_tokens\":4096"))
+        // گفتگو replies carry the generous chat budget (whole files must fit),
+        // not the 4096 default used by structured generation
+        assertTrue("max_tokens missing: $chatBody", chatBody.orEmpty().contains("\"max_tokens\":16384"))
     }
 
     @Test
