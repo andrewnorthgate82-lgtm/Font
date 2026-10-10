@@ -95,10 +95,20 @@ class ImageStudioViewModel @Inject constructor(
         }
         // deep link from the app menu: show one specific past generation
         savedStateHandle.get<Long>("generationId")?.takeIf { it > 0L }?.let { targetId ->
-            viewModelScope.launch {
-                val history = imageRepository.history().first { list -> list.any { it.id == targetId } }
-                _uiState.update { it.copy(current = history.first { g -> g.id == targetId }) }
-            }
+            openGeneration(targetId)
+        }
+    }
+
+    /**
+     * Shows one specific past generation (app-menu حافظه deep link). Public
+     * so the screen can also drive it when the nav entry changes while the
+     * ViewModel is reused.
+     */
+    fun openGeneration(generationId: Long) {
+        if (generationId <= 0L) return
+        viewModelScope.launch {
+            val history = imageRepository.history().first { list -> list.any { it.id == generationId } }
+            _uiState.update { it.copy(current = history.first { g -> g.id == generationId }) }
         }
     }
 

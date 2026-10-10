@@ -215,18 +215,19 @@ class OpenAiCompatibleProvider @Inject constructor(
             return@withContext Result.failure(IllegalStateException(it))
         }
         if (config.isGemini) {
-            return@withContext geminiCall(config, model = selectedModel, turns = turns) { it }
+            return@withContext geminiCall(config, model = selectedModel, turns = turns, maxOutputTokens = CHAT_MAX_TOKENS) { it }
         }
         val request = ChatCompletionChatRequestDto(
             model = selectedModel,
             messages = turns.map { turn -> turn.toContentMessage() },
-            maxTokens = DEFAULT_MAX_TOKENS,
+            maxTokens = CHAT_MAX_TOKENS,
         )
         when (
             val response = postChatWithTokenRetry(
                 config,
                 request,
                 ChatCompletionChatRequestDto.serializer(),
+                maxCap = CHAT_MAX_TOKENS,
             ) { req, cap -> req.copy(maxTokens = cap) }
         ) {
             is HttpOutcome.Success -> {
@@ -564,10 +565,11 @@ class OpenAiCompatibleProvider @Inject constructor(
         config: ProviderConfig,
         model: String,
         turns: List<ChatTurn>,
+        maxOutputTokens: Int = DEFAULT_MAX_TOKENS,
         map: (String) -> T,
     ): Result<T> = withContext(ioDispatcher) {
         val url = GeminiWire.generateContentUrl(config.baseUrl, model)
-        val request = GeminiWire.fromTurns(turns, maxOutputTokens = DEFAULT_MAX_TOKENS)
+        val request = GeminiWire.fromTurns(turns, maxOutputTokens = maxOutputTokens)
         val body = json.encodeToString(GeminiWire.GeminiGenerateRequest.serializer(), request)
         when (val response = httpCallWithRetry("POST", url, config, body)) {
             is HttpOutcome.Success -> {
@@ -620,6 +622,7 @@ class OpenAiCompatibleProvider @Inject constructor(
         config: ProviderConfig,
         request: T,
         serializer: KSerializer<T>,
+        maxCap: Int = DEFAULT_MAX_TOKENS,
         withMaxTokens: (T, Int?) -> T,
     ): HttpOutcome {
         var response = httpCallWithRetry("POST", config.chatUrl, config, encodeChatBody(request, serializer))
@@ -628,7 +631,7 @@ class OpenAiCompatibleProvider @Inject constructor(
             if (affordable != null && affordable >= MIN_AFFORDABLE_TOKENS) {
                 val retry = withMaxTokens(
                     request,
-                    (affordable * 9 / 10).coerceIn(MIN_AFFORDABLE_TOKENS, DEFAULT_MAX_TOKENS),
+                    (affordable * 9 / 10).coerceIn(MIN_AFFORDABLE_TOKENS, maxCap),
                 )
                 response = httpCallWithRetry("POST", config.chatUrl, config, encodeChatBody(retry, serializer))
             }
@@ -899,8 +902,16 @@ class OpenAiCompatibleProvider @Inject constructor(
         const val CONNECT_TIMEOUT_MS = 15_000
         const val READ_TIMEOUT_MS = 90_000
 
-        /** Reply cap sent as max_tokens on every chat request. */
+        /** Reply cap sent as max_tokens on structured generation requests. */
         const val DEFAULT_MAX_TOKENS = 4096
+
+        /**
+         * The گفتگو tab asks for whole FILES back (edited md, long code) —
+         * 4096 tokens cut those replies in half. Professional-chat replies
+         * get a generous budget; providers that reject the cap fall back via
+         * the existing 400/max_tokens retry (server default).
+         */
+        const val CHAT_MAX_TOKENS = 16_384
 
         /** Below this affordable cap a retry is pointless — surface the error. */
         const val MIN_AFFORDABLE_TOKENS = 200

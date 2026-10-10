@@ -46,6 +46,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -82,12 +83,19 @@ import java.io.File
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ImageStudioScreen(
+    generationId: Long = 0L,
     onOpenMenu: () -> Unit,
     onNavigateToSettings: () -> Unit,
     viewModel: ImageStudioViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+    // deep link from the app menu (حافظه‌ها): show the tapped generation even
+    // when this screen instance outlives the nav entry that created it.
+    LaunchedEffect(generationId) {
+        if (generationId > 0L) viewModel.openGeneration(generationId)
+    }
 
     // تصویر مرجع / فایل متنی برای ساخت تصویر — چندتایی، بدون محدودیت تعداد
     val pickReferenceFiles = rememberAttachmentPicker(

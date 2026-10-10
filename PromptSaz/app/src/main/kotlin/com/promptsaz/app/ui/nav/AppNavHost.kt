@@ -76,11 +76,19 @@ fun AppNavHost(
         }
     }
 
-    /** Opens a section tab WITHOUT restoring state, so the deep-link args land. */
+    /**
+     * Opens a section tab WITHOUT restoring state, so the deep-link args land.
+     *
+     * No launchSingleTop here — THAT was the حافظه bug: navigating to
+     * chat?conversationId=5 while the chat tab is already open replaces the
+     * back stack entry but KEEPS its old ViewModel store, so the existing
+     * ChatViewModel (holding the OLD args in its SavedStateHandle) survives
+     * and the tapped conversation never opens. Without singleTop, every tap
+     * creates a fresh entry + ViewModel carrying the new id.
+     */
     fun openTabWithArgs(route: String) {
         navController.navigate(route) {
             popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-            launchSingleTop = true
         }
     }
 
@@ -183,8 +191,9 @@ fun AppNavHost(
                         defaultValue = 0L
                     },
                 ),
-            ) {
+            ) { entry ->
                 ChatScreen(
+                    conversationId = entry.arguments?.getLong("conversationId") ?: 0L,
                     onOpenMenu = { scope.launch { drawerState.open() } },
                     onNavigateToSettings = { navController.navigate(Routes.SETTINGS) },
                 )
@@ -203,8 +212,9 @@ fun AppNavHost(
                         defaultValue = 0L
                     },
                 ),
-            ) {
+            ) { entry ->
                 ImageStudioScreen(
+                    generationId = entry.arguments?.getLong("generationId") ?: 0L,
                     onOpenMenu = { scope.launch { drawerState.open() } },
                     onNavigateToSettings = { navController.navigate(Routes.SETTINGS) },
                 )

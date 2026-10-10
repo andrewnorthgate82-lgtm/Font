@@ -2,6 +2,8 @@ package com.promptsaz.app.ui.screens.chat
 
 import android.graphics.BitmapFactory
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
@@ -33,6 +35,7 @@ import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.SaveAlt
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -66,6 +69,7 @@ import com.promptsaz.app.domain.model.UserAttachment
 import com.promptsaz.app.ui.components.ModelPickerSheet
 import com.promptsaz.app.ui.components.AttachmentChipsRow
 import com.promptsaz.app.ui.components.ChatAttachmentChips
+import com.promptsaz.app.ui.components.MessageExport
 import com.promptsaz.app.ui.components.SoftIconButton
 import com.promptsaz.app.ui.components.rememberAttachmentPicker
 import com.promptsaz.app.ui.theme.BrandGradient
@@ -79,12 +83,42 @@ import com.promptsaz.app.util.PlatformUtils
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
+    conversationId: Long = 0L,
     onOpenMenu: () -> Unit,
     onNavigateToSettings: () -> Unit,
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+    // deep link from the app menu (حافظه‌ها): whenever the nav entry hands us
+    // a conversation id, open THAT conversation — belt and suspenders next to
+    // the ViewModel's SavedStateHandle read so a reused entry can't skip it.
+    LaunchedEffect(conversationId) {
+        if (conversationId > 0L) viewModel.openConversation(conversationId)
+    }
+
+    // پاسخ دستیار → فایل واقعی روی گوشی (معادل دکمهٔ دانلود ChatGPT/Gemini):
+    // محتوای بلوک کدِ پاسخ با یک ضربه به فایل md تبدیل و در گوشی ذخیره می‌شود.
+    var pendingExport by remember { mutableStateOf<String?>(null) }
+    val saveFileLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/markdown"),
+    ) { uri ->
+        val content = pendingExport
+        pendingExport = null
+        if (uri != null && content != null) {
+            val saved = runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { output ->
+                    output.write(MessageExport.exportContent(content).toByteArray(Charsets.UTF_8))
+                } != null
+            }.getOrDefault(false)
+            Toast.makeText(
+                context,
+                if (saved) "فایل ذخیره شد ✓" else "ذخیرهٔ فایل ناموفق بود؛ دوباره تلاش کن.",
+                Toast.LENGTH_SHORT,
+            ).show()
+        }
+    }
 
     var input by remember { mutableStateOf("") }
     val pendingFiles = remember { mutableStateListOf<UserAttachment>() }
@@ -252,6 +286,10 @@ fun ChatScreen(
                             MessageBubble(
                                 message = message,
                                 readImage = viewModel::readImageFile,
+                                onSaveFile = { text ->
+                                    pendingExport = text
+                                    saveFileLauncher.launch(MessageExport.suggestedFileName(text))
+                                },
                             )
                         }
                     }
@@ -417,6 +455,7 @@ private fun EmptyChat(onSuggestion: (String) -> Unit, modifier: Modifier = Modif
 private fun MessageBubble(
     message: ChatMessage,
     readImage: (String) -> ByteArray?,
+    onSaveFile: (String) -> Unit = {},
 ) {
     val fromUser = message.isFromUser
     val context = LocalContext.current
@@ -473,11 +512,26 @@ private fun MessageBubble(
                     }
                 }
             }
-            // one quiet copy action (selection covers everything else)
+            // quiet actions (selection covers everything else)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
                 modifier = Modifier.padding(top = 2.dp),
             ) {
+                if (!fromUser) {
+                    Icon(
+                        imageVector = Icons.Rounded.SaveAlt,
+                        contentDescription = "ذخیرهٔ پاسخ به فایل",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clip(CircleShape)
+                            .clickable(
+                                enabled = message.text.isNotBlank(),
+                                onClick = { onSaveFile(message.text) },
+                            ),
+                    )
+                }
                 Icon(
                     imageVector = Icons.Rounded.ContentCopy,
                     contentDescription = "کپی پیام",

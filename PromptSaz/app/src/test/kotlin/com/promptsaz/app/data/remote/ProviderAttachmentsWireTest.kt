@@ -147,6 +147,8 @@ class ProviderAttachmentsWireTest {
 
         assertTrue("chat failed: ${result.exceptionOrNull()?.message}", result.isSuccess)
         val body = capturedBody.get().orEmpty()
+        // file-sized replies need the generous chat budget, not the 4096 default
+        assertTrue("chat output budget missing", body.contains("\"maxOutputTokens\":16384"))
         // image + audio as inlineData with their exact mimes and base64 payloads
         assertTrue("png mime missing", body.contains("\"mimeType\":\"image/png\""))
         assertTrue("png payload missing", body.contains(Base64.getEncoder().encodeToString(png.bytes)))
