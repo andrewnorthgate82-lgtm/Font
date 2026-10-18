@@ -39,7 +39,18 @@ jobs:
         working-directory: local-ai-poc
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon --stacktrace :app:assembleDebug
+          set +e
+          ./gradlew --no-daemon --stacktrace :app:assembleDebug > "$RUNNER_TEMP/gradle-build.log" 2>&1
+          build_status=$?
+          cat "$RUNNER_TEMP/gradle-build.log"
+          if [ "$build_status" -ne 0 ]; then
+            while IFS= read -r line; do
+              line=${line//'%'/'%25'}
+              line=${line//$'\r'/'%0D'}
+              echo "::error title=Gradle diagnostic::$line"
+            done < <(tail -n 40 "$RUNNER_TEMP/gradle-build.log")
+            exit "$build_status"
+          fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v7.0.2
