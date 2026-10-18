@@ -10,7 +10,7 @@ on:
       - ".github/workflows/build-local-ai-poc.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-debug-apk:
@@ -64,3 +64,33 @@ jobs:
           path: local-ai-poc/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish direct APK download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="local-ai-poc-build-${GITHUB_RUN_ID}"
+          apk="$RUNNER_TEMP/local-ai-poc-debug.apk"
+          cp local-ai-poc/app/build/outputs/apk/debug/app-debug.apk "$apk"
+          notes=$(cat <<EOF
+          Experimental Android POC build for offline Persian text generation.
+
+          The APK has compiled successfully, but this build has not yet been tested on the user's Redmi Note 13 Pro+. Actual-device latency, memory, thermal, and stability results remain to be collected.
+
+          The first model download requires internet access; after downloading, inference is intended to run locally on the phone.
+
+          Source commit: ${GITHUB_SHA}
+          Workflow run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          EOF
+          )
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" "$apk" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$tag" "$apk" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Local AI POC build ${GITHUB_RUN_NUMBER}" \
+              --notes "$notes" \
+              --target "$GITHUB_SHA" \
+              --prerelease
+          fi
