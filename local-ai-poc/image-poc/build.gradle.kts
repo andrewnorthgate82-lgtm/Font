@@ -11,8 +11,8 @@ android {
         applicationId = "com.font.localimagepoc"
         minSdk = 31
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
         ndk {
             abiFilters += "arm64-v8a"
         }
@@ -31,5 +31,11 @@ kotlin {
 }
 
 dependencies {
-    implementation("com.google.mediapipe:tasks-vision-image-generator:0.10.26.1")
+    // MediaPipe 0.10.26.1 emits calls to the full protobuf Any.Builder API while its POM
+    // declares protobuf-javalite. Exclude lite and use the matching full runtime to avoid
+    // NoSuchMethodError at ImageGenerator.createFromOptions() on Android.
+    implementation("com.google.mediapipe:tasks-vision-image-generator:0.10.26.1") {
+        exclude(group = "com.google.protobuf", module = "protobuf-javalite")
+    }
+    implementation("com.google.protobuf:protobuf-java:4.32.0")
 }

@@ -82,7 +82,7 @@ jobs:
 
           Assets:
           - local-ai-poc-debug.apk: offline Persian text-generation POC.
-          - local-image-poc-debug.apk: separate experimental image-generation POC using MediaPipe Image Generator 0.10.26.1. The image model is not bundled; the app downloads and verifies a separate approximately 2.07 GB model archive. The MediaPipe Image Generator task is deprecated and no longer actively maintained. This APK has not been tested on the user's Redmi Note 13 Pro+; image quality, latency, memory, thermal behavior, and stability require a real-device test.
+          - local-image-poc-debug.apk: separate experimental image-generation POC (app version 0.1.1) using MediaPipe Image Generator 0.10.26.1, with a protobuf runtime compatibility fix for initialization. The image model is not bundled; the app downloads and verifies a separate approximately 2.07 GB model archive. The MediaPipe Image Generator task is deprecated and no longer actively maintained. This APK has not been tested on the user's Redmi Note 13 Pro+; image quality, latency, memory, thermal behavior, and stability require a real-device test.
 
           First model downloads require Wi-Fi/internet. Inference is intended to run locally after the model is ready.
           Source commit: ${GITHUB_SHA}
