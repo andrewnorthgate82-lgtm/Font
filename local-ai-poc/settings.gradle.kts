@@ -15,4 +15,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "LocalAiPoc"
-include(":app")
+include(":app", ":image-poc")

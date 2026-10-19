@@ -1,4 +1,4 @@
-name: Build Local AI POC APK
+name: Build Local AI POC APKs
 
 on:
   workflow_dispatch:
@@ -13,10 +13,10 @@ permissions:
   contents: write
 
 jobs:
-  build-debug-apk:
-    name: Build Android debug APK
+  build-debug-apks:
+    name: Build Android debug APKs
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Check out source
         uses: actions/checkout@v7.0.1
@@ -35,12 +35,12 @@ jobs:
       - name: Install Android SDK packages
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Build APK
+      - name: Build text and image POC APKs
         working-directory: local-ai-poc
         run: |
           chmod +x ./gradlew
           set +e
-          ./gradlew --no-daemon --stacktrace :app:assembleDebug > "$RUNNER_TEMP/gradle-build.log" 2>&1
+          ./gradlew --no-daemon --stacktrace :app:assembleDebug :image-poc:assembleDebug > "$RUNNER_TEMP/gradle-build.log" 2>&1
           build_status=$?
           cat "$RUNNER_TEMP/gradle-build.log"
           if [ "$build_status" -ne 0 ]; then
@@ -57,37 +57,42 @@ jobs:
             exit "$build_status"
           fi
 
-      - name: Upload APK artifact
+      - name: Upload APK artifacts
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: local-ai-poc-debug-apk
-          path: local-ai-poc/app/build/outputs/apk/debug/app-debug.apk
+          name: local-ai-poc-apks
+          path: |
+            local-ai-poc/app/build/outputs/apk/debug/app-debug.apk
+            local-ai-poc/image-poc/build/outputs/apk/debug/image-poc-debug.apk
           if-no-files-found: error
           retention-days: 14
 
-      - name: Publish direct APK download
+      - name: Publish direct APK downloads
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           tag="local-ai-poc-build-${GITHUB_RUN_ID}"
-          apk="$RUNNER_TEMP/local-ai-poc-debug.apk"
-          cp local-ai-poc/app/build/outputs/apk/debug/app-debug.apk "$apk"
+          text_apk="$RUNNER_TEMP/local-ai-poc-debug.apk"
+          image_apk="$RUNNER_TEMP/local-image-poc-debug.apk"
+          cp local-ai-poc/app/build/outputs/apk/debug/app-debug.apk "$text_apk"
+          cp local-ai-poc/image-poc/build/outputs/apk/debug/image-poc-debug.apk "$image_apk"
           notes=$(cat <<EOF
-          Experimental Android POC build for offline Persian text generation.
+          Experimental Android POC builds for on-device AI evaluation.
 
-          The APK has compiled successfully, but this build has not yet been tested on the user's Redmi Note 13 Pro+. Actual-device latency, memory, thermal, and stability results remain to be collected.
+          Assets:
+          - local-ai-poc-debug.apk: offline Persian text-generation POC.
+          - local-image-poc-debug.apk: separate experimental image-generation POC using MediaPipe Image Generator 0.10.26.1. The image model is not bundled; the app downloads and verifies a separate approximately 2.07 GB model archive. The MediaPipe Image Generator task is deprecated and no longer actively maintained. This APK has not been tested on the user's Redmi Note 13 Pro+; image quality, latency, memory, thermal behavior, and stability require a real-device test.
 
-          The first model download requires internet access; after downloading, inference is intended to run locally on the phone.
-
+          First model downloads require Wi-Fi/internet. Inference is intended to run locally after the model is ready.
           Source commit: ${GITHUB_SHA}
           Workflow run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
           EOF
           )
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$tag" "$apk" --repo "$GITHUB_REPOSITORY" --clobber
+            gh release upload "$tag" "$text_apk" "$image_apk" --repo "$GITHUB_REPOSITORY" --clobber
           else
-            gh release create "$tag" "$apk" \
+            gh release create "$tag" "$text_apk" "$image_apk" \
               --repo "$GITHUB_REPOSITORY" \
               --title "Local AI POC build ${GITHUB_RUN_NUMBER}" \
               --notes "$notes" \
