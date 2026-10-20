@@ -68,8 +68,15 @@ jobs:
           test -n "$SIGNING_PASSWORD" || { echo '::error::Image signing password secret is missing'; exit 1; }
           keystore="$RUNNER_TEMP/image-signing.p12"
           trap 'rm -f "$keystore"' EXIT
-          printf '%s' "$SIGNING_KEY_B64" | base64 --decode > "$keystore"
-          keytool -list -keystore "$keystore" -storetype PKCS12 -storepass:env SIGNING_PASSWORD -alias font-image-poc >/dev/null
+          if ! printf '%s' "$SIGNING_KEY_B64" | base64 --decode > "$keystore"; then
+            echo '::error::Signing key secret is not valid Base64. Recopy the complete value.'
+            exit 1
+          fi
+          if ! keytool -list -keystore "$keystore" -storetype PKCS12 -storepass:env SIGNING_PASSWORD -alias font-image-poc > "$RUNNER_TEMP/key-check.log" 2>&1; then
+            echo '::error::Signing key could not be opened with the supplied password and alias.'
+            while IFS= read -r line; do echo "::error title=Signing validation::$line"; done < "$RUNNER_TEMP/key-check.log"
+            exit 1
+          fi
           apk="local-ai-poc/image-poc/build/outputs/apk/debug/image-poc-debug.apk"
           signer="$ANDROID_HOME/build-tools/36.0.0/apksigner"
           "$signer" sign --ks "$keystore" --ks-type PKCS12 --ks-key-alias font-image-poc \
