@@ -57,7 +57,11 @@ jobs:
             exit "$build_status"
           fi
 
-      - name: Sign image APK with persistent key
+      - name: Test studio core
+        working-directory: local-ai-poc
+        run: ./gradlew --no-daemon :studio-core:test :app:testDebugUnitTest
+
+      - name: Sign studio and image APKs with persistent key
         env:
           SIGNING_KEY_B64: ${{ secrets.LOCAL_IMAGE_POC_SIGNING_KEYSTORE_B64 }}
           SIGNING_PASSWORD: ${{ secrets.LOCAL_IMAGE_POC_SIGNING_PASSWORD }}
@@ -80,13 +84,14 @@ jobs:
             while IFS= read -r line; do echo "::error title=Signing validation::$line"; done < "$RUNNER_TEMP/key-check.log"
             exit 1
           fi
-          apk="local-ai-poc/image-poc/build/outputs/apk/debug/image-poc-debug.apk"
           signer="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          for apk in local-ai-poc/app/build/outputs/apk/debug/app-debug.apk local-ai-poc/image-poc/build/outputs/apk/debug/image-poc-debug.apk; do
           "$signer" sign --ks "$keystore" --ks-type PKCS12 --ks-key-alias font-image-poc \
             --ks-pass env:SIGNING_PASSWORD --key-pass env:SIGNING_PASSWORD \
             --out "$RUNNER_TEMP/signed-image.apk" "$apk"
           "$signer" verify --verbose --print-certs "$RUNNER_TEMP/signed-image.apk"
           cp "$RUNNER_TEMP/signed-image.apk" "$apk"
+          done
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v7.0.2
@@ -112,7 +117,7 @@ jobs:
           Experimental Android POC builds for on-device AI evaluation.
 
           Assets:
-          - local-ai-poc-debug.apk: offline Persian text-generation POC.
+          - local-ai-poc-debug.apk: experimental content studio 0.2.0 (com.font.localstudio), using the existing local Gemma E2B/E4B text engine. Generates three structured proposals, allows selection and text editing, and saves/reopens one local project with revision history. Installs alongside the old text POC; does NOT reuse its private model files. A separate model download is required. Keep old apps and data. Signed using the persistent key. Not yet device-tested. No visual editor, image integration or social publishing in this build.
           - local-image-poc-debug.apk: separate experimental image-generation POC (app version 0.1.2) using MediaPipe Image Generator 0.10.26.1, with a protobuf runtime compatibility fix for initialization. This version has a new application ID (com.font.localimagepoc.stable) and a persistent signing key. It installs alongside the old image app, NOT as its update. Keep the old app and its data. The new app requires its own model download. The image model is not bundled; the app downloads and verifies a separate approximately 2.07 GB model archive. The MediaPipe Image Generator task is deprecated and no longer actively maintained. This APK has not been tested on the user's Redmi Note 13 Pro+; image quality, latency, memory, thermal behavior, and stability require a real-device test.
 
           First model downloads require Wi-Fi/internet. Inference is intended to run locally after the model is ready.

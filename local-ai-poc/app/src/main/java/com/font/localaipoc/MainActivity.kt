@@ -89,6 +89,7 @@ class MainActivity : Activity() {
     private lateinit var loadButton: Button
     private lateinit var unloadButton: Button
     private lateinit var deleteButton: Button
+    private lateinit var studioPanel: StudioPanel
     private lateinit var generateButton: Button
     private lateinit var cancelButton: Button
     private lateinit var outputView: TextView
@@ -132,9 +133,9 @@ class MainActivity : Activity() {
         scroll.addView(content)
         setContentView(scroll)
 
-        content.addView(makeText("آزمون هوش مصنوعی محلی", 25, true, Color.rgb(24, 53, 49)))
+        content.addView(makeText("استودیوی محتوای فارسی — آزمایشی", 25, true, Color.rgb(24, 53, 49)))
         content.addView(makeText(
-            "نمونهٔ فنی برای سنجش تولید فارسی روی خود گوشی؛ بدون API مدل ابری و بدون انتشار خودکار.",
+            "پیشنهاد و ویرایش متن با مدل محلی؛ بدون مدل ابری یا انتشار خودکار. این نسخه جدا از اپ متن قبلی نصب می‌شود و مدل‌های آن را خودکار منتقل نمی‌کند.",
             15,
             false,
             Color.rgb(68, 83, 80),
@@ -163,6 +164,8 @@ class MainActivity : Activity() {
         content.addView(deleteButton, matchWrap())
         operationStatusView = makeText("", 14, false, Color.rgb(68, 83, 80))
         content.addView(operationStatusView)
+
+        studioPanel = StudioPanel(this, content) { request -> runSelectedTest(request, true) }
 
         addSectionTitle(content, "۲) آزمون فارسی و پلتفرم")
         content.addView(makeText(
@@ -285,6 +288,7 @@ class MainActivity : Activity() {
         loadButton.isEnabled = !isWorking && modelReady && loadedModel != selectedModel
         unloadButton.isEnabled = !isWorking && loadedModel != null
         deleteButton.isEnabled = !isWorking && modelReady && loadedModel != selectedModel && !downloadActive
+        studioPanel.generateButton.isEnabled = !isWorking && engine != null && loadedModel == selectedModel
         generateButton.isEnabled = !isWorking && engine != null && loadedModel == selectedModel
         cancelButton.visibility = if (isGenerating) View.VISIBLE else View.GONE
         modelSpinner.isEnabled = !isWorking && !downloadActive
@@ -629,7 +633,7 @@ class MainActivity : Activity() {
     }
 
     @OptIn(ExperimentalApi::class)
-    private fun runSelectedTest() {
+    private fun runSelectedTest(promptOverride: String? = null, studio: Boolean = false) {
         if (isWorking) return
         val engineForRun = engine
         val modelForRun = loadedModel
@@ -637,12 +641,13 @@ class MainActivity : Activity() {
             showError("ابتدا مدل انتخاب‌شده را بارگذاری کن.")
             return
         }
-        val prompt = promptInput.text?.toString()?.trim().orEmpty()
+        val prompt = promptOverride ?: promptInput.text?.toString()?.trim().orEmpty()
         if (prompt.isBlank()) {
             showError("متن آزمون خالی است.")
             return
         }
-        val testCase = selectedCase
+        val testCase = if (studio) PromptCase("studio_proposals", "سه پیشنهاد استودیو", prompt) else selectedCase
+        val outputLimit = if (studio) 1536 else MAX_OUTPUT_TOKENS
         val batteryBefore = readBatteryPercent()
         val thermalBefore = readThermalStatus()
         val pssBefore = Debug.getPss()
@@ -661,12 +666,12 @@ class MainActivity : Activity() {
                 val config = ConversationConfig(
                     systemInstruction = Contents.of(PromptCatalog.SYSTEM_INSTRUCTION),
                     samplerConfig = SamplerConfig(topK = 40, topP = 0.9, temperature = 0.7),
-                    maxOutputToken = MAX_OUTPUT_TOKENS,
+                    maxOutputToken = outputLimit,
                 )
                 conversation = engineForRun.createConversation(config)
                 activeConversation = conversation
                 val startedAt = SystemClock.elapsedRealtime()
-                val response = conversation.sendMessage(prompt, maxOutputToken = MAX_OUTPUT_TOKENS)
+                val response = conversation.sendMessage(prompt, maxOutputToken = outputLimit)
                 val wallTimeMs = SystemClock.elapsedRealtime() - startedAt
                 val benchmark = conversation.getBenchmarkInfo()
                 val pssAfter = Debug.getPss()
@@ -691,6 +696,7 @@ class MainActivity : Activity() {
                     isWorking = false
                     isGenerating = false
                     showInferenceResult(result)
+                    if (studio) studioPanel.receive(result.output)
                     refreshControls()
                 }
             } catch (error: Throwable) {
