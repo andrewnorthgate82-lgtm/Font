@@ -16,3 +16,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "LocalAiPoc"
 include(":app", ":image-poc")
+
+include(":studio-core")
