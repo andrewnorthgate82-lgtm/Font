@@ -57,6 +57,27 @@ jobs:
             exit "$build_status"
           fi
 
+      - name: Sign image APK with persistent key
+        env:
+          SIGNING_KEY_B64: ${{ secrets.LOCAL_IMAGE_POC_SIGNING_KEYSTORE_B64 }}
+          SIGNING_PASSWORD: ${{ secrets.LOCAL_IMAGE_POC_SIGNING_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$SIGNING_KEY_B64" || { echo '::error::Image signing key secret is missing'; exit 1; }
+          test -n "$SIGNING_PASSWORD" || { echo '::error::Image signing password secret is missing'; exit 1; }
+          keystore="$RUNNER_TEMP/image-signing.p12"
+          trap 'rm -f "$keystore"' EXIT
+          printf '%s' "$SIGNING_KEY_B64" | base64 --decode > "$keystore"
+          keytool -list -keystore "$keystore" -storetype PKCS12 -storepass:env SIGNING_PASSWORD -alias font-image-poc >/dev/null
+          apk="local-ai-poc/image-poc/build/outputs/apk/debug/image-poc-debug.apk"
+          signer="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          "$signer" sign --ks "$keystore" --ks-type PKCS12 --ks-key-alias font-image-poc \
+            --ks-pass env:SIGNING_PASSWORD --key-pass env:SIGNING_PASSWORD \
+            --out "$RUNNER_TEMP/signed-image.apk" "$apk"
+          "$signer" verify --verbose --print-certs "$RUNNER_TEMP/signed-image.apk"
+          cp "$RUNNER_TEMP/signed-image.apk" "$apk"
+
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v7.0.2
         with:
@@ -82,7 +103,7 @@ jobs:
 
           Assets:
           - local-ai-poc-debug.apk: offline Persian text-generation POC.
-          - local-image-poc-debug.apk: separate experimental image-generation POC (app version 0.1.1) using MediaPipe Image Generator 0.10.26.1, with a protobuf runtime compatibility fix for initialization. The image model is not bundled; the app downloads and verifies a separate approximately 2.07 GB model archive. The MediaPipe Image Generator task is deprecated and no longer actively maintained. This APK has not been tested on the user's Redmi Note 13 Pro+; image quality, latency, memory, thermal behavior, and stability require a real-device test.
+          - local-image-poc-debug.apk: separate experimental image-generation POC (app version 0.1.2) using MediaPipe Image Generator 0.10.26.1, with a protobuf runtime compatibility fix for initialization. This version has a new application ID (com.font.localimagepoc.stable) and a persistent signing key. It installs alongside the old image app, NOT as its update. Keep the old app and its data. The new app requires its own model download. The image model is not bundled; the app downloads and verifies a separate approximately 2.07 GB model archive. The MediaPipe Image Generator task is deprecated and no longer actively maintained. This APK has not been tested on the user's Redmi Note 13 Pro+; image quality, latency, memory, thermal behavior, and stability require a real-device test.
 
           First model downloads require Wi-Fi/internet. Inference is intended to run locally after the model is ready.
           Source commit: ${GITHUB_SHA}
