@@ -64,6 +64,9 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
+          # These generated hex/Base64 secrets contain no meaningful whitespace.
+          export SIGNING_PASSWORD="$(printf '%s' "$SIGNING_PASSWORD" | tr -d '[:space:]')"
+          SIGNING_KEY_B64="$(printf '%s' "$SIGNING_KEY_B64" | tr -d '[:space:]')"
           test -n "$SIGNING_KEY_B64" || { echo '::error::Image signing key secret is missing'; exit 1; }
           test -n "$SIGNING_PASSWORD" || { echo '::error::Image signing password secret is missing'; exit 1; }
           keystore="$RUNNER_TEMP/image-signing.p12"
