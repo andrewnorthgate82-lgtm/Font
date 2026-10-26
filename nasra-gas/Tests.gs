@@ -1,5 +1,6 @@
-// Tests.gs — تست‌های پذیرش فاز ۱. در ویرایشگر Apps Script تابع runTests را Run کنید؛
-// در Execution log باید خروجی «11 passed» را ببینید (در صورت شکست، علت هر مورد نوشته می‌شود).
+// Tests.gs — تست‌های پذیرش فاز ۱ و ۲. در ویرایشگر Apps Script تابع runTests را Run کنید؛
+// در Execution log باید خروجی «16 passed» را ببینید (در صورت شکست، علت هر مورد نوشته می‌شود).
+// تست‌های ۱۲ تا ۱۶ مال پنل مدیریت فاز ۲ (Admin.gs) هستند و هیچ پیامی به تلگرام نمی‌فرستند.
 // نکته: پس از هر به‌روزرسانی کد، یک بار setup()‎ را هم Run کنید (بی‌خطر و تکراری است) تا فرمت متنی ستون‌ها اعمال شود.
 
 function runTests() {
@@ -217,6 +218,109 @@ function runTests() {
       if (tempAdminRow) sheet_('Admins').deleteRow(tempAdminRow);
       deleteTestUser(tgDis); deleteTestUser(tgRej); deleteTestUser(tgHalf);
       wlRows.sort(function (a, b) { return b - a; }).forEach(function (r) { sheet_('Whitelist').deleteRow(r); });
+      bustCache_();
+    }
+  });
+
+  check('۱۲) پنل: خواندن تاریخ و ساعتِ تایپ‌شده توسط ادمین', function () {
+    var j = parseJalaliInput_('۱۴۰۵/۷/۲۳');
+    ok(j && j.jy === 1405 && j.jm === 7 && j.jd === 23, 'تاریخ با ارقام فارسی و بدون صفر');
+    ok(parseJalaliInput_('1405-07-23') !== null, 'خط تیره به‌جای اسلش');
+    eq(parseJalaliInput_('1405/12/30'), null, '۳۰ اسفند ۱۴۰۵ (غیرکبیسه) نامعتبر');
+    ok(parseJalaliInput_('1403/12/30') !== null, '۳۰ اسفند ۱۴۰۳ (کبیسه) معتبر');
+    eq(parseJalaliInput_('1405/13/01'), null, 'ماه ۱۳ نامعتبر');
+    eq(parseJalaliInput_('امروز'), null, 'متن نامعتبر');
+    eq(parseTimeInput_('21:00'), '21:00', 'ساعت عادی');
+    eq(parseTimeInput_('۹:۰۵'), '09:05', 'ارقام فارسی + صفر اول');
+    eq(parseTimeInput_('24:00'), null, 'ساعت ۲۴ نامعتبر');
+    eq(parseTimeInput_('21:60'), null, 'دقیقه ۶۰ نامعتبر');
+  });
+
+  check('۱۳) پنل: آمار ماهانه فقط تاییدشده‌های همان ماه را می‌شمارد', function () {
+    var cities = [{ city_id: 1, name: 'الف' }, { city_id: 2, name: 'ب' }, { city_id: 3, name: 'ج' }];
+    var reps = [
+      { status: 'approved', city_id: 2, event_year: 1405, event_month: 8, participants: 30 },
+      { status: 'approved', city_id: 2, event_year: 1405, event_month: 8, participants: 10 },
+      { status: 'approved', city_id: 1, event_year: 1405, event_month: 8, participants: 5 },
+      { status: 'deleted', city_id: 1, event_year: 1405, event_month: 8, participants: 99 },
+      { status: 'pending', city_id: 3, event_year: 1405, event_month: 8, participants: 99 },
+      { status: 'approved', city_id: 3, event_year: 1405, event_month: 7, participants: 99 }
+    ];
+    var st = monthStats_(reps, cities, 1405, 8);
+    eq(st.total, 3, 'جمع گزارش‌ها');
+    eq(st.people, 45, 'جمع نفرات');
+    eq(st.rows[0].name, 'ب', 'رتبه اول');
+    eq(st.rows[0].count, 2, 'تعداد رتبه اول');
+    eq(st.zero.join(','), 'ج', 'شهرستان بدون گزارش');
+    var pv = prevJalaliMonth_(1405, 1);
+    eq(pv.jy + '/' + pv.jm, '1404/12', 'ماه قبل از فروردین');
+  });
+
+  check('۱۴) پنل: همه callback_dataها حداکثر ۶۴ بایت', function () {
+    function bytes(x) { return unescape(encodeURIComponent(x)).length; }
+    var datas = [];
+    function collect(kb) { kb.inline_keyboard.forEach(function (row) { row.forEach(function (b) { datas.push(b.callback_data); }); }); }
+    var bigRid = 999999999;
+    collect(reportEditKb_(bigRid));
+    ['class', 'audience', 'duration'].forEach(function (f) { collect(fieldOptionsKb_(bigRid, f)); });
+    collect(reportCardKb_({ report_id: bigRid, status: 'approved' }));
+    collect(adminCitiesKb_('A:us:' + bigRid + ':', 'A:uy:' + bigRid + ':', 3, [], null));
+    collect(adminCitiesKb_('A:tc:', 'A:t:', 0, [], function () { return ':99'; }, {}));
+    datas.push('A:aX:9999999999999', 'A:s:1405:12', 'A:tc:32:99', 'A:ti:' + bigRid);
+    ok(datas.length > 20, 'نمونه کافی');
+    datas.forEach(function (d) {
+      ok(d.indexOf('A:') === 0, 'پیشوند A: ← ' + d);
+      ok(bytes(d) <= 64, 'طول ' + d);
+    });
+  });
+
+  check('۱۵) پنل: ویرایش کپشن منتشرشده تاریخ درج را نگه می‌دارد و ورودی بد را رد می‌کند', function () {
+    var rep = {
+      report_id: 1, status: 'approved', city_id: 29, class_type: 'حضوری', operation_name: '',
+      subject: 'آموزش سواد رسانه', instructor_name: 'محمد احمدی', event_year: 1405, event_month: 7,
+      event_day: 23, event_time: '21:00', duration_min: 90, participants: 35, audience: 'عموم',
+      place: 'مسجد جامع', publish_jalali: '1405/07/25'
+    };
+    var p1 = reportPatchFor_(rep, 'date', '1405/06/10', 0);
+    ok(p1.patch && p1.patch.event_month === 6 && p1.patch.event_jalali === '1405/06/10', 'پچ تاریخ');
+    var merged = {};
+    Object.keys(rep).forEach(function (k) { merged[k] = rep[k]; });
+    Object.keys(p1.patch).forEach(function (k) { merged[k] = p1.patch[k]; });
+    var cap = captionFromReport_(merged, rep.publish_jalali);
+    ok(cap.indexOf('تاریخ درج در کانال :1405/07/25') === 0, 'تاریخ درج اصلی حفظ می‌شود');
+    ok(cap.indexOf('🗓  ماه : #شهریور1405') !== -1, 'هشتگ ماه با تاریخ جدید عوض می‌شود');
+    ok(cap.indexOf('تاریخ برگزاری:1405/06/10') !== -1, 'تاریخ برگزاری جدید');
+    eq(reportPatchFor_(rep, 'time', '۲۰:۳۰', 0).patch.event_time, '20:30', 'پچ ساعت');
+    eq(reportPatchFor_(rep, 'participants', '۱۲۰', 0).patch.participants, 120, 'پچ تعداد');
+    eq(reportPatchFor_(rep, 'operation', '-', 0).patch.operation_name, '', 'خالی‌کردن نام عملیات');
+    eq(reportPatchFor_(rep, 'duration', 1, 0).patch.duration_min, CFG.DURATIONS_MIN[1], 'پچ مدت دکمه‌ای');
+    ok(reportPatchFor_(rep, 'participants', '0', 0).error, 'تعداد صفر رد می‌شود');
+    ok(reportPatchFor_(rep, 'date', '1499/01/01', 0).error, 'تاریخ آینده رد می‌شود');
+    ok(reportPatchFor_(rep, 'subject', '   ', 0).error, 'موضوع خالی رد می‌شود');
+    ok(reportPatchFor_({ status: 'pending' }, 'subject', 'x', 0).error, 'گزارش غیرتاییدشده ویرایش نمی‌شود');
+  });
+
+  check('۱۶) پنل: افزودن و برداشتن ادمین (بدون پیام تلگرام) + محافظت از سوپرادمین', function () {
+    var t = 999000777;
+    try {
+      ok(!isAdminTg_(t), 'قبل از افزودن ادمین نیست');
+      var r = addAdmin_(t, 'ادمین تست', false);
+      ok(r.ok, 'افزودن موفق');
+      ok(isAdminTg_(t), 'بعد از افزودن ادمین است');
+      ok(!isSuperTg_(t), 'نقش admin است نه superadmin');
+      ok(!addAdmin_(t, 'ادمین تست', false).ok, 'افزودن تکراری رد می‌شود');
+      ok(!removeAdmin_(t, t).ok, 'کسی دسترسی خودش را برنمی‌دارد');
+      ok(removeAdmin_(t, 1).ok, 'برداشتن دسترسی موفق');
+      ok(!isAdminTg_(t), 'بعد از برداشتن ادمین نیست');
+      ok(addAdmin_(t, 'ادمین تست', false).ok, 'فعال‌سازی دوباره همان ردیف');
+      eq(readTable_('Admins').filter(function (a) { return num_(a.telegram_id) === t; }).length, 1, 'ردیف تکراری ساخته نمی‌شود');
+      appendRow_('Admins', { telegram_id: 999000778, full_name: 'سوپر تست', role: 'superadmin', is_active: 1, added_at: nowStr_() });
+      bustCache_();
+      ok(!removeAdmin_(999000778, t).ok, 'سوپرادمین از داخل بات برداشته نمی‌شود');
+    } finally {
+      var rows = readTable_('Admins').filter(function (a) { return num_(a.telegram_id) === t || num_(a.telegram_id) === 999000778; })
+        .map(function (a) { return a._row; }).sort(function (a, b) { return b - a; });
+      rows.forEach(function (rr) { sheet_('Admins').deleteRow(rr); });
       bustCache_();
     }
   });

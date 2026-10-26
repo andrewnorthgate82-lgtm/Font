@@ -1,4 +1,5 @@
 // Telegram.gs — کلاینت Telegram API (فقط UrlFetchApp)، کیبوردها، doPost/doGet و مسیریاب آپدیت‌ها
+// فاز ۲: دستور /admin و همه دکمه‌های «A:» به Admin.gs می‌روند.
 // امنیت: doPost فقط وقتی پردازش می‌کند که ?key= برابر GAS_KEY در Script Properties باشد (Worker این کلید را می‌فرستد).
 
 function tgCall_(method, payload, _tried) {
@@ -179,7 +180,10 @@ function routePrivateMessage_(msg) {
   var session = getSession_(chatId, tg);
 
   if (isChannelForward_(msg, session, tg)) { handleChannelForward_(msg); return; }
-  if (msg.contact) { handleContact_(msg); return; }
+  if (msg.contact) {
+    if (session.state === 'adm:addAdmin') { handleAdminContact_(msg, session); return; } // فاز ۲: افزودن ادمین با مخاطب
+    handleContact_(msg); return;
+  }
 
   if (msg.photo) {
     if (session.state === 'form:photos') { handleFormPhoto_(msg, session); return; }
@@ -193,6 +197,7 @@ function routePrivateMessage_(msg) {
   if (text.indexOf('/claim') === 0) { handleClaim_(msg, text.replace('/claim', '').trim()); return; }
   if (text === '/start') { handleStart_(msg); return; }
   if (text === '/status') { handleStatus_(msg); return; }
+  if (text === '/admin' || text === '/panel') { handleAdminCommand_(msg); return; } // فاز ۲: پنل مدیریت
   if (text === '/myid') {
     tgSend_(chatId, '🆔 آیدی عددی تلگرام شما: ' + tg + '\n(برای افزودن دستی در برگه‌های Users/Admins از همین عدد استفاده می‌شود.)');
     return;
@@ -221,6 +226,7 @@ function routePrivateMessage_(msg) {
   if (text === '👨‍🏫 مدرسان من') { menuMyTeachers_(msg); return; }
 
   if (session.state === 'reg:name') { handleRegName_(msg, session); return; }
+  if (session.state.indexOf('adm:') === 0) { handleAdminText_(msg, session); return; } // فاز ۲: ورودی‌های پنل
   if (session.state.indexOf('form:') === 0) { handleFormText_(msg, session); return; }
   fallbackPrivate_(msg);
 }
@@ -241,6 +247,7 @@ function routeCallback_(cb) {
   if (!chatId || !tg) { tgAnswerCb_(cb.id); return; }
   var session = getSession_(chatId, tg);
 
+  if (data.indexOf('A:') === 0) return handleAdminCb_(cb, session, data); // فاز ۲: پنل مدیریت
   if (data === 's1' || data === 's2' || data === 'st') return handleSetupCb_(cb, data);
   if (data.indexOf('rc:') === 0 || data.indexOf('pg:rc:') === 0) return handleRegCityCb_(cb, session, data);
   if (data.indexOf('ga:') === 0 || data.indexOf('gd:') === 0) return handleRegDecisionCb_(cb, data);
@@ -285,8 +292,9 @@ function sendMainMenu_(chatId, tg) {
   var name = (u && u.full_name) || 'همکار گرامی';
   var city = u ? getCityById_(u.city_id) : null;
   if (isAdminTg_(tg) && !(u && num_(u.city_id) > 0)) {
-    tgSend_(chatId, 'سلام ' + name + ' 👋\nشما دسترسی ادمین دارید.\n• وضعیت سیستم: /status\n• لیست مجاز شماره‌ها در گوگل‌شیت، برگه Whitelist است.', mainMenuKb_());
+    tgSend_(chatId, 'سلام ' + name + ' 👋\nشما دسترسی ادمین دارید.\n• پنل مدیریت: /admin\n• وضعیت سیستم: /status\n• لیست مجاز شماره‌ها در گوگل‌شیت، برگه Whitelist است.', mainMenuKb_());
   } else {
-    tgSend_(chatId, 'سلام ' + name + ' 👋\nشهرستان شما: ' + (city ? city.name : '—') + '\nاز منوی زیر انتخاب کنید:', mainMenuKb_());
+    tgSend_(chatId, 'سلام ' + name + ' 👋\nشهرستان شما: ' + (city ? city.name : '—') +
+      (isAdminTg_(tg) ? '\n🛠 پنل مدیریت: /admin' : '') + '\nاز منوی زیر انتخاب کنید:', mainMenuKb_());
   }
 }
