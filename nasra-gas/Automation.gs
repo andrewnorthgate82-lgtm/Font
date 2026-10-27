@@ -1,5 +1,5 @@
 // Automation.gs — فاز ۳: بکاپ شبانه خودکار، کارهای روزانه (یادآوری ماهانه، هشدار گزارش معطل، خلاصه ماه)،
-// صف پیام همگانی، و خروجی اکسل (CSV) ماهانه.
+// صف پیام همگانی، و خروجی اکسل واقعی (.xlsx) ماهانه.
 // نصب یک‌باره: در ویرایشگر تابع installPhase3 را Run کنید (اجازه دسترسی به Google Drive برای بکاپ لازم است).
 // تنظیمات قابل تغییر در برگه Settings (اگر نباشند، مقدار پیش‌فرض استفاده می‌شود):
 //   backup_keep = 14            تعداد بکاپ‌هایی که نگه داشته می‌شود (قدیمی‌ترها به سطل زباله Drive می‌روند)
@@ -62,28 +62,101 @@ function broadcastRecipients_(users, admins, aud, cityId) {
   });
   return ids;
 }
-function csvCell_(v) {
-  var s = String(v === null || v === undefined ? '' : cellToStr_(v));
-  if (/^[=+\-@]/.test(s)) s = "'" + s; // جلوگیری از فرمول‌شدن در اکسل
-  return '"' + s.replace(/"/g, '""') + '"';
+// ---------- خروجی اکسل واقعی (.xlsx) — بدون کتابخانه؛ فایل‌های XML با Utilities.zip بسته می‌شوند ----------
+// CSV در ویندوزِ فارسی/ایرانی همه ستون‌ها را در یک سلول می‌ریزد (جداکننده فهرست آن‌جا «,» نیست)؛ xlsx همه‌جا درست باز می‌شود.
+var XLSX_HEADER = ['تاریخ برگزاری', 'ناحیه برگزار کننده', 'موضوع', 'نام سخنران یا مدرس',
+  'مدت زمان کلاس (دقیقه)', 'تعداد نفرات', 'مکان برگزاری', 'لینک منتشرشده در کانال'];
+var XLSX_WIDTHS = [14, 18, 40, 24, 12, 11, 34, 38];
+function xmlEsc_(v) {
+  return String(v === null || v === undefined ? '' : v)
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
-// فایل CSV گزارش‌های تاییدشده یک ماه (بدون BOM؛ BOM هنگام ساخت فایل اضافه می‌شود)
-function monthCsv_(reports, cities, jy, jm) {
+function colLetter_(i) { return String.fromCharCode(65 + i); } // ستون‌های A تا H
+// لینک پست کانال: کانال عمومی ← t.me/نام‌کاربری/شماره ، کانال خصوصی ← t.me/c/شناسه/شماره (فقط برای اعضای کانال باز می‌شود)
+function channelPostLink_(channelId, username, msgId) {
+  if (!channelId || !msgId) return '';
+  if (username) return 'https://t.me/' + String(username).replace(/^@/, '') + '/' + msgId;
+  return 'https://t.me/c/' + String(channelId).replace(/^-100/, '') + '/' + msgId;
+}
+// ردیف‌های اکسل یک ماه: فقط تاییدشده‌ها، به ترتیب روز برگزاری و بعد شهرستان
+function monthExcelRows_(reports, cities, jy, jm, channelId, username) {
   var cname = {};
   cities.forEach(function (c) { cname[num_(c.city_id)] = c.name; });
-  var head = ['شماره گزارش', 'شهرستان', 'کارمند', 'نوع کلاس/برنامه', 'نام عملیات', 'موضوع', 'مدرس/سخنران',
-    'تاریخ برگزاری', 'ساعت', 'مدت (دقیقه)', 'تعداد نفرات', 'نوع مخاطبین', 'مکان', 'تاریخ درج در کانال', 'دفعات ارسال مجدد'];
-  var rows = reports.filter(function (r) {
+  return reports.filter(function (r) {
     return r.status === 'approved' && num_(r.event_year) === jy && num_(r.event_month) === jm;
   }).sort(function (a, b) {
-    var ca = String(cname[num_(a.city_id)] || ''), cb = String(cname[num_(b.city_id)] || '');
-    return ca.localeCompare(cb, 'fa') || num_(a.event_day) - num_(b.event_day) || num_(a.report_id) - num_(b.report_id);
+    return num_(a.event_day) - num_(b.event_day) ||
+      String(cname[num_(a.city_id)] || '').localeCompare(String(cname[num_(b.city_id)] || ''), 'fa') ||
+      num_(a.report_id) - num_(b.report_id);
   }).map(function (r) {
-    return [r.report_id, cname[num_(r.city_id)] || '', r.employee_name, r.class_type, r.operation_name, r.subject,
-      r.instructor_name, r.event_jalali, r.event_time, r.duration_min, r.participants, r.audience, r.place,
-      r.publish_jalali, num_(r.resubmit_count)];
+    var ids = safeJsonArr_(cellToStr_(r.channel_message_ids));
+    return [String(cellToStr_(r.event_jalali)), cname[num_(r.city_id)] || '', String(r.subject || ''),
+      String(r.instructor_name || ''), num_(r.duration_min), num_(r.participants),
+      String(r.place || '').replace(/\s*[\r\n]+\s*/g, ' - '), channelPostLink_(channelId, username, ids[0])];
   });
-  return [head].concat(rows).map(function (row) { return row.map(csvCell_).join(','); }).join('\r\n');
+}
+// همه فایل‌های داخل بسته xlsx (کمینه و استاندارد): یک برگه راست‌به‌چپ، سطر عنوان پررنگ و ثابت، لینک قابل کلیک
+function xlsxParts_(sheetName, header, rows, widths) {
+  var NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+  var RNS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  var PR = 'http://schemas.openxmlformats.org/package/2006/relationships';
+  var head = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+  var links = [], sd = [];
+  function strCell(ref, v, style) {
+    return '<c r="' + ref + '" t="inlineStr"' + (style ? ' s="' + style + '"' : '') + '><is><t xml:space="preserve">' + xmlEsc_(v) + '</t></is></c>';
+  }
+  sd.push('<row r="1">' + header.map(function (h, i) { return strCell(colLetter_(i) + '1', h, 1); }).join('') + '</row>');
+  rows.forEach(function (row, ri) {
+    var rn = ri + 2;
+    sd.push('<row r="' + rn + '">' + row.map(function (v, ci) {
+      var ref = colLetter_(ci) + rn;
+      if (typeof v === 'number') return '<c r="' + ref + '"><v>' + v + '</v></c>';
+      if (/^https?:\/\//.test(v)) { links.push({ ref: ref, url: v }); return strCell(ref, v, 2); }
+      return strCell(ref, v, 0);
+    }).join('') + '</row>');
+  });
+  var cols = '<cols>' + (widths || []).map(function (w, i) {
+    return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>';
+  }).join('') + '</cols>';
+  var sheet = head + '<worksheet xmlns="' + NS + '" xmlns:r="' + RNS + '">' +
+    '<sheetViews><sheetView rightToLeft="1" workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' +
+    '<sheetFormatPr defaultRowHeight="15"/>' + ((widths && widths.length) ? cols : '') +
+    '<sheetData>' + sd.join('') + '</sheetData>' +
+    (links.length ? '<hyperlinks>' + links.map(function (l, i) { return '<hyperlink ref="' + l.ref + '" r:id="rId' + (i + 1) + '"/>'; }).join('') + '</hyperlinks>' : '') +
+    '</worksheet>';
+  var sheetRels = head + '<Relationships xmlns="' + PR + '">' + links.map(function (l, i) {
+    return '<Relationship Id="rId' + (i + 1) + '" Type="' + RNS + '/hyperlink" Target="' + xmlEsc_(l.url) + '" TargetMode="External"/>';
+  }).join('') + '</Relationships>';
+  var styles = head + '<styleSheet xmlns="' + NS + '">' +
+    '<fonts count="3"><font><sz val="11"/><name val="Tahoma"/></font><font><b/><sz val="11"/><name val="Tahoma"/></font>' +
+    '<font><u/><sz val="11"/><color rgb="FF0563C1"/><name val="Tahoma"/></font></fonts>' +
+    '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>' +
+    '<fill><patternFill patternType="solid"><fgColor rgb="FFDDEBF7"/><bgColor indexed="64"/></patternFill></fill></fills>' +
+    '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+    '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+    '<cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+    '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>' +
+    '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs>' +
+    '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+  var safeName = String(sheetName || 'گزارش‌ها').replace(/[\[\]:*?\/\\]/g, ' ').slice(0, 31);
+  return [
+    { name: '[Content_Types].xml', content: head + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+      '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>' },
+    { name: '_rels/.rels', content: head + '<Relationships xmlns="' + PR + '"><Relationship Id="rId1" Type="' + RNS + '/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
+    { name: 'xl/workbook.xml', content: head + '<workbook xmlns="' + NS + '" xmlns:r="' + RNS + '"><bookViews><workbookView/></bookViews>' +
+      '<sheets><sheet name="' + xmlEsc_(safeName) + '" sheetId="1" r:id="rId1"/></sheets></workbook>' },
+    { name: 'xl/_rels/workbook.xml.rels', content: head + '<Relationships xmlns="' + PR + '">' +
+      '<Relationship Id="rId1" Type="' + RNS + '/worksheet" Target="worksheets/sheet1.xml"/>' +
+      '<Relationship Id="rId2" Type="' + RNS + '/styles" Target="styles.xml"/></Relationships>' },
+    { name: 'xl/styles.xml', content: styles },
+    { name: 'xl/worksheets/sheet1.xml', content: sheet },
+    { name: 'xl/worksheets/_rels/sheet1.xml.rels', content: sheetRels }
+  ];
 }
 
 // ---------- ارسال بی‌سروصدا (بدون نوشتن هر خطا در Logs) و ارسال فایل ----------
@@ -116,11 +189,14 @@ function tgSendDocument_(chatId, blob, caption) {
     return !!body.ok;
   } catch (e) { log_('error', 'telegram:sendDocument', e && e.message, ''); return false; }
 }
-function sendMonthCsv_(chatId, jy, jm) {
-  var csv = monthCsv_(readTable_('Reports'), getCities_(), jy, jm);
-  var n = csv.split('\r\n').length - 1;
-  var blob = Utilities.newBlob('\uFEFF' + csv, 'text/csv', 'nasra-' + jy + '-' + pad2_(jm) + '.csv');
-  return tgSendDocument_(chatId, blob, '📥 گزارش‌های تاییدشده ' + JALALI_MONTHS[jm - 1] + ' ' + jy + ' — ' + n + ' گزارش\n(با Excel یا Google Sheets باز کنید)');
+function sendMonthExcel_(chatId, jy, jm) {
+  var channelId = getSettingNum_('channel_id'), chat = channelId ? tgGetChat_(channelId) : null;
+  var rows = monthExcelRows_(readTable_('Reports'), getCities_(), jy, jm, channelId, chat && chat.username ? chat.username : '');
+  var parts = xlsxParts_(JALALI_MONTHS[jm - 1] + ' ' + jy, XLSX_HEADER, rows, XLSX_WIDTHS);
+  var fileName = 'nasra-' + jy + '-' + pad2_(jm) + '.xlsx';
+  var blob = Utilities.zip(parts.map(function (p) { return Utilities.newBlob(p.content, 'application/xml', p.name); }), fileName);
+  blob.setContentType('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  return tgSendDocument_(chatId, blob, '📥 گزارش‌های تاییدشده ' + JALALI_MONTHS[jm - 1] + ' ' + jy + ' — ' + rows.length + ' گزارش\n(فایل Excel؛ روی لینک‌ها بزنید تا پست کانال باز شود)');
 }
 
 // ---------- بکاپ ----------
@@ -271,7 +347,7 @@ function sendMonthlySummary_(reports, jy, jm) {
   var text = monthStatsText_(reports, jy, jm);
   superadminTgs_().forEach(function (tg) {
     tgSend_(tg, '🗓 خلاصه خودکار ماه گذشته\n\n' + text);
-    sendMonthCsv_(tg, jy, jm);
+    sendMonthExcel_(tg, jy, jm);
   });
 }
 

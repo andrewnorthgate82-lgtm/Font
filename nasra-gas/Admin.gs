@@ -167,7 +167,7 @@ function handleAdminCb_(cb, s, data) {
   if (p === 's') { tgAnswerCb_(cb.id); showMonthStats_(chatId, num_(a), num_(b), mid); return; }
   if (p === 'sx') {
     tgAnswerCb_(cb.id, 'در حال ساخت فایل…');
-    if (!sendMonthCsv_(chatId, num_(a), num_(b))) tgSend_(chatId, '⚠️ ارسال فایل ناموفق بود؛ چند دقیقه دیگر دوباره امتحان کنید.');
+    if (!sendMonthExcel_(chatId, num_(a), num_(b))) tgSend_(chatId, '⚠️ ارسال فایل ناموفق بود؛ چند دقیقه دیگر دوباره امتحان کنید.');
     return;
   }
 

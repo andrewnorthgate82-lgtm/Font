@@ -326,26 +326,35 @@ function runTests() {
     }
   });
 
-  check('۱۷) فاز ۳: فایل اکسل (CSV) ماهانه', function () {
+  check('۱۷) فاز ۳: فایل اکسل (xlsx) ماهانه — ۸ ستون جدا، راست‌به‌چپ، لینک کانال', function () {
     var cities = [{ city_id: 23, name: 'کاشان' }, { city_id: 29, name: 'نجف آباد' }];
     var reps = [
-      { report_id: 7, status: 'approved', city_id: 29, employee_name: 'ب', class_type: 'حضوری', operation_name: '', subject: 'موضوع "مهم"',
-        instructor_name: 'م', event_jalali: '1405/08/03', event_time: '21:00', event_year: 1405, event_month: 8, event_day: 3,
-        duration_min: 60, participants: 20, audience: 'عموم', place: 'خط اول\nخط دوم', publish_jalali: '1405/08/04', resubmit_count: 1 },
-      { report_id: 5, status: 'approved', city_id: 23, employee_name: 'الف', class_type: 'مجازی', operation_name: '=HYPERLINK(1)', subject: 'س',
-        instructor_name: 'م', event_jalali: '1405/08/01', event_time: '09:00', event_year: 1405, event_month: 8, event_day: 1,
-        duration_min: 30, participants: 5, audience: 'گردان', place: 'م', publish_jalali: '1405/08/02', resubmit_count: 0 },
+      { report_id: 7, status: 'approved', city_id: 29, subject: 'موضوع <مهم> & "ویژه"', instructor_name: 'م', event_jalali: '1405/08/03',
+        event_year: 1405, event_month: 8, event_day: 3, duration_min: '60', participants: '20', place: 'خط اول\nخط دوم', channel_message_ids: '[51,52]' },
+      { report_id: 5, status: 'approved', city_id: 23, subject: '=1+1', instructor_name: 'ن', event_jalali: '1405/08/01',
+        event_year: 1405, event_month: 8, event_day: 1, duration_min: 90, participants: 35, place: 'مسجد', channel_message_ids: '[40]' },
       { report_id: 6, status: 'deleted', city_id: 23, event_year: 1405, event_month: 8, subject: 'حذف‌شده' },
       { report_id: 8, status: 'approved', city_id: 23, event_year: 1405, event_month: 7, subject: 'ماه قبل' }
     ];
-    var csv = monthCsv_(reps, cities, 1405, 8), lines = csv.split('\r\n');
-    eq(lines[0].split(',')[0], '"شماره گزارش"', 'سطر عنوان');
-    eq(lines.length, 3, 'عنوان + ۲ گزارش (مکان دوخطی داخل نقل‌قول می‌ماند)');
-    ok(lines[1].indexOf('"5","کاشان"') === 0, 'مرتب بر اساس شهرستان (کاشان قبل از نجف آباد)');
-    ok(lines[1].indexOf('"\'=HYPERLINK(1)"') !== -1, 'فرمول در اکسل اجرا نمی‌شود');
-    ok(lines[2].indexOf('"موضوع ""مهم"""') !== -1, 'نقل‌قول دوتایی فرار داده می‌شود');
-    ok(csv.indexOf('حذف‌شده') === -1 && csv.indexOf('ماه قبل') === -1, 'حذف‌شده و ماه دیگر نمی‌آیند');
-    eq(csvCell_('21:00'), '"21:00"', 'ساعت متن می‌ماند');
+    var rows = monthExcelRows_(reps, cities, 1405, 8, -1001234567890, '');
+    eq(rows.length, 2, 'فقط تاییدشده‌های همین ماه');
+    eq(rows[0].join('|'), '1405/08/01|کاشان|=1+1|ن|90|35|مسجد|https://t.me/c/1234567890/40', 'ردیف اول به ترتیب روز، ۸ ستون');
+    eq(typeof rows[0][4] + typeof rows[0][5], 'numbernumber', 'مدت و تعداد «عدد» هستند (قابل جمع در اکسل)');
+    eq(rows[1][6], 'خط اول - خط دوم', 'مکان چندخطی در یک سلول');
+    eq(channelPostLink_(-1001234567890, '@nasra_isf', 51), 'https://t.me/nasra_isf/51', 'لینک کانال عمومی');
+    eq(channelPostLink_(-1001234567890, '', 0), '', 'بدون پست، بدون لینک');
+    eq(XLSX_HEADER.length, 8, '۸ عنوان');
+    var parts = xlsxParts_('آبان 1405', XLSX_HEADER, rows, XLSX_WIDTHS), byName = {};
+    parts.forEach(function (p) { byName[p.name] = p.content; });
+    ['[Content_Types].xml', '_rels/.rels', 'xl/workbook.xml', 'xl/_rels/workbook.xml.rels', 'xl/styles.xml',
+      'xl/worksheets/sheet1.xml', 'xl/worksheets/_rels/sheet1.xml.rels'].forEach(function (n) { ok(byName[n], 'بخش ' + n); });
+    var sh = byName['xl/worksheets/sheet1.xml'];
+    ok(sh.indexOf('rightToLeft="1"') !== -1, 'برگه راست‌به‌چپ');
+    ok(sh.indexOf('موضوع &lt;مهم&gt; &amp; &quot;ویژه&quot;') !== -1, 'نویسه‌های ویژه XML فرار داده می‌شوند');
+    ok(sh.indexOf('<f>') === -1, 'هیچ فرمولی در فایل نیست (=1+1 متن می‌ماند)');
+    ok(sh.indexOf('<c r="E2"><v>90</v></c>') !== -1, 'عدد در سلول عددی');
+    eq((sh.match(/<hyperlink /g) || []).length, 2, 'دو لینک قابل کلیک');
+    ok(byName['xl/worksheets/_rels/sheet1.xml.rels'].indexOf('TargetMode="External"') !== -1, 'لینک بیرونی');
   });
 
   check('۱۸) فاز ۳: یادآوری فقط برای شهرستان‌های بدون گزارش و فقط کارمندان فعال', function () {
