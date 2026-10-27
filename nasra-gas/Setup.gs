@@ -22,7 +22,7 @@ function setup() {
   if (!props.getProperty('GAS_KEY')) { props.setProperty('GAS_KEY', randomSecret_()); made.push('GAS_KEY'); }
   if (!props.getProperty('TG_SECRET')) { props.setProperty('TG_SECRET', randomSecret_()); made.push('TG_SECRET'); }
   var code = ensureSetupCode_();
-  ensureBackupTrigger_(); // آمادهٔ فاز ۳ (بکاپ شبانه)؛ در فاز ۱ فقط لاگ می‌نویسد
+  ensureBackupTrigger_(); // تریگرهای بکاپ شبانه و کارهای روزانه (Automation.gs)
   bustCache_();
   Logger.log('✅ setup تمام شد. (SPREADSHEET_ID در Script Properties ذخیره شد)');
   Logger.log('این سه مقدار را الآن کپی کنید و در Cloudflare Worker (Settings ← Variables and Secrets) به‌صورت Secret بگذارید:');
@@ -88,17 +88,7 @@ function ensureSetupCode_() {
   setSetting_('setup_code', code, 'کد راه‌اندازی یک‌بارمصرف — در بات بنویسید: ‎/claim‎ کد. پس از استفاده خودکار حذف می‌شود');
   return code;
 }
-function ensureBackupTrigger_() {
-  var exists = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'nightlyBackup'; });
-  if (!exists) {
-    ScriptApp.newTrigger('nightlyBackup').timeBased().atHour(3).nearMinute(0).everyDays(1)
-      .inTimezone('Asia/Tehran').create();
-  }
-}
-// جای نگه‌دار بکاپ شبانه — منطق کامل در فاز ۳ (ساخت کپی از فایل Sheet در Drive و اطلاع به سوپرادمین)
-function nightlyBackup() {
-  log_('warn', 'nightlyBackup', 'placeholder (phase 3)', '');
-}
+// ensureBackupTrigger_ و nightlyBackup از فاز ۳ در فایل Automation.gs هستند.
 
 // ---------- وبهوک: فقط از مسیر Worker ثبت می‌شود، هرگز مستقیم به /exec ----------
 function setWebhook() {
@@ -232,6 +222,7 @@ function handleStatus_(msg) {
     '• زمان اجرای آپدیت (۲۴ ساعت اخیر): میانگین ' + st.avgSec + ' ثانیه — بیشترین ' + st.maxSec + ' ثانیه (سقف هر اجرا ۶ دقیقه)\n' +
     '• تایم‌اوت قفل در ۲۴ ساعت اخیر: ' + st.lockTimeouts + ' (ورکر خودش دوباره تلاش می‌کند)\n' +
     '• برآورد تماس‌های امروز به تلگرام (سقف رایگان گوگل حدود ۲۰٬۰۰۰ در روز): ' + fetchCountToday_() + '\n' +
-    '• آخرین بکاپ: ' + (getSetting_('last_backup_at') || '— (بکاپ شبانه در فاز ۳؛ فعلاً گاه‌گاه از File ← Make a copy یک کپی از شیت نگه دارید)') + '\n' +
+    '• آخرین بکاپ: ' + (getSetting_('last_backup_at') || '— هنوز گرفته نشده (در ویرایشگر یک بار installPhase3 را Run کنید)') + '\n' +
+    '• بکاپ شبانه و کارهای روزانه: ' + (triggerStatus_().backup && triggerStatus_().daily ? 'فعال ✅' : 'کامل نصب نشده ⚠️ (installPhase3)') + '\n' +
     'برای سلامت وبهوک در ویرایشگر Apps Script تابع checkWebhook را Run کنید.');
 }

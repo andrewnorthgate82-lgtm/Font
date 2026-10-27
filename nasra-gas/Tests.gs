@@ -1,6 +1,7 @@
-// Tests.gs — تست‌های پذیرش فاز ۱ و ۲. در ویرایشگر Apps Script تابع runTests را Run کنید؛
-// در Execution log باید خروجی «16 passed» را ببینید (در صورت شکست، علت هر مورد نوشته می‌شود).
-// تست‌های ۱۲ تا ۱۶ مال پنل مدیریت فاز ۲ (Admin.gs) هستند و هیچ پیامی به تلگرام نمی‌فرستند.
+// Tests.gs — تست‌های پذیرش فاز ۱، ۲ و ۳. در ویرایشگر Apps Script تابع runTests را Run کنید؛
+// در Execution log باید خروجی «20 passed» را ببینید (در صورت شکست، علت هر مورد نوشته می‌شود).
+// تست‌های ۱۲ تا ۱۶ مال پنل مدیریت فاز ۲ (Admin.gs) و ۱۷ تا ۲۰ مال خودکارهای فاز ۳ (Automation.gs) هستند؛
+// هیچ‌کدام پیامی به تلگرام نمی‌فرستند و به Google Drive دست نمی‌زنند.
 // نکته: پس از هر به‌روزرسانی کد، یک بار setup()‎ را هم Run کنید (بی‌خطر و تکراری است) تا فرمت متنی ستون‌ها اعمال شود.
 
 function runTests() {
@@ -323,6 +324,80 @@ function runTests() {
       rows.forEach(function (rr) { sheet_('Admins').deleteRow(rr); });
       bustCache_();
     }
+  });
+
+  check('۱۷) فاز ۳: فایل اکسل (CSV) ماهانه', function () {
+    var cities = [{ city_id: 23, name: 'کاشان' }, { city_id: 29, name: 'نجف آباد' }];
+    var reps = [
+      { report_id: 7, status: 'approved', city_id: 29, employee_name: 'ب', class_type: 'حضوری', operation_name: '', subject: 'موضوع "مهم"',
+        instructor_name: 'م', event_jalali: '1405/08/03', event_time: '21:00', event_year: 1405, event_month: 8, event_day: 3,
+        duration_min: 60, participants: 20, audience: 'عموم', place: 'خط اول\nخط دوم', publish_jalali: '1405/08/04', resubmit_count: 1 },
+      { report_id: 5, status: 'approved', city_id: 23, employee_name: 'الف', class_type: 'مجازی', operation_name: '=HYPERLINK(1)', subject: 'س',
+        instructor_name: 'م', event_jalali: '1405/08/01', event_time: '09:00', event_year: 1405, event_month: 8, event_day: 1,
+        duration_min: 30, participants: 5, audience: 'گردان', place: 'م', publish_jalali: '1405/08/02', resubmit_count: 0 },
+      { report_id: 6, status: 'deleted', city_id: 23, event_year: 1405, event_month: 8, subject: 'حذف‌شده' },
+      { report_id: 8, status: 'approved', city_id: 23, event_year: 1405, event_month: 7, subject: 'ماه قبل' }
+    ];
+    var csv = monthCsv_(reps, cities, 1405, 8), lines = csv.split('\r\n');
+    eq(lines[0].split(',')[0], '"شماره گزارش"', 'سطر عنوان');
+    eq(lines.length, 3, 'عنوان + ۲ گزارش (مکان دوخطی داخل نقل‌قول می‌ماند)');
+    ok(lines[1].indexOf('"5","کاشان"') === 0, 'مرتب بر اساس شهرستان (کاشان قبل از نجف آباد)');
+    ok(lines[1].indexOf('"\'=HYPERLINK(1)"') !== -1, 'فرمول در اکسل اجرا نمی‌شود');
+    ok(lines[2].indexOf('"موضوع ""مهم"""') !== -1, 'نقل‌قول دوتایی فرار داده می‌شود');
+    ok(csv.indexOf('حذف‌شده') === -1 && csv.indexOf('ماه قبل') === -1, 'حذف‌شده و ماه دیگر نمی‌آیند');
+    eq(csvCell_('21:00'), '"21:00"', 'ساعت متن می‌ماند');
+  });
+
+  check('۱۸) فاز ۳: یادآوری فقط برای شهرستان‌های بدون گزارش و فقط کارمندان فعال', function () {
+    var cities = [{ city_id: 1, name: 'الف' }, { city_id: 2, name: 'ب' }, { city_id: 3, name: 'ج' }, { city_id: 4, name: 'د' }];
+    var users = [
+      { telegram_id: 11, city_id: 1, status: 'approved' }, { telegram_id: 12, city_id: 1, status: 'disabled' },
+      { telegram_id: 21, city_id: 2, status: 'approved' }, { telegram_id: 31, city_id: 3, status: 'approved' },
+      { telegram_id: 32, city_id: 3, status: 'pending' }
+    ];
+    var reps = [
+      { status: 'approved', city_id: 2, event_year: 1405, event_month: 8 },
+      { status: 'pending', city_id: 4, event_year: 1405, event_month: 8 },
+      { status: 'rejected', city_id: 1, event_year: 1405, event_month: 8 },
+      { status: 'approved', city_id: 3, event_year: 1405, event_month: 7 }
+    ];
+    var t = reminderTargets_(reps, users, cities, 1405, 8);
+    eq(t.cities.map(function (c) { return c.name; }).join(','), 'الف,ج', 'شهرستان‌های بدون گزارش این ماه (ردشده و ماه قبل حساب نیست)');
+    eq(t.cities[0].recipients.join(','), '11', 'غیرفعال یادآوری نمی‌گیرد');
+    eq(t.cities[1].recipients.join(','), '31', 'در انتظار تایید ثبت‌نام یادآوری نمی‌گیرد');
+    eq(t.totalRecipients, 2, 'جمع گیرندگان');
+  });
+
+  check('۱۹) فاز ۳: روزهای یادآوری و گزارش‌های معطل', function () {
+    eq(parseDaysList_('۲۰، 27, x, 40, 20').join(','), '20,27', 'خواندن روزها با ارقام فارسی و حذف نامعتبر/تکراری');
+    eq(parseDaysList_('').length, 0, 'خالی');
+    var reps = [
+      { report_id: 3, status: 'pending', updated_at: '2026-10-20 09:00:00' },
+      { report_id: 1, status: 'pending', updated_at: '2026-10-19 08:00:00' },
+      { report_id: 2, status: 'pending', updated_at: '2026-10-25 10:00:00' },
+      { report_id: 4, status: 'approved', updated_at: '2026-10-01 10:00:00' }
+    ];
+    eq(overduePending_(reps, '2026-10-24 10:00:00').map(function (r) { return r.report_id; }).join(','), '1,3', 'فقط در انتظارهای قدیمی، به ترتیب شماره');
+  });
+
+  check('۲۰) فاز ۳: گیرندگان پیام همگانی + طول callback دکمه‌های جدید + جاشدن صف', function () {
+    var users = [
+      { telegram_id: 11, city_id: 1, status: 'approved' }, { telegram_id: 12, city_id: 2, status: 'approved' },
+      { telegram_id: 13, city_id: 2, status: 'disabled' }, { telegram_id: 14, city_id: 0, status: 'approved' },
+      { telegram_id: 11, city_id: 1, status: 'approved' }
+    ];
+    var admins = [{ telegram_id: 90, is_active: 1 }, { telegram_id: 91, is_active: '0' }];
+    eq(broadcastRecipients_(users, admins, 'all').join(','), '11,12', 'همه فعال‌ها، بدون تکرار و بدون بی‌شهرستان');
+    eq(broadcastRecipients_(users, admins, 'city', 2).join(','), '12', 'یک شهرستان');
+    eq(broadcastRecipients_(users, admins, 'admins').join(','), '90', 'فقط ادمین‌های فعال');
+    ['A:b', 'A:ba', 'A:bm', 'A:bc:3', 'A:bC:32', 'A:bs', 'A:k', 'A:kb', 'A:kr', 'A:kt', 'A:sx:1405:12'].forEach(function (d) {
+      ok(unescape(encodeURIComponent(d)).length <= 64, 'طول ' + d);
+    });
+    var ids = [], i, text = '';
+    for (i = 0; i < 200; i++) ids.push(7000000000 + i);
+    for (i = 0; i < AUTO.BC_MAX_CHARS; i++) text += 'س';
+    var job = JSON.stringify({ by: 7000000000, text: text, ids: ids, pos: 199, ok: 199, fail: 0, label: 'همکاران فریدون شهر', at: '2026-10-26 10:00:00' });
+    ok(unescape(encodeURIComponent(job)).length < 9 * 1024, 'صف پیام همگانی (۲۰۰ نفر، طولانی‌ترین متن) در سقف ۹KB هر Script Property جا می‌شود');
   });
 
   if (failed.length) {

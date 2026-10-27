@@ -2,6 +2,7 @@
 // بخش‌ها: گزارش‌های در انتظار، منتشرشده‌ها (ویرایش کپشن / حذف از کانال)، جستجوی گزارش با شماره،
 // آمار ماهانه شهرستان‌ها، کاربران (فعال/غیرفعال و تغییر شهرستان)، مدرسان (افزودن/تغییر نام/غیرفعال)
 // و ادمین‌ها (فقط سوپرادمین: افزودن/حذف دسترسی).
+// فاز ۳ (همراه Automation.gs): پیام همگانی و «بکاپ و کارهای خودکار» (فقط سوپرادمین) + فایل اکسل ماهانه (همه ادمین‌ها).
 // همه کال‌بک‌های پنل با «A:» شروع می‌شوند (کوتاه‌تر از ۶۴ بایت). حالت‌های ورود متن با «adm:» در Sessions.
 
 var ADM_PER_PAGE = 8;
@@ -91,7 +92,10 @@ function adminPanelKb_(tg) {
     [btn_('🔎 گزارش با شماره', 'A:rf'), btn_('📊 آمار ماهانه', 'A:s:' + t.jy + ':' + t.jm)],
     [btn_('👤 کاربران', 'A:u'), btn_('👨‍🏫 مدرسان', 'A:t:0')]
   ];
-  if (isSuperTg_(tg)) rows.push([btn_('🛡 ادمین‌ها', 'A:a')]);
+  if (isSuperTg_(tg)) {
+    rows.push([btn_('📣 پیام همگانی', 'A:b'), btn_('💾 بکاپ و خودکارها', 'A:k')]);
+    rows.push([btn_('🛡 ادمین‌ها', 'A:a')]);
+  }
   rows.push([btn_('✖️ بستن پنل', 'A:x')]);
   return ikb_(rows);
 }
@@ -110,7 +114,8 @@ function handleAdminCb_(cb, s, data) {
   if (!isAdminTg_(tg)) { tgAnswerCb_(cb.id, TXT.NO_ACCESS, true); return; }
   if (!cb.message.chat || cb.message.chat.type !== 'private') { tgAnswerCb_(cb.id, 'پنل مدیریت فقط در چت خصوصی بات کار می‌کند.', true); return; }
   // هر کلیک روی پنل، حالت «منتظر متن» قبلی را لغو می‌کند؛ اگر لازم باشد، خود دکمه حالت تازه می‌سازد
-  if (String(s.state || '').indexOf('adm:') === 0) { s.state = ''; s.data = {}; saveSession_(chatId, tg, s); }
+  var prev = { state: String(s.state || ''), data: s.data || {} }; // برای «ارسال» پیام همگانی که پیش‌نویسش در حالت قبلی است
+  if (prev.state.indexOf('adm:') === 0) { s.state = ''; s.data = {}; saveSession_(chatId, tg, s); }
   var parts = data.split(':'), p = parts[1], a = parts[2], b = parts[3], c = parts[4];
 
   if (p === 'm') { tgAnswerCb_(cb.id); showAdminPanel_(chatId, tg, mid); return; }
@@ -158,8 +163,20 @@ function handleAdminCb_(cb, s, data) {
     return;
   }
 
-  // آمار
+  // آمار + فایل اکسل ماه
   if (p === 's') { tgAnswerCb_(cb.id); showMonthStats_(chatId, num_(a), num_(b), mid); return; }
+  if (p === 'sx') {
+    tgAnswerCb_(cb.id, 'در حال ساخت فایل…');
+    if (!sendMonthCsv_(chatId, num_(a), num_(b))) tgSend_(chatId, '⚠️ ارسال فایل ناموفق بود؛ چند دقیقه دیگر دوباره امتحان کنید.');
+    return;
+  }
+
+  // فاز ۳: پیام همگانی و بکاپ/خودکارها (فقط سوپرادمین)
+  if (/^(b|ba|bm|bc|bC|bs|k|kb|kr|kt)$/.test(p)) {
+    if (!isSuperTg_(tg)) { tgAnswerCb_(cb.id, 'این بخش فقط برای سوپرادمین است.', true); return; }
+    handlePhase3Cb_(cb, s, prev, p, a, chatId, tg, mid);
+    return;
+  }
 
   // کاربران
   if (p === 'u') {
@@ -279,6 +296,18 @@ function handleAdminText_(msg, s) {
     clearSession_(chatId, tg);
     tgSend_(chatId, '✅ ' + r2.msg);
     showCityInstructors_(chatId, num_(d.cityId), 0, 0);
+    return;
+  }
+  if (st === 'adm:bcText') {
+    if (!isSuperTg_(tg)) { clearSession_(chatId, tg); tgSend_(chatId, TXT.NO_ACCESS); return; }
+    var body = String(msg.text || '').trim(); // متن خام (با همان خط‌ها و نیم‌فاصله‌ها)
+    if (!body) { tgSend_(chatId, 'متن پیام خالی است؛ دوباره بنویسید.'); return; }
+    if (body.length > AUTO.BC_MAX_CHARS) { tgSend_(chatId, '⚠️ متن ' + body.length + ' حرف است؛ حداکثر ' + AUTO.BC_MAX_CHARS + ' حرف مجاز است. کوتاه‌ترش کنید و دوباره بفرستید.'); return; }
+    var ids = broadcastRecipients_(readTable_('Users'), readTable_('Admins'), d.aud, d.cityId);
+    s.state = 'adm:bcReady'; s.data = { aud: d.aud, cityId: d.cityId, text: body, label: d.label };
+    saveSession_(chatId, tg, s);
+    tgSend_(chatId, '👁 پیش‌نمایش پیام همگانی — گیرندگان: ' + d.label + ' (' + ids.length + ' نفر)\n—\n📣 پیام از معاونت نسرا:\n\n' + body + '\n—',
+      ikb_([[btn_('✅ ارسال برای ' + ids.length + ' نفر', 'A:bs')], [btn_('✏️ نوشتن دوباره', 'A:b'), btn_('❌ انصراف', 'A:m')]]));
     return;
   }
   if (st === 'adm:addAdmin') {
@@ -478,10 +507,8 @@ function deletePublishedReport_(rid, adminTg) {
 }
 
 // ---------- آمار ----------
-function showMonthStats_(chatId, jy, jm, mid) {
-  var t = todayJalali_();
-  if (!jy || jm < 1 || jm > 12) { jy = t.jy; jm = t.jm; }
-  var reports = readTable_('Reports'), st = monthStats_(reports, getCities_(), jy, jm);
+function monthStatsText_(reports, jy, jm) {
+  var st = monthStats_(reports, getCities_(), jy, jm);
   var pending = reports.filter(function (r) { return r.status === 'pending'; }).length;
   var lines = ['📊 گزارش‌های تاییدشده — ' + JALALI_MONTHS[jm - 1] + ' ' + jy + ' (بر اساس تاریخ برگزاری)',
     'جمع: ' + st.total + ' گزارش — ' + st.people + ' نفر شرکت‌کننده', ''];
@@ -490,9 +517,15 @@ function showMonthStats_(chatId, jy, jm, mid) {
   });
   if (st.zero.length) lines.push('', '⚪️ بدون گزارش (' + st.zero.length + ' شهرستان): ' + st.zero.join('، '));
   lines.push('', '⏳ در انتظار بررسی (همه ماه‌ها): ' + pending);
+  return lines.join('\n');
+}
+function showMonthStats_(chatId, jy, jm, mid) {
+  var t = todayJalali_();
+  if (!jy || jm < 1 || jm > 12) { jy = t.jy; jm = t.jm; }
+  var text = monthStatsText_(readTable_('Reports'), jy, jm);
   var pv = prevJalaliMonth_(jy, jm), nx = nextJalaliMonth_(jy, jm), nav = [btn_('⬅️ ' + JALALI_MONTHS[pv.jm - 1], 'A:s:' + pv.jy + ':' + pv.jm)];
   if (nx.jy < t.jy || (nx.jy === t.jy && nx.jm <= t.jm)) nav.push(btn_(JALALI_MONTHS[nx.jm - 1] + ' ➡️', 'A:s:' + nx.jy + ':' + nx.jm));
-  panelOut_(chatId, mid, lines.join('\n'), ikb_([nav, homeRow_()]));
+  panelOut_(chatId, mid, text, ikb_([nav, [btn_('📥 فایل اکسل همین ماه', 'A:sx:' + jy + ':' + jm)], homeRow_()]));
 }
 
 // ---------- کاربران ----------
@@ -682,4 +715,88 @@ function removeAdmin_(targetTg, byTg) {
   updateRow_('Admins', row._row, { is_active: '0' });
   bustCache_();
   return { ok: true };
+}
+
+// ---------- فاز ۳: پیام همگانی و بکاپ/خودکارها (فقط سوپرادمین) ----------
+function handlePhase3Cb_(cb, s, prev, p, a, chatId, tg, mid) {
+  if (p === 'b') { // انتخاب گیرندگان
+    tgAnswerCb_(cb.id);
+    var users = readTable_('Users'), admins = readTable_('Admins'), job = broadcastJob_();
+    var nAll = broadcastRecipients_(users, admins, 'all').length, nAdm = broadcastRecipients_(users, admins, 'admins').length;
+    panelOut_(chatId, mid, '📣 پیام همگانی\nپیام فقط متنی است و با عنوان «📣 پیام از معاونت نسرا» برای هر نفر جداگانه در چت خصوصی بات فرستاده می‌شود.' +
+      (job ? '\n\n⏳ یک پیام همگانی در حال ارسال است: ' + job.pos + ' از ' + job.ids.length : '') + '\n\nگیرندگان را انتخاب کنید:',
+      ikb_([[btn_('👥 همه همکاران فعال (' + nAll + ')', 'A:ba')], [btn_('🏙 همکاران یک شهرستان', 'A:bc:0')],
+        [btn_('🛡 فقط ادمین‌ها (' + nAdm + ')', 'A:bm')], homeRow_()]));
+    return;
+  }
+  if (p === 'bc') {
+    tgAnswerCb_(cb.id);
+    panelOut_(chatId, mid, '🏙 پیام برای همکاران کدام شهرستان؟', adminCitiesKb_('A:bC:', 'A:bc:', num_(a), [[btn_('↩️ بازگشت', 'A:b')]], null));
+    return;
+  }
+  if (p === 'ba' || p === 'bm' || p === 'bC') {
+    var aud = p === 'ba' ? 'all' : p === 'bm' ? 'admins' : 'city', cty = p === 'bC' ? getCityById_(num_(a)) : null;
+    if (p === 'bC' && !cty) { tgAnswerCb_(cb.id, 'شهرستان پیدا نشد.', true); return; }
+    var label = aud === 'all' ? 'همه همکاران فعال' : aud === 'admins' ? 'ادمین‌ها' : 'همکاران ' + cty.name;
+    s.state = 'adm:bcText'; s.data = { aud: aud, cityId: cty ? num_(cty.city_id) : 0, label: label };
+    saveSession_(chatId, tg, s);
+    tgAnswerCb_(cb.id);
+    panelOut_(chatId, mid, '✍️ گیرندگان: ' + label + '\nمتن پیام را بنویسید و بفرستید (حداکثر ' + AUTO.BC_MAX_CHARS + ' حرف). قبل از ارسال، پیش‌نمایش نشان داده می‌شود.',
+      ikb_([[btn_('↩️ انصراف', 'A:b')]]));
+    return;
+  }
+  if (p === 'bs') { // ارسال نهایی — پیش‌نویس در حالت قبلی (adm:bcReady) است؛ کلیک دوم چیزی نمی‌فرستد
+    if (prev.state !== 'adm:bcReady' || !prev.data.text) { tgAnswerCb_(cb.id, 'این پیش‌نمایش دیگر معتبر نیست؛ از «📣 پیام همگانی» دوباره شروع کنید.', true); return; }
+    var ids = broadcastRecipients_(readTable_('Users'), readTable_('Admins'), prev.data.aud, prev.data.cityId);
+    var q = enqueueBroadcast_(tg, prev.data.text, ids, prev.data.label);
+    if (!q.ok) { tgAnswerCb_(cb.id, q.msg, true); return; }
+    tgAnswerCb_(cb.id, 'در صف ارسال قرار گرفت');
+    panelOut_(chatId, mid, '✅ پیام همگانی برای ' + q.count + ' نفر در صف ارسال قرار گرفت.\nارسال تا ۱–۲ دقیقه دیگر شروع می‌شود و پایانش را همین‌جا خبر می‌دهم.', ikb_([homeRow_()]));
+    return;
+  }
+  if (p === 'k') { tgAnswerCb_(cb.id); showAutomation_(chatId, mid); return; }
+  if (p === 'kb') {
+    tgAnswerCb_(cb.id, 'در حال گرفتن بکاپ… (چند ثانیه)');
+    try {
+      var r = runBackup_();
+      tgSend_(chatId, '✅ بکاپ گرفته شد: ' + r.name + '\nپوشه بکاپ‌ها: ' + r.folderUrl + (r.trashed ? '\n(' + r.trashed + ' بکاپ قدیمی به سطل زباله Drive رفت)' : ''));
+    } catch (e) {
+      log_('error', 'manual-backup', e && e.message, '');
+      tgSend_(chatId, '⚠️ بکاپ ناموفق بود: ' + String(e && e.message || e).slice(0, 200) + '\nاحتمالاً اجازه Google Drive داده نشده؛ در ویرایشگر تابع installPhase3 را یک بار Run کنید.');
+    }
+    showAutomation_(chatId, 0);
+    return;
+  }
+  if (p === 'kr') {
+    tgAnswerCb_(cb.id);
+    sendMonthlyReminder_(readTable_('Reports'), todayJalali_(), tg);
+    return;
+  }
+  if (p === 'kt') {
+    var on = autoSetting_('reminder_enabled') !== '0';
+    setSetting_('reminder_enabled', on ? '0' : '1', 'یادآوری ماهانه به شهرستان‌های بدون گزارش: 1 روشن، 0 خاموش');
+    tgAnswerCb_(cb.id, on ? 'یادآوری ماهانه خاموش شد' : 'یادآوری ماهانه روشن شد');
+    showAutomation_(chatId, mid);
+  }
+}
+function showAutomation_(chatId, mid) {
+  var trg = triggerStatus_(), folderId = getSetting_('backup_folder_id'), job = broadcastJob_();
+  var remOn = autoSetting_('reminder_enabled') !== '0', hours = num_(autoSetting_('pending_alert_hours'));
+  var text = '💾 بکاپ و کارهای خودکار\n' +
+    '• آخرین بکاپ: ' + (getSetting_('last_backup_at') || '— هنوز گرفته نشده') + '\n' +
+    (folderId ? '• پوشه بکاپ‌ها: https://drive.google.com/drive/folders/' + folderId + '\n' : '') +
+    '• نگه‌داری: آخرین ' + (num_(autoSetting_('backup_keep')) || 14) + ' بکاپ\n' +
+    '• بکاپ شبانه (ساعت ' + AUTO.BACKUP_HOUR + ' بامداد): ' + (trg.backup ? 'فعال ✅' : 'غیرفعال ❌') + '\n' +
+    '• کارهای روزانه (ساعت ' + AUTO.DAILY_HOUR + ' صبح): ' + (trg.daily ? 'فعال ✅' : 'غیرفعال ❌ — در ویرایشگر installPhase3 را Run کنید') + '\n' +
+    '• یادآوری به شهرستان‌های بدون گزارش: ' + (remOn ? 'روشن ✅ — روزهای ' + parseDaysList_(autoSetting_('reminder_days')).join(' و ') + ' هر ماه' : 'خاموش ⏸') + '\n' +
+    '• هشدار گزارش معطل در گروه بررسی: ' + (hours ? 'بعد از ' + hours + ' ساعت ✅' : 'خاموش ⏸') + '\n' +
+    '• خلاصه و فایل اکسل ماه قبل: روز اول هر ماه برای سوپرادمین' +
+    (job ? '\n• ⏳ پیام همگانی در حال ارسال: ' + job.pos + ' از ' + job.ids.length : '') +
+    '\n\n(روزها و ساعت‌ها را می‌توانید در برگه Settings عوض کنید: reminder_days ، pending_alert_hours ، backup_keep)';
+  panelOut_(chatId, mid, text, ikb_([
+    [btn_('💾 بکاپ همین الان', 'A:kb')],
+    [btn_('👁 پیش‌نمایش یادآوری (فقط برای من)', 'A:kr')],
+    [btn_(remOn ? '⏸ خاموش‌کردن یادآوری ماهانه' : '▶️ روشن‌کردن یادآوری ماهانه', 'A:kt')],
+    homeRow_()
+  ]));
 }
