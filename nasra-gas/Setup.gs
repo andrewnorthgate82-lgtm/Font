@@ -3,11 +3,11 @@
 var HEADER_NOTES = {
   Settings: { key: 'نام تنظیم — دست نزنید', value: 'مقدار تنظیم (کد راه‌اندازی و آیدی گروه/کانال این‌جاست)', note: 'توضیح — اگر ردیف debug با مقدار 1 بسازید، لاگ‌های info هم در Logs نوشته می‌شوند' },
   Cities: { city_id: 'شماره شهرستان — دست نزنید', name: 'نام نمایشی شهرستان', hashtag: 'هشتگ کانال؛ با # شروع شود، بدون فاصله و پرانتز', is_active: '۱ یعنی فعال، ۰ یعنی غیرفعال' },
-  Users: { telegram_id: 'آیدی عددی تلگرام', phone: 'شماره موبایل تأییدشده', full_name: 'نام و نام‌خانوادگی', city_id: 'شماره شهرستان', status: 'pending یعنی در انتظار تایید، approved تاییدشده، rejected ردشده، disabled غیرفعال' },
+  Users: { telegram_id: 'آیدی عددی تلگرام', phone: 'شماره موبایل تأییدشده', full_name: 'نام و نام‌خانوادگی', city_id: 'شماره شهرستان', status: 'pending یعنی در انتظار تایید، approved تاییدشده، rejected ردشده، disabled غیرفعال', position: 'نقش در شهرستان (از فهرست کشویی انتخاب کنید)؛ خواهر/برادر فایل اکسل از همین ستون است' },
   Whitelist: { phone: 'شماره موبایل همکار (مثل 09123456789) — همین‌جا در شیت بچسبانید', full_name: 'نام و نام‌خانوادگی', city_name: 'نام شهرستان دقیقاً مثل برگه Cities', city_id: 'اختیاری: اگر خالی باشد بات با city_name پیدا می‌کند' },
   Admins: { telegram_id: 'آیدی عددی ادمین', role: 'superadmin یا admin', is_active: '۱ یعنی فعال' },
   Instructors: { city_id: 'شماره شهرستان', name: 'نام مدرس/سخنران', name_norm: 'فرم نرمال نام برای جلوگیری از تکراری — دست نزنید' },
-  Reports: { status: 'pending/approved/rejected/deleted', event_jalali: 'تاریخ برگزاری شمسی', publish_jalali: 'تاریخ درج در کانال (لحظه تایید)', resubmit_count: 'تعداد ارسال مجدد بعد از رد' },
+  Reports: { status: 'pending/approved/rejected/deleted', event_jalali: 'تاریخ برگزاری شمسی', publish_jalali: 'تاریخ درج در کانال (لحظه تایید)', resubmit_count: 'تعداد ارسال مجدد بعد از رد', submitter_position: 'نقش فرستنده در لحظه ارسال گزارش' },
   Sessions: { state: 'قدم فعلی فرم کاربر — دست نزنید', data_json: 'داده‌های فرم نیمه‌کاره — دست نزنید' },
   Logs: { event: 'فقط هشدار و خطا این‌جا ثبت می‌شود؛ آمار آپدیت‌ها در کش و در ‪/status‬ است' }
 };
@@ -68,6 +68,7 @@ function applyValidations_() {
   listRule('Admins', 3, ['superadmin', 'admin']);                               // role
   listRule('Reports', 7, ['draft', 'pending', 'approved', 'rejected', 'deleted']); // status
   listRule('Cities', 4, ['1', '0']);                                            // is_active
+  listRule('Users', SHEETS.Users.indexOf('position') + 1, POSITIONS);            // نقش در شهرستان
 }
 function seedCitiesIfEmpty_() {
   if (readTable_('Cities').length) return;

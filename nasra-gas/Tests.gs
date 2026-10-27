@@ -1,6 +1,6 @@
-// Tests.gs — تست‌های پذیرش فاز ۱، ۲ و ۳. در ویرایشگر Apps Script تابع runTests را Run کنید؛
-// در Execution log باید خروجی «20 passed» را ببینید (در صورت شکست، علت هر مورد نوشته می‌شود).
-// تست‌های ۱۲ تا ۱۶ مال پنل مدیریت فاز ۲ (Admin.gs) و ۱۷ تا ۲۰ مال خودکارهای فاز ۳ (Automation.gs) هستند؛
+// Tests.gs — تست‌های پذیرش فاز ۱ تا ۴. در ویرایشگر Apps Script تابع runTests را Run کنید؛
+// در Execution log باید خروجی «23 passed» را ببینید (در صورت شکست، علت هر مورد نوشته می‌شود).
+// تست‌های ۱۲ تا ۱۶ مال پنل مدیریت فاز ۲ (Admin.gs)، ۱۷ تا ۲۰ مال خودکارهای فاز ۳ و ۲۱ تا ۲۳ مال فاز ۴ (دوره ۲۱ تا ۲۰، نقش‌ها، اکسل) هستند؛
 // هیچ‌کدام پیامی به تلگرام نمی‌فرستند و به Google Drive دست نمی‌زنند.
 // نکته: پس از هر به‌روزرسانی کد، یک بار setup()‎ را هم Run کنید (بی‌خطر و تکراری است) تا فرمت متنی ستون‌ها اعمال شود.
 
@@ -237,18 +237,19 @@ function runTests() {
     eq(parseTimeInput_('21:60'), null, 'دقیقه ۶۰ نامعتبر');
   });
 
-  check('۱۳) پنل: آمار ماهانه فقط تاییدشده‌های همان ماه را می‌شمارد', function () {
+  check('۱۳) پنل: آمار ماهانه فقط تاییدشده‌های دوره همان ماه (۲۱ تا ۲۰) را می‌شمارد', function () {
     var cities = [{ city_id: 1, name: 'الف' }, { city_id: 2, name: 'ب' }, { city_id: 3, name: 'ج' }];
     var reps = [
-      { status: 'approved', city_id: 2, event_year: 1405, event_month: 8, participants: 30 },
-      { status: 'approved', city_id: 2, event_year: 1405, event_month: 8, participants: 10 },
-      { status: 'approved', city_id: 1, event_year: 1405, event_month: 8, participants: 5 },
-      { status: 'deleted', city_id: 1, event_year: 1405, event_month: 8, participants: 99 },
-      { status: 'pending', city_id: 3, event_year: 1405, event_month: 8, participants: 99 },
-      { status: 'approved', city_id: 3, event_year: 1405, event_month: 7, participants: 99 }
+      { status: 'approved', city_id: 2, event_year: 1405, event_month: 8, event_day: 5, participants: 30 },
+      { status: 'approved', city_id: 2, event_year: 1405, event_month: 7, event_day: 25, participants: 10 },
+      { status: 'approved', city_id: 1, event_year: 1405, event_month: 8, event_day: 20, participants: 5 },
+      { status: 'deleted', city_id: 1, event_year: 1405, event_month: 8, event_day: 10, participants: 99 },
+      { status: 'pending', city_id: 3, event_year: 1405, event_month: 8, event_day: 10, participants: 99 },
+      { status: 'approved', city_id: 3, event_year: 1405, event_month: 7, event_day: 20, participants: 99 },
+      { status: 'approved', city_id: 3, event_year: 1405, event_month: 8, event_day: 21, participants: 99 }
     ];
     var st = monthStats_(reps, cities, 1405, 8);
-    eq(st.total, 3, 'جمع گزارش‌ها');
+    eq(st.total, 3, 'جمع گزارش‌های دوره آبان (۲۵ مهر حساب است، ۲۰ مهر و ۲۱ آبان نه)');
     eq(st.people, 45, 'جمع نفرات');
     eq(st.rows[0].name, 'ب', 'رتبه اول');
     eq(st.rows[0].count, 2, 'تعداد رتبه اول');
@@ -326,38 +327,48 @@ function runTests() {
     }
   });
 
-  check('۱۷) فاز ۳: فایل اکسل (xlsx) ماهانه — ۸ ستون جدا، راست‌به‌چپ، لینک کانال', function () {
+  check('۱۷) فایل اکسل: پنج برگه مثل فایل نمونه، هر گزارش در برگه نوع خودش، فقط دوره ۲۱ تا ۲۰', function () {
     var cities = [{ city_id: 23, name: 'کاشان' }, { city_id: 29, name: 'نجف آباد' }];
+    var base = { status: 'approved', instructor_name: 'ن', duration_min: 90, participants: 35, place: 'مسجد', channel_message_ids: '[]' };
+    function R(o) { var r = {}; Object.keys(base).forEach(function (k) { r[k] = base[k]; }); Object.keys(o).forEach(function (k) { r[k] = o[k]; }); return r; }
     var reps = [
-      { report_id: 7, status: 'approved', city_id: 29, subject: 'موضوع <مهم> & "ویژه"', instructor_name: 'م', event_jalali: '1405/08/03',
-        event_year: 1405, event_month: 8, event_day: 3, duration_min: '60', participants: '20', place: 'خط اول\nخط دوم', channel_message_ids: '[51,52]' },
-      { report_id: 5, status: 'approved', city_id: 23, subject: '=1+1', instructor_name: 'ن', event_jalali: '1405/08/01',
-        event_year: 1405, event_month: 8, event_day: 1, duration_min: 90, participants: 35, place: 'مسجد', channel_message_ids: '[40]' },
-      { report_id: 6, status: 'deleted', city_id: 23, event_year: 1405, event_month: 8, subject: 'حذف‌شده' },
-      { report_id: 8, status: 'approved', city_id: 23, event_year: 1405, event_month: 7, subject: 'ماه قبل' }
+      R({ report_id: 7, city_id: 29, class_type: 'حضوری', subject: 'موضوع <مهم> & "ویژه"', event_jalali: '1405/08/03', event_year: 1405, event_month: 8, event_day: 3,
+        duration_min: '60', participants: '20', place: 'خط اول\nخط دوم', channel_message_ids: '[51,52]' }),
+      R({ report_id: 5, city_id: 23, class_type: 'حضوری', subject: '=1+1', event_jalali: '1405/07/21', event_year: 1405, event_month: 7, event_day: 21, channel_message_ids: '[40]' }),
+      R({ report_id: 9, city_id: 23, class_type: 'تولیدات', subject: 'کلیپ', instructor_name: 'تولیدکننده', event_jalali: '1405/08/10', event_year: 1405, event_month: 8, event_day: 10, channel_message_ids: '[60]' }),
+      R({ report_id: 10, city_id: 23, class_type: 'مجازی', subject: 'لایو', place: 'ایتا', event_jalali: '1405/08/20', event_year: 1405, event_month: 8, event_day: 20 }),
+      R({ report_id: 6, status: 'deleted', city_id: 23, class_type: 'حضوری', event_jalali: '1405/08/05', event_year: 1405, event_month: 8, event_day: 5 }),
+      R({ report_id: 8, city_id: 23, class_type: 'حضوری', event_jalali: '1405/07/20', event_year: 1405, event_month: 7, event_day: 20 }),
+      R({ report_id: 11, city_id: 23, class_type: 'حضوری', event_jalali: '1405/08/21', event_year: 1405, event_month: 8, event_day: 21 })
     ];
-    var rows = monthExcelRows_(reps, cities, 1405, 8, -1001234567890, '');
-    eq(rows.length, 2, 'فقط تاییدشده‌های همین ماه');
-    eq(rows[0].join('|'), '1405/08/01|کاشان|=1+1|ن|90|35|مسجد|https://t.me/c/1234567890/40', 'ردیف اول به ترتیب روز، ۸ ستون');
-    eq(typeof rows[0][4] + typeof rows[0][5], 'numbernumber', 'مدت و تعداد «عدد» هستند (قابل جمع در اکسل)');
-    eq(rows[1][6], 'خط اول - خط دوم', 'مکان چندخطی در یک سلول');
+    var pick = excelPick_(reps, {}, 1405, 8, 0, 'a');
+    eq(pick.map(function (r) { return r.report_id; }).sort().join(','), '10,5,7,9', 'فقط تاییدشده‌های ۲۱ مهر تا ۲۰ آبان');
+    var sheets = excelSheets_(pick, cities, -1001234567890, '');
+    eq(sheets.map(function (s) { return s.name; }).join('|'), 'سوادرسانه حضوری|سوادرسانه مجازی (لایو)|توانمندسازی گردان|سواد رسانه خلاقانه|تولیدات', 'نام و ترتیب برگه‌ها');
+    eq(sheets.map(function (s) { return s.rows.length; }).join(','), '2,1,0,0,1', 'هر گزارش در برگه نوع خودش');
+    eq(sheets[0].cols.map(function (c) { return c[0]; }).join('|'), 'ردیف|تاریخ|نام ناحیه|موضوع|نام سخنران / مدرس|مدت (دقیقه)|تعداد نفرات|مکان برگزاری|لینک مستندات', 'ستون‌های برگه حضوری');
+    eq(sheets[0].rows[0].join('|'), '1|1405/07/21|کاشان|=1+1|ن|90|35|مسجد|https://t.me/c/1234567890/40', 'ردیف اول به ترتیب تاریخ');
+    eq(typeof sheets[0].rows[1][5] + typeof sheets[0].rows[1][6], 'numbernumber', 'مدت و تعداد «عدد» هستند (قابل جمع در اکسل)');
+    eq(sheets[0].rows[1][7], 'خط اول - خط دوم', 'مکان چندخطی در یک سلول');
+    eq(sheets[1].rows[0].join('|'), '1|1405/08/20|کاشان|لایو|ن|90|35|ایتا|', 'مجازی: بستر = متن مکان، بدون پست = بدون لینک');
+    eq(sheets[4].rows[0].join('|'), '1|1405/08/10|کاشان|کلیپ|تولیدکننده|||https://t.me/c/1234567890/60', 'تولیدات: ستون‌های پرسیده‌نشده خالی');
     eq(channelPostLink_(-1001234567890, '@nasra_isf', 51), 'https://t.me/nasra_isf/51', 'لینک کانال عمومی');
-    eq(channelPostLink_(-1001234567890, '', 0), '', 'بدون پست، بدون لینک');
-    eq(XLSX_HEADER.length, 8, '۸ عنوان');
-    var parts = xlsxParts_('آبان 1405', XLSX_HEADER, rows, XLSX_WIDTHS), byName = {};
+    var parts = xlsxBook_(sheets), byName = {};
     parts.forEach(function (p) { byName[p.name] = p.content; });
     ['[Content_Types].xml', '_rels/.rels', 'xl/workbook.xml', 'xl/_rels/workbook.xml.rels', 'xl/styles.xml',
-      'xl/worksheets/sheet1.xml', 'xl/worksheets/_rels/sheet1.xml.rels'].forEach(function (n) { ok(byName[n], 'بخش ' + n); });
+      'xl/worksheets/sheet1.xml', 'xl/worksheets/sheet5.xml', 'xl/worksheets/_rels/sheet5.xml.rels'].forEach(function (n) { ok(byName[n], 'بخش ' + n); });
+    eq((byName['xl/workbook.xml'].match(/<sheet /g) || []).length, 5, 'پنج برگه در فایل');
     var sh = byName['xl/worksheets/sheet1.xml'];
     ok(sh.indexOf('rightToLeft="1"') !== -1, 'برگه راست‌به‌چپ');
     ok(sh.indexOf('موضوع &lt;مهم&gt; &amp; &quot;ویژه&quot;') !== -1, 'نویسه‌های ویژه XML فرار داده می‌شوند');
-    ok(sh.indexOf('<f>') === -1, 'هیچ فرمولی در فایل نیست (=1+1 متن می‌ماند)');
-    ok(sh.indexOf('<c r="E2"><v>90</v></c>') !== -1, 'عدد در سلول عددی');
-    eq((sh.match(/<hyperlink /g) || []).length, 2, 'دو لینک قابل کلیک');
-    ok(byName['xl/worksheets/_rels/sheet1.xml.rels'].indexOf('TargetMode="External"') !== -1, 'لینک بیرونی');
+    ok(parts.every(function (p) { return p.content.indexOf('<f>') === -1; }), 'هیچ فرمولی در فایل نیست (=1+1 متن می‌ماند)');
+    ok(sh.indexOf('<c r="F2" s="2"><v>90</v></c>') !== -1, 'عدد در سلول عددی');
+    eq((sh.match(/<hyperlink /g) || []).length, 2, 'دو لینک قابل کلیک در برگه حضوری');
+    ok(byName['xl/worksheets/_rels/sheet5.xml.rels'].indexOf('TargetMode="External"') !== -1, 'لینک بیرونی در برگه تولیدات');
+    ok(byName['xl/styles.xml'].indexOf('B Titr') !== -1, 'قلم فایل نمونه');
   });
 
-  check('۱۸) فاز ۳: یادآوری فقط برای شهرستان‌های بدون گزارش و فقط کارمندان فعال', function () {
+  check('۱۸) یادآوری فقط برای شهرستان‌های بدون گزارش در دوره (۲۱ تا ۲۰) و فقط کارمندان فعال', function () {
     var cities = [{ city_id: 1, name: 'الف' }, { city_id: 2, name: 'ب' }, { city_id: 3, name: 'ج' }, { city_id: 4, name: 'د' }];
     var users = [
       { telegram_id: 11, city_id: 1, status: 'approved' }, { telegram_id: 12, city_id: 1, status: 'disabled' },
@@ -365,13 +376,13 @@ function runTests() {
       { telegram_id: 32, city_id: 3, status: 'pending' }
     ];
     var reps = [
-      { status: 'approved', city_id: 2, event_year: 1405, event_month: 8 },
-      { status: 'pending', city_id: 4, event_year: 1405, event_month: 8 },
-      { status: 'rejected', city_id: 1, event_year: 1405, event_month: 8 },
-      { status: 'approved', city_id: 3, event_year: 1405, event_month: 7 }
+      { status: 'approved', city_id: 2, event_year: 1405, event_month: 8, event_day: 5 },
+      { status: 'pending', city_id: 4, event_year: 1405, event_month: 7, event_day: 28 },
+      { status: 'rejected', city_id: 1, event_year: 1405, event_month: 8, event_day: 5 },
+      { status: 'approved', city_id: 3, event_year: 1405, event_month: 7, event_day: 15 }
     ];
     var t = reminderTargets_(reps, users, cities, 1405, 8);
-    eq(t.cities.map(function (c) { return c.name; }).join(','), 'الف,ج', 'شهرستان‌های بدون گزارش این ماه (ردشده و ماه قبل حساب نیست)');
+    eq(t.cities.map(function (c) { return c.name; }).join(','), 'الف,ج', 'شهرستان‌های بدون گزارش دوره آبان (۲۸ مهر جزو آبان است؛ ردشده و ۱۵ مهر حساب نیست)');
     eq(t.cities[0].recipients.join(','), '11', 'غیرفعال یادآوری نمی‌گیرد');
     eq(t.cities[1].recipients.join(','), '31', 'در انتظار تایید ثبت‌نام یادآوری نمی‌گیرد');
     eq(t.totalRecipients, 2, 'جمع گیرندگان');
@@ -399,7 +410,7 @@ function runTests() {
     eq(broadcastRecipients_(users, admins, 'all').join(','), '11,12', 'همه فعال‌ها، بدون تکرار و بدون بی‌شهرستان');
     eq(broadcastRecipients_(users, admins, 'city', 2).join(','), '12', 'یک شهرستان');
     eq(broadcastRecipients_(users, admins, 'admins').join(','), '90', 'فقط ادمین‌های فعال');
-    ['A:b', 'A:ba', 'A:bm', 'A:bc:3', 'A:bC:32', 'A:bs', 'A:k', 'A:kb', 'A:kr', 'A:kt', 'A:sx:1405:12'].forEach(function (d) {
+    ['A:b', 'A:ba', 'A:bm', 'A:bc:3', 'A:bC:32', 'A:bs', 'A:k', 'A:kb', 'A:kr', 'A:kt'].forEach(function (d) {
       ok(unescape(encodeURIComponent(d)).length <= 64, 'طول ' + d);
     });
     var ids = [], i, text = '';
@@ -407,6 +418,63 @@ function runTests() {
     for (i = 0; i < AUTO.BC_MAX_CHARS; i++) text += 'س';
     var job = JSON.stringify({ by: 7000000000, text: text, ids: ids, pos: 199, ok: 199, fail: 0, label: 'همکاران فریدون شهر', at: '2026-10-26 10:00:00' });
     ok(unescape(encodeURIComponent(job)).length < 9 * 1024, 'صف پیام همگانی (۲۰۰ نفر، طولانی‌ترین متن) در سقف ۹KB هر Script Property جا می‌شود');
+  });
+
+  check('۲۱) دوره گزارش هر ماه: ۲۱ ماه قبل تا ۲۰ همان ماه (همه ۱۲ ماه، عبور از سال، اسفند کبیسه)', function () {
+    function P(y, m, d) { var p = reportPeriodOf_(y, m, d); return p.jy + '/' + p.jm; }
+    eq(P(1405, 7, 20), '1405/7', '۲۰ مهر ← گزارش مهر');
+    eq(P(1405, 7, 21), '1405/8', '۲۱ مهر ← گزارش آبان');
+    eq(P(1405, 8, 20), '1405/8', '۲۰ آبان ← گزارش آبان');
+    eq(P(1405, 12, 21), '1406/1', '۲۱ اسفند ← گزارش فروردین سال بعد');
+    eq(P(1403, 12, 30), '1404/1', '۳۰ اسفند کبیسه ← گزارش فروردین');
+    eq(P(1406, 1, 20), '1406/1', '۲۰ فروردین ← گزارش فروردین');
+    var r = periodRange_(1406, 1);
+    eq(r.from + '→' + r.to, '1405/12/21→1406/01/20', 'گزارش فروردین: ۲۱ اسفند تا ۲۰ فروردین');
+    for (var m = 1; m <= 12; m++) {
+      var g = periodRange_(1405, m), pv = prevJalaliMonth_(1405, m);
+      eq(g.from, formatJalali_(pv.jy, pv.jm, 21), 'شروع گزارش ' + JALALI_MONTHS[m - 1]);
+      eq(g.to, formatJalali_(1405, m, 20), 'پایان گزارش ' + JALALI_MONTHS[m - 1]);
+    }
+    eq(periodRangeText_(1405, 8), 'از 1405/07/21 تا 1405/08/20', 'متن بازه آبان');
+    var row = reportPeriodOfRow_({ event_jalali: '1405/08/25' });
+    eq(row.jy + '/' + row.jm, '1405/9', 'گزارش بدون ستون‌های عددی: از تاریخ متنی خوانده می‌شود');
+    var t = todayJalali_(), cp = currentPeriod_(), want = reportPeriodOf_(t.jy, t.jm, t.jd);
+    eq(cp.jy + '/' + cp.jm, want.jy + '/' + want.jm, 'دوره امروز');
+  });
+
+  check('۲۲) نقش‌ها: خواهر/برادر از روی نقش فرستنده؛ فضای مجازی و بدون نقش فقط در تجمیعی', function () {
+    eq(POSITIONS.length, 5, 'پنج نقش');
+    eq(positionOf_(' مسئول  نسرا   خواهر '), 'مسئول نسرا خواهر', 'تحمل فاصله اضافه');
+    eq(positionOf_('مسئول‌فضاي مجازي'), 'مسئول فضای مجازی', 'تحمل نیم‌فاصله و ی عربی');
+    eq(positionOf_('مدیر'), '', 'نقش ناشناخته');
+    eq(POSITIONS.map(positionSide_).join(','), 'v,s,s,b,b', 'سمت هر نقش');
+    var users = [
+      { telegram_id: 1, position: 'فرمانده گردان خواهر' }, { telegram_id: 2, position: 'مسئول نسرا برادر' },
+      { telegram_id: 3, position: 'مسئول فضای مجازی' }, { telegram_id: 4, position: '' }, { telegram_id: 5, position: 'مسئول نسرا خواهر' }
+    ];
+    function R(id, tg, city, pos) { return { report_id: id, status: 'approved', submitter_telegram_id: tg, city_id: city, submitter_position: pos || '', event_year: 1405, event_month: 8, event_day: 1 }; }
+    var reps = [R(1, 1, 5), R(2, 2, 5), R(3, 3, 5), R(4, 4, 5), R(5, 5, 6), R(6, 2, 5, 'مسئول نسرا خواهر'),
+      { report_id: 7, status: 'pending', submitter_telegram_id: 1, city_id: 5, event_year: 1405, event_month: 8, event_day: 1 }];
+    var pos = positionsByTg_(users);
+    function ids(list) { return list.map(function (r) { return r.report_id; }).join(','); }
+    eq(ids(excelPick_(reps, pos, 1405, 8, 5, 's')), '1,6', 'خواهران شهرستان ۵ (گزارش ۶ با نقشِ لحظه ارسال)');
+    eq(ids(excelPick_(reps, pos, 1405, 8, 5, 'b')), '2', 'برادران شهرستان ۵');
+    eq(ids(excelPick_(reps, pos, 1405, 8, 5, 'a')), '1,2,3,4,6', 'تجمیعی شهرستان ۵ (شامل فضای مجازی و بدون نقش)');
+    eq(ids(excelPick_(reps, pos, 1405, 8, 0, 'a')), '1,2,3,4,5,6', 'همه شهرستان‌ها');
+    var sc = sideCounts_(reps, pos, 1405, 8, 5);
+    eq([sc.s, sc.b, sc.v, sc.none, sc.all].join(','), '2,1,1,1,5', 'شمارش خواهر/برادر/فضای مجازی/بدون نقش');
+  });
+
+  check('۲۳) دکمه‌های فاز ۴ (ماه/شهرستان/خواهر-برادر/نقش) حداکثر ۶۴ بایت + هر نوع کلاس یک برگه', function () {
+    var datas = ['A:xm:5', 'A:xs:1405:12', 'A:xa:1405:12', 'A:xc:1405:12:3', 'A:xg:1405:12:32', 'A:xf:1405:12:32:s', 'A:xf:1405:12:32:a',
+      'A:uq:99999', 'A:uQ:99999:4', 'A:uQ:99999:x', 'po:4'];
+    function collect(kb) { kb.inline_keyboard.forEach(function (row) { row.forEach(function (b) { datas.push(b.callback_data); }); }); }
+    collect(excelMonthPickerKb_(0)); collect(excelMonthPickerKb_(5));
+    collect(adminCitiesKb_('A:xg:1405:12:', 'A:xc:1405:12:', 0, [], null, {}));
+    datas.forEach(function (d) { ok(unescape(encodeURIComponent(d)).length <= 64, 'طول ' + d); });
+    eq(XL_SHEETS.map(function (s) { return s.type; }).join(','), CFG.CLASS_TYPES.join(','), 'هر هشتگ نوع کلاس برگه خودش را دارد');
+    XL_SHEETS.forEach(function (s) { ok(s.name.length <= 31, 'طول نام برگه ' + s.name); });
+    ok(SHEETS.Users.indexOf('position') !== -1 && SHEETS.Reports.indexOf('submitter_position') !== -1, 'ستون‌های تازه در اسکیمای برگه‌ها');
   });
 
   if (failed.length) {

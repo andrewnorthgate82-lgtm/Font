@@ -16,6 +16,7 @@ var EDIT_FIELDS = [
 ];
 
 function startReport_(chatId, tg, user) {
+  if (!positionOf_(user && user.position)) { askPosition_(chatId, tg); return; } // فاز ۴: نقش فقط یک بار پرسیده می‌شود
   var s = getSession_(chatId, tg);
   s.state = 'form:photos';
   s.data = { photos: [], replacePhotos: false, editing: false, rid: 0, tp: 0 };
@@ -23,6 +24,15 @@ function startReport_(chatId, tg, user) {
   showStep_(chatId, tg, s, 'photos', 0);
 }
 
+// فاز ۴: همکاری که هنوز نقش ندارد، قبل از اولین گزارش نقش خودش را انتخاب می‌کند (بعداً فقط ادمین عوضش می‌کند)
+function askPosition_(chatId, tg) {
+  var s = getSession_(chatId, tg);
+  s.state = 'form:position'; s.data = {};
+  saveSession_(chatId, tg, s);
+  var rows = POSITIONS.map(function (p, i) { return [btn_(p, 'po:' + i)]; });
+  rows.push([btn_('❌ انصراف', 'cx')]);
+  tgSend_(chatId, '🎖 پیش از ثبت گزارش، نقش خودتان را در شهرستان انتخاب کنید:\n(فقط همین یک بار پرسیده می‌شود؛ برای تغییرِ بعدی به ادمین بگویید.)', ikb_(rows));
+}
 function photosKb_(n) {
   return ikb_([[btn_('✅ پایان ارسال عکس (' + n + ')', 'pd')], [btn_('❌ انصراف', 'cx')]]);
 }
@@ -207,6 +217,17 @@ function handleFormCb_(cb, s, data) {
   if (!isActiveEmployee_(u)) { tgAnswerCb_(cb.id, TXT.NO_ACCESS, true); return; }
   var step = stepOf_(s), parts = data.split(':'), p = parts[0], v = parts[1];
 
+  if (p === 'po') { // انتخاب نقش (فاز ۴)
+    var pos = /^\d$/.test(String(v)) ? POSITIONS[num_(v)] : null;
+    if (step !== 'position' || !pos) { tgAnswerCb_(cb.id, 'این دکمه دیگر فعال نیست؛ دوباره «📝 ثبت گزارش جدید» را بزنید.', true); return; }
+    if (!positionOf_(u.position)) updateUser_(u.user_id, tg, { position: pos }); // اگر ادمین در این فاصله نقش گذاشته، همان می‌ماند
+    tgAnswerCb_(cb.id, 'ثبت شد');
+    var fresh = getUserByTg_(tg);
+    tgEdit_(chatId, mid, '🎖 نقش شما: ' + (positionOf_(fresh && fresh.position) || pos) + ' ✅', null);
+    startReport_(chatId, tg, fresh);
+    return;
+  }
+
   if (data === 'bk') {
     tgAnswerCb_(cb.id);
     if (s.data.editing && !FORM_SUBSTEPS[step]) {
@@ -288,7 +309,8 @@ function submitReport_(cb, s, u) {
     audience: d.audience, place: d.place,
     publish_jalali: '', published_caption: '', channel_message_ids: '[]',
     review_chat_id: '', review_album_ids: '[]', review_info_id: '',
-    decided_by: '', decided_at: '', resubmit_count: 0
+    decided_by: '', decided_at: '', resubmit_count: 0,
+    submitter_position: positionOf_(u.position) // نقش فرستنده در همین لحظه (برای خواهر/برادر فایل اکسل)
   };
   var rid;
   if (d.rid) { // ارسال مجدد گزارش ردشده — همان ردیف، شمارنده +۱

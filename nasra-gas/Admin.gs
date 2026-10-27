@@ -3,6 +3,7 @@
 // آمار ماهانه شهرستان‌ها، کاربران (فعال/غیرفعال و تغییر شهرستان)، مدرسان (افزودن/تغییر نام/غیرفعال)
 // و ادمین‌ها (فقط سوپرادمین: افزودن/حذف دسترسی).
 // فاز ۳ (همراه Automation.gs): پیام همگانی و «بکاپ و کارهای خودکار» (فقط سوپرادمین) + فایل اکسل ماهانه (همه ادمین‌ها).
+// فاز ۴: آمار و اکسل بر اساس دوره ۲۱ تا ۲۰؛ اکسل پنج‌برگه‌ای برای یک شهرستان (خواهر/برادر/تجمیعی) یا همه؛ تعیین نقش کاربر.
 // همه کال‌بک‌های پنل با «A:» شروع می‌شوند (کوتاه‌تر از ۶۴ بایت). حالت‌های ورود متن با «adm:» در Sessions.
 
 var ADM_PER_PAGE = 8;
@@ -44,13 +45,13 @@ function parseTimeInput_(raw) {
   if (h > 23 || mi > 59) return null;
   return pad2_(h) + ':' + pad2_(mi);
 }
-// آمار تاییدشده‌های یک ماه (بر اساس تاریخ برگزاری) برای هر شهرستان
+// آمار تاییدشده‌های دوره گزارش یک ماه (۲۱ ماه قبل تا ۲۰ همان ماه، بر اساس تاریخ برگزاری) برای هر شهرستان
 function monthStats_(reports, cities, jy, jm) {
   var by = {};
   cities.forEach(function (c) { by[num_(c.city_id)] = { name: c.name, count: 0, people: 0 }; });
   var total = 0, people = 0;
   reports.forEach(function (r) {
-    if (r.status !== 'approved' || num_(r.event_year) !== jy || num_(r.event_month) !== jm) return;
+    if (r.status !== 'approved' || !inPeriod_(r, jy, jm)) return;
     var b = by[num_(r.city_id)];
     if (!b) return;
     b.count++; b.people += num_(r.participants);
@@ -75,18 +76,18 @@ function handleAdminCommand_(msg) {
   showAdminPanel_(chatId, tg, 0);
 }
 function adminPanelText_() {
-  var t = todayJalali_(), reports = readTable_('Reports'), pending = 0, month = 0;
+  var t = currentPeriod_(), reports = readTable_('Reports'), pending = 0, month = 0;
   reports.forEach(function (r) {
     if (r.status === 'pending') pending++;
-    if (r.status === 'approved' && num_(r.event_year) === t.jy && num_(r.event_month) === t.jm) month++;
+    if (r.status === 'approved' && inPeriod_(r, t.jy, t.jm)) month++;
   });
   return '🛠 پنل مدیریت بات نسرا\n' +
     '• گزارش‌های در انتظار بررسی: ' + pending + '\n' +
-    '• گزارش‌های تاییدشده ' + JALALI_MONTHS[t.jm - 1] + ' ' + t.jy + ': ' + month + '\n\n' +
+    '• تاییدشده‌های گزارش ' + periodName_(t.jy, t.jm) + ' (' + periodRangeText_(t.jy, t.jm) + '): ' + month + '\n\n' +
     'یک بخش را انتخاب کنید:';
 }
 function adminPanelKb_(tg) {
-  var t = todayJalali_();
+  var t = currentPeriod_();
   var rows = [
     [btn_('⏳ در انتظار بررسی', 'A:p'), btn_('📢 منتشرشده‌ها', 'A:rl')],
     [btn_('🔎 گزارش با شماره', 'A:rf'), btn_('📊 آمار ماهانه', 'A:s:' + t.jy + ':' + t.jm)],
@@ -165,11 +166,7 @@ function handleAdminCb_(cb, s, data) {
 
   // آمار + فایل اکسل ماه
   if (p === 's') { tgAnswerCb_(cb.id); showMonthStats_(chatId, num_(a), num_(b), mid); return; }
-  if (p === 'sx') {
-    tgAnswerCb_(cb.id, 'در حال ساخت فایل…');
-    if (!sendMonthExcel_(chatId, num_(a), num_(b))) tgSend_(chatId, '⚠️ ارسال فایل ناموفق بود؛ چند دقیقه دیگر دوباره امتحان کنید.');
-    return;
-  }
+  if (/^(sx|xm|xs|xc|xg|xa|xf)$/.test(p)) { handleExcelCb_(cb, parts, chatId, mid); return; }
 
   // فاز ۳: پیام همگانی و بکاپ/خودکارها (فقط سوپرادمین)
   if (/^(b|ba|bm|bc|bC|bs|k|kb|kr|kt)$/.test(p)) {
@@ -193,6 +190,14 @@ function handleAdminCb_(cb, s, data) {
     return;
   }
   if (p === 'us') { setUserCity_(cb, chatId, num_(a), num_(b), mid); return; }
+  if (p === 'uq') {
+    tgAnswerCb_(cb.id);
+    var prow = POSITIONS.map(function (x, i) { return [btn_(x, 'A:uQ:' + a + ':' + i)]; });
+    prow.push([btn_('🚫 بدون نقش', 'A:uQ:' + a + ':x')], [btn_('↩️ بازگشت', 'A:uc:' + a)]);
+    panelOut_(chatId, mid, '🎖 نقش این همکار در شهرستان را انتخاب کنید:\n(خواهر/برادر بودن گزارش‌هایش در فایل اکسل از همین نقش تعیین می‌شود؛ گزارش‌های قبلی‌اش با همان نقشی که موقع ارسال داشت می‌مانند)', ikb_(prow));
+    return;
+  }
+  if (p === 'uQ') { setUserPosition_(cb, chatId, num_(a), b, mid); return; }
 
   // مدرسان
   if (p === 't') {
@@ -510,8 +515,11 @@ function deletePublishedReport_(rid, adminTg) {
 function monthStatsText_(reports, jy, jm) {
   var st = monthStats_(reports, getCities_(), jy, jm);
   var pending = reports.filter(function (r) { return r.status === 'pending'; }).length;
-  var lines = ['📊 گزارش‌های تاییدشده — ' + JALALI_MONTHS[jm - 1] + ' ' + jy + ' (بر اساس تاریخ برگزاری)',
-    'جمع: ' + st.total + ' گزارش — ' + st.people + ' نفر شرکت‌کننده', ''];
+  var sides = sideCounts_(reports, positionsByTg_(readTable_('Users')), jy, jm, 0);
+  var lines = ['📊 گزارش ' + periodName_(jy, jm) + ' — تاییدشده‌ها',
+    '🗓 برنامه‌های ' + periodRangeText_(jy, jm) + ' (بر اساس تاریخ برگزاری)',
+    'جمع: ' + st.total + ' گزارش — ' + st.people + ' نفر شرکت‌کننده',
+    'خواهران: ' + sides.s + ' — برادران: ' + sides.b + ' — فضای مجازی: ' + sides.v + (sides.none ? ' — بدون نقش: ' + sides.none : ''), ''];
   st.rows.forEach(function (r, i) {
     lines.push((i === 0 ? '🏆 ' : (i + 1) + ') ') + r.name + ': ' + r.count + ' گزارش (' + r.people + ' نفر)');
   });
@@ -520,12 +528,12 @@ function monthStatsText_(reports, jy, jm) {
   return lines.join('\n');
 }
 function showMonthStats_(chatId, jy, jm, mid) {
-  var t = todayJalali_();
+  var t = currentPeriod_();
   if (!jy || jm < 1 || jm > 12) { jy = t.jy; jm = t.jm; }
   var text = monthStatsText_(readTable_('Reports'), jy, jm);
   var pv = prevJalaliMonth_(jy, jm), nx = nextJalaliMonth_(jy, jm), nav = [btn_('⬅️ ' + JALALI_MONTHS[pv.jm - 1], 'A:s:' + pv.jy + ':' + pv.jm)];
   if (nx.jy < t.jy || (nx.jy === t.jy && nx.jm <= t.jm)) nav.push(btn_(JALALI_MONTHS[nx.jm - 1] + ' ➡️', 'A:s:' + nx.jy + ':' + nx.jm));
-  panelOut_(chatId, mid, text, ikb_([nav, [btn_('📥 فایل اکسل همین ماه', 'A:sx:' + jy + ':' + jm)], homeRow_()]));
+  panelOut_(chatId, mid, text, ikb_([nav, [btn_('📥 فایل اکسل', 'A:xm:0')], homeRow_()]));
 }
 
 // ---------- کاربران ----------
@@ -546,6 +554,7 @@ function showUserCard_(chatId, uid, mid) {
   function cnt(st) { return mine.filter(function (r) { return r.status === st; }).length; }
   var text = '👤 ' + (u.full_name || 'بدون نام') +
     '\nشهرستان: ' + (cty ? cty.name : '— (تعیین نشده)') +
+    '\nنقش: ' + (positionOf_(u.position) || '— تعیین نشده') +
     '\nشماره: ' + (u.phone || '—') +
     '\nآیدی تلگرام: ' + u.telegram_id +
     '\nوضعیت: ' + (USER_STATUS_FA[u.status] || u.status) +
@@ -555,7 +564,7 @@ function showUserCard_(chatId, uid, mid) {
   var rows = [];
   if (u.status === 'approved') rows.push([btn_('⛔️ غیرفعال‌کردن', 'A:ut:' + uid)]);
   else rows.push([btn_(u.status === 'disabled' ? '✅ فعال‌سازی دوباره' : '✅ تایید و فعال‌سازی', 'A:ut:' + uid)]);
-  rows.push([btn_('🏙 تغییر شهرستان', 'A:uy:' + uid + ':0')]);
+  rows.push([btn_('🏙 تغییر شهرستان', 'A:uy:' + uid + ':0'), btn_('🎖 تعیین نقش', 'A:uq:' + uid)]);
   rows.push([btn_('🔎 جستجوی دیگر', 'A:u'), btn_('🏠 پنل اصلی', 'A:m')]);
   panelOut_(chatId, mid, text, ikb_(rows));
 }
@@ -582,6 +591,13 @@ function setUserCity_(cb, chatId, uid, cityId, mid) {
   if (us.state) clearSession_(num_(u.telegram_id), num_(u.telegram_id)); // فرم نیمه‌کاره با شهرستان قبلی ادامه پیدا نکند
   if (u.status === 'approved') tgSend_(u.telegram_id, 'ℹ️ شهرستان حساب شما توسط ادمین به «' + cty.name + '» تغییر کرد.', mainMenuKb_());
   tgAnswerCb_(cb.id, 'شهرستان به ' + cty.name + ' تغییر کرد.');
+  showUserCard_(chatId, uid, mid);
+}
+function setUserPosition_(cb, chatId, uid, code, mid) {
+  var u = getUserById_(uid), pos = code === 'x' ? '' : (/^\d$/.test(String(code)) ? POSITIONS[num_(code)] : null);
+  if (!u || pos === null || pos === undefined) { tgAnswerCb_(cb.id, 'کاربر یا نقش پیدا نشد.', true); return; }
+  updateUser_(uid, u.telegram_id, { position: pos });
+  tgAnswerCb_(cb.id, pos ? 'نقش: ' + pos : 'نقش برداشته شد');
   showUserCard_(chatId, uid, mid);
 }
 // کیبورد شهرستان‌ها برای پنل: pickPrefix + city_id (+ پسوند اختیاری)، navPrefix + page
@@ -790,7 +806,7 @@ function showAutomation_(chatId, mid) {
     '• کارهای روزانه (ساعت ' + AUTO.DAILY_HOUR + ' صبح): ' + (trg.daily ? 'فعال ✅' : 'غیرفعال ❌ — در ویرایشگر installPhase3 را Run کنید') + '\n' +
     '• یادآوری به شهرستان‌های بدون گزارش: ' + (remOn ? 'روشن ✅ — روزهای ' + parseDaysList_(autoSetting_('reminder_days')).join(' و ') + ' هر ماه' : 'خاموش ⏸') + '\n' +
     '• هشدار گزارش معطل در گروه بررسی: ' + (hours ? 'بعد از ' + hours + ' ساعت ✅' : 'خاموش ⏸') + '\n' +
-    '• خلاصه و فایل اکسل ماه قبل: روز اول هر ماه برای سوپرادمین' +
+    '• خلاصه و فایل اکسل هر دوره: روز ' + (PERIOD_END_DAY + 1) + ' هر ماه (پایان دوره ۲۱ تا ۲۰) برای سوپرادمین' +
     (job ? '\n• ⏳ پیام همگانی در حال ارسال: ' + job.pos + ' از ' + job.ids.length : '') +
     '\n\n(روزها و ساعت‌ها را می‌توانید در برگه Settings عوض کنید: reminder_days ، pending_alert_hours ، backup_keep)';
   panelOut_(chatId, mid, text, ikb_([
@@ -799,4 +815,71 @@ function showAutomation_(chatId, mid) {
     [btn_(remOn ? '⏸ خاموش‌کردن یادآوری ماهانه' : '▶️ روشن‌کردن یادآوری ماهانه', 'A:kt')],
     homeRow_()
   ]));
+}
+
+// ---------- فایل اکسل: انتخاب ماه ← یک شهرستان / همه شهرستان‌ها ← (برای یک شهرستان) خواهر / برادر / تجمیعی ----------
+function validPeriodArgs_(y, m) { y = num_(y); m = num_(m); return (y >= 1300 && y <= 1500 && m >= 1 && m <= 12) ? { jy: y, jm: m } : null; }
+function excelMonthPickerKb_(page) {
+  var cur = currentPeriod_(), y = cur.jy, m = cur.jm, i, pv, rows = [], row = [];
+  page = Math.max(0, Math.min(num_(page), 5));
+  for (i = 0; i < page * 12; i++) { pv = prevJalaliMonth_(y, m); y = pv.jy; m = pv.jm; }
+  for (i = 0; i < 12; i++) {
+    row.push(btn_(periodName_(y, m), 'A:xs:' + y + ':' + m));
+    if (row.length === 3) { rows.push(row); row = []; }
+    pv = prevJalaliMonth_(y, m); y = pv.jy; m = pv.jm;
+  }
+  var nav = [];
+  if (page < 5) nav.push(btn_('⬅️ ماه‌های قدیمی‌تر', 'A:xm:' + (page + 1)));
+  if (page > 0) nav.push(btn_('ماه‌های جدیدتر ➡️', 'A:xm:' + (page - 1)));
+  if (nav.length) rows.push(nav);
+  rows.push([btn_('📊 آمار ماهانه', 'A:s:' + cur.jy + ':' + cur.jm), btn_('🏠 پنل اصلی', 'A:m')]);
+  return ikb_(rows);
+}
+function handleExcelCb_(cb, parts, chatId, mid) {
+  var p = parts[1];
+  if (p === 'xm') {
+    tgAnswerCb_(cb.id);
+    var cur = currentPeriod_();
+    panelOut_(chatId, mid, '📥 فایل اکسل\nگزارش کدام ماه؟\n(گزارش هر ماه = برنامه‌هایی که تاریخ برگزاری‌شان از ۲۱ ماه قبل تا ۲۰ همان ماه است؛ دوره فعلی: ' +
+      periodName_(cur.jy, cur.jm) + ' — ' + periodRangeText_(cur.jy, cur.jm) + ')', excelMonthPickerKb_(parts[2]));
+    return;
+  }
+  var per = validPeriodArgs_(parts[2], parts[3]);
+  if (!per) { tgAnswerCb_(cb.id, 'ماه نامعتبر است.', true); return; }
+  var y = per.jy, m = per.jm, ym = y + ':' + m, title = 'گزارش ' + periodName_(y, m), range = '🗓 برنامه‌های ' + periodRangeText_(y, m);
+  if (p === 'xs' || p === 'sx') { // sx: دکمه قدیمی «فایل اکسل همین ماه»
+    tgAnswerCb_(cb.id);
+    var n = excelPick_(readTable_('Reports'), null, y, m, 0, 'a').length;
+    panelOut_(chatId, mid, '📥 فایل اکسل — ' + title + '\n' + range + '\nتاییدشده‌ها در همه شهرستان‌ها: ' + n + ' گزارش\n\nفایل برای کدام شهرستان؟',
+      ikb_([[btn_('🏙 یک شهرستان', 'A:xc:' + ym + ':0'), btn_('🗂 همه شهرستان‌ها', 'A:xa:' + ym)],
+        [btn_('↩️ انتخاب ماه دیگر', 'A:xm:0'), btn_('🏠 پنل اصلی', 'A:m')]]));
+    return;
+  }
+  if (p === 'xc') {
+    tgAnswerCb_(cb.id);
+    var counts = {};
+    excelPick_(readTable_('Reports'), null, y, m, 0, 'a').forEach(function (r) { counts[num_(r.city_id)] = (counts[num_(r.city_id)] || 0) + 1; });
+    panelOut_(chatId, mid, '🏙 ' + title + ' — کدام شهرستان؟\n(عدد داخل پرانتز = گزارش‌های تاییدشده این دوره)',
+      adminCitiesKb_('A:xg:' + ym + ':', 'A:xc:' + ym + ':', num_(parts[4]), [[btn_('↩️ بازگشت', 'A:xs:' + ym)]], null, counts));
+    return;
+  }
+  if (p === 'xg') {
+    var cty = getCityById_(num_(parts[4]));
+    if (!cty) { tgAnswerCb_(cb.id, 'شهرستان پیدا نشد.', true); return; }
+    tgAnswerCb_(cb.id);
+    var sc = sideCounts_(readTable_('Reports'), positionsByTg_(readTable_('Users')), y, m, cty.city_id), cym = ym + ':' + cty.city_id;
+    var other = sc.v || sc.none ? '\n   (شامل ' + (sc.v ? sc.v + ' گزارش مسئول فضای مجازی' : '') + (sc.v && sc.none ? ' و ' : '') + (sc.none ? sc.none + ' گزارش همکار بدون نقش' : '') + ')' : '';
+    panelOut_(chatId, mid, '🏙 ' + cty.name + ' — ' + title + '\n' + range + '\n\n• خواهران: ' + sc.s + ' گزارش\n• برادران: ' + sc.b + ' گزارش\n• تجمیعی (همه): ' + sc.all + ' گزارش' + other + '\n\nکدام فایل؟',
+      ikb_([[btn_('خواهر', 'A:xf:' + cym + ':s'), btn_('برادر', 'A:xf:' + cym + ':b'), btn_('تجمیعی', 'A:xf:' + cym + ':a')],
+        [btn_('↩️ شهرستان دیگر', 'A:xc:' + ym + ':0'), btn_('🏠 پنل اصلی', 'A:m')]]));
+    return;
+  }
+  if (p === 'xa' || p === 'xf') {
+    var cid = p === 'xf' ? num_(parts[4]) : 0;
+    if (p === 'xf' && !getCityById_(cid)) { tgAnswerCb_(cb.id, 'شهرستان پیدا نشد.', true); return; }
+    tgAnswerCb_(cb.id, 'در حال ساخت فایل…');
+    if (!sendExcel_(chatId, y, m, cid, p === 'xf' ? parts[5] : 'a')) tgSend_(chatId, '⚠️ ارسال فایل ناموفق بود؛ چند دقیقه دیگر دوباره امتحان کنید.');
+    return;
+  }
+  tgAnswerCb_(cb.id);
 }

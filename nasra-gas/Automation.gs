@@ -1,10 +1,11 @@
 // Automation.gs — فاز ۳: بکاپ شبانه خودکار، کارهای روزانه (یادآوری ماهانه، هشدار گزارش معطل، خلاصه ماه)،
 // صف پیام همگانی، و خروجی اکسل واقعی (.xlsx) ماهانه.
+// فاز ۴: دوره گزارش ماهانه ۲۱ تا ۲۰، خواهر/برادر از روی نقش، اکسل پنج‌برگه‌ای مثل فایل نمونه (نصب: installPhase4).
 // نصب یک‌باره: در ویرایشگر تابع installPhase3 را Run کنید (اجازه دسترسی به Google Drive برای بکاپ لازم است).
 // تنظیمات قابل تغییر در برگه Settings (اگر نباشند، مقدار پیش‌فرض استفاده می‌شود):
 //   backup_keep = 14            تعداد بکاپ‌هایی که نگه داشته می‌شود (قدیمی‌ترها به سطل زباله Drive می‌روند)
 //   reminder_enabled = 1        یادآوری ماهانه روشن (0 = خاموش)
-//   reminder_days = 20,27       روزهای ماه شمسی که یادآوری به شهرستان‌های بدون گزارش فرستاده می‌شود
+//   reminder_days = 15,18       روزهای ماه شمسی که یادآوری به شهرستان‌های بدون گزارش فرستاده می‌شود (دوره هر ماه روز ۲۰ تمام می‌شود)
 //   pending_alert_hours = 24    گزارشی که بیش از این ساعت در انتظار بماند، در گروه بررسی یادآوری می‌شود (0 = خاموش)
 
 var AUTO = {
@@ -16,7 +17,7 @@ var AUTO = {
   BC_MAX_CHARS: 2500,
   BC_HANDLER: 'processBroadcastQueue',
   RUN_BUDGET_MS: 270000, // ۴.۵ دقیقه (سقف هر اجرا ۶ دقیقه)
-  DEFAULTS: { backup_keep: '14', reminder_enabled: '1', reminder_days: '20,27', pending_alert_hours: '24' }
+  DEFAULTS: { backup_keep: '14', reminder_enabled: '1', reminder_days: '15,18', pending_alert_hours: '24' }
 };
 function autoSetting_(key) { var v = getSetting_(key); return v === null ? AUTO.DEFAULTS[key] : v; }
 
@@ -29,11 +30,11 @@ function parseDaysList_(s) {
   });
   return out.sort(function (a, b) { return a - b; });
 }
-// شهرستان‌هایی که در ماه (بر اساس تاریخ برگزاری) هیچ گزارش «در انتظار» یا «تاییدشده» ندارند + کارمندان فعالشان
+// شهرستان‌هایی که در دوره گزارش (۲۱ ماه قبل تا ۲۰ این ماه، بر اساس تاریخ برگزاری) هیچ گزارش «در انتظار» یا «تاییدشده» ندارند + کارمندان فعالشان
 function reminderTargets_(reports, users, cities, jy, jm) {
   var has = {};
   reports.forEach(function (r) {
-    if ((r.status === 'approved' || r.status === 'pending') && num_(r.event_year) === jy && num_(r.event_month) === jm) has[num_(r.city_id)] = 1;
+    if ((r.status === 'approved' || r.status === 'pending') && inPeriod_(r, jy, jm)) has[num_(r.city_id)] = 1;
   });
   var out = [], total = 0;
   cities.forEach(function (c) {
@@ -62,101 +63,188 @@ function broadcastRecipients_(users, admins, aud, cityId) {
   });
   return ids;
 }
+// ---------- دوره گزارش ماهانه — قانون کلی: «گزارش آبان» = برنامه‌هایی که تاریخ برگزاری‌شان ۲۱ مهر تا ۲۰ آبان است ----------
+// (روز ۲۰ هر ماه آخرین روز همان ماه است و از روز ۲۱، برنامه‌ها جزو گزارش ماه بعد حساب می‌شوند؛ مثل فایل نمونه شهریور که از 1405/05/21 شروع می‌شود)
+var PERIOD_END_DAY = 20;
+function reportPeriodOf_(jy, jm, jd) { // تاریخ برگزاری ← گزارش کدام ماه
+  jy = num_(jy); jm = num_(jm); jd = num_(jd);
+  if (!jy || jm < 1 || jm > 12 || !jd) return null;
+  return jd > PERIOD_END_DAY ? nextJalaliMonth_(jy, jm) : { jy: jy, jm: jm };
+}
+function reportPeriodOfRow_(r) {
+  var y = num_(r.event_year), m = num_(r.event_month), d = num_(r.event_day);
+  if (!(y && m && d)) {
+    var p = parseJalaliInput_(String(cellToStr_(r.event_jalali) || ''));
+    if (p) { y = p.jy; m = p.jm; d = p.jd; }
+  }
+  return reportPeriodOf_(y, m, d);
+}
+function inPeriod_(r, jy, jm) { var p = reportPeriodOfRow_(r); return !!p && p.jy === num_(jy) && p.jm === num_(jm); }
+function periodRange_(jy, jm) {
+  var pv = prevJalaliMonth_(jy, jm);
+  return { from: formatJalali_(pv.jy, pv.jm, PERIOD_END_DAY + 1), to: formatJalali_(jy, jm, PERIOD_END_DAY) };
+}
+function periodName_(jy, jm) { return JALALI_MONTHS[jm - 1] + ' ' + jy; }
+function periodRangeText_(jy, jm) { var r = periodRange_(jy, jm); return 'از ' + r.from + ' تا ' + r.to; }
+function currentPeriod_() { var t = todayJalali_(); return reportPeriodOf_(t.jy, t.jm, t.jd); }
+
+// ---------- خواهر / برادر از روی نقش فرستنده ----------
+function positionsByTg_(users) {
+  var m = {};
+  users.forEach(function (u) { m[num_(u.telegram_id)] = u.position || ''; });
+  return m;
+}
+// نقشِ ثبت‌شده در خود گزارش (لحظه ارسال)؛ برای گزارش‌های قدیمی‌تر، نقش فعلی فرستنده
+function reportSide_(r, posByTg) {
+  return positionSide_(positionOf_(r.submitter_position) || (posByTg ? posByTg[num_(r.submitter_telegram_id)] : ''));
+}
+// تاییدشده‌های یک دوره — cityId=0 یعنی همه شهرستان‌ها؛ side: 'a' تجمیعی (همه)، 's' فقط خواهران، 'b' فقط برادران
+function excelPick_(reports, posByTg, jy, jm, cityId, side) {
+  return reports.filter(function (r) {
+    if (r.status !== 'approved' || !inPeriod_(r, jy, jm)) return false;
+    if (num_(cityId) && num_(r.city_id) !== num_(cityId)) return false;
+    return (side === 's' || side === 'b') ? reportSide_(r, posByTg) === side : true;
+  });
+}
+function sideCounts_(reports, posByTg, jy, jm, cityId) {
+  var c = { s: 0, b: 0, v: 0, none: 0, all: 0 };
+  excelPick_(reports, posByTg, jy, jm, cityId, 'a').forEach(function (r) {
+    var sd = reportSide_(r, posByTg);
+    c[sd || 'none']++; c.all++;
+  });
+  return c;
+}
+
 // ---------- خروجی اکسل واقعی (.xlsx) — بدون کتابخانه؛ فایل‌های XML با Utilities.zip بسته می‌شوند ----------
-// CSV در ویندوزِ فارسی/ایرانی همه ستون‌ها را در یک سلول می‌ریزد (جداکننده فهرست آن‌جا «,» نیست)؛ xlsx همه‌جا درست باز می‌شود.
-var XLSX_HEADER = ['تاریخ برگزاری', 'ناحیه برگزار کننده', 'موضوع', 'نام سخنران یا مدرس',
-  'مدت زمان کلاس (دقیقه)', 'تعداد نفرات', 'مکان برگزاری', 'لینک منتشرشده در کانال'];
-var XLSX_WIDTHS = [14, 18, 40, 24, 12, 11, 34, 38];
+// CSV در ویندوزِ فارسی همه ستون‌ها را در یک سلول می‌ریزد؛ xlsx همه‌جا درست باز می‌شود.
+// پنج برگه دقیقاً مثل فایل نمونه؛ هر گزارش بر اساس هشتگ «نوع کلاس/برنامه» در برگه خودش می‌رود.
+// هر ستون: [عنوان، عرض، فیلد]. فیلد خالی = این اطلاعات در فرم بات پرسیده نمی‌شود و ستون برای پرکردن دستی خالی می‌ماند.
+var XL_SHEETS = [
+  { type: 'حضوری', name: 'سوادرسانه حضوری', cols: [['ردیف', 7, 'n'], ['تاریخ', 13, 'date'], ['نام ناحیه', 18, 'city'],
+    ['موضوع', 34, 'subject'], ['نام سخنران / مدرس', 22, 'teacher'], ['مدت (دقیقه)', 12, 'dur'], ['تعداد نفرات', 12, 'ppl'],
+    ['مکان برگزاری', 30, 'place'], ['لینک مستندات', 34, 'link']] },
+  { type: 'مجازی', name: 'سوادرسانه مجازی (لایو)', cols: [['ردیف', 7, 'n'], ['تاریخ', 13, 'date'], ['نام ناحیه', 18, 'city'],
+    ['موضوع', 34, 'subject'], ['نام سخنران / مدرس', 22, 'teacher'], ['مدت (دقیقه)', 12, 'dur'], ['تعداد نفرات', 12, 'ppl'],
+    ['بستر برگزاری', 30, 'place'], ['لینک مستندات', 34, 'link']] },
+  { type: 'توانمندسازی', name: 'توانمندسازی گردان', cols: [['ردیف', 7, 'n'], ['تاریخ', 13, 'date'], ['برگزار کننده', 18, 'city'],
+    ['موضوع', 34, 'subject'], ['نام سخنران / مدرس', 22, 'teacher'], ['مدت (دقیقه)', 12, 'dur'], ['تعداد نفرات', 12, 'ppl'],
+    ['مکان برگزاری', 30, 'place'], ['لینک مستندات', 34, 'link'], ['نوع کلاس', 16, '']] },
+  { type: 'خلاقانه', name: 'سواد رسانه خلاقانه', cols: [['ردیف', 7, 'n'], ['تاریخ', 13, 'date'], ['ناحیه برگزار کننده', 18, 'city'],
+    ['موضوع', 34, 'subject'], ['تعداد نفرات / تعداد بازدید', 18, 'ppl'], ['بستر برگزاری', 30, 'place'], ['لینک مستندات', 34, 'link']] },
+  { type: 'تولیدات', name: 'تولیدات', cols: [['ردیف', 7, 'n'], ['تاریخ محتوای تولید شده', 16, 'date'], ['تولید کننده', 18, 'city'],
+    ['موضوع', 34, 'subject'], ['نام تولید کننده محتوا', 22, 'teacher'], ['نوع تولید محتوا', 16, ''], ['تعداد صفحات', 12, ''],
+    ['لینک مستندات', 34, 'link']] }
+];
+var EXCEL_SIDE_FA = { a: 'تجمیعی', s: 'خواهران', b: 'برادران' };
 function xmlEsc_(v) {
   return String(v === null || v === undefined ? '' : v)
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
-function colLetter_(i) { return String.fromCharCode(65 + i); } // ستون‌های A تا H
+function colLetter_(i) { return String.fromCharCode(65 + i); } // ستون‌های A تا J
 // لینک پست کانال: کانال عمومی ← t.me/نام‌کاربری/شماره ، کانال خصوصی ← t.me/c/شناسه/شماره (فقط برای اعضای کانال باز می‌شود)
 function channelPostLink_(channelId, username, msgId) {
   if (!channelId || !msgId) return '';
   if (username) return 'https://t.me/' + String(username).replace(/^@/, '') + '/' + msgId;
   return 'https://t.me/c/' + String(channelId).replace(/^-100/, '') + '/' + msgId;
 }
-// ردیف‌های اکسل یک ماه: فقط تاییدشده‌ها، به ترتیب روز برگزاری و بعد شهرستان
-function monthExcelRows_(reports, cities, jy, jm, channelId, username) {
+// گزارش‌ها ← پنج برگه (به ترتیب تاریخ برگزاری، بعد شهرستان، بعد شماره گزارش)
+function excelSheets_(list, cities, channelId, username) {
   var cname = {};
   cities.forEach(function (c) { cname[num_(c.city_id)] = c.name; });
-  return reports.filter(function (r) {
-    return r.status === 'approved' && num_(r.event_year) === jy && num_(r.event_month) === jm;
-  }).sort(function (a, b) {
-    return num_(a.event_day) - num_(b.event_day) ||
+  function dateOf(r) {
+    var p = parseJalaliInput_(String(cellToStr_(r.event_jalali) || ''));
+    if (!p && num_(r.event_year)) p = { jy: num_(r.event_year), jm: num_(r.event_month), jd: num_(r.event_day) };
+    return p ? formatJalali_(p.jy, p.jm, p.jd) : String(cellToStr_(r.event_jalali) || '');
+  }
+  var sorted = list.slice().sort(function (a, b) {
+    return (dateOf(a) < dateOf(b) ? -1 : dateOf(a) > dateOf(b) ? 1 : 0) ||
       String(cname[num_(a.city_id)] || '').localeCompare(String(cname[num_(b.city_id)] || ''), 'fa') ||
       num_(a.report_id) - num_(b.report_id);
-  }).map(function (r) {
-    var ids = safeJsonArr_(cellToStr_(r.channel_message_ids));
-    return [String(cellToStr_(r.event_jalali)), cname[num_(r.city_id)] || '', String(r.subject || ''),
-      String(r.instructor_name || ''), num_(r.duration_min), num_(r.participants),
-      String(r.place || '').replace(/\s*[\r\n]+\s*/g, ' - '), channelPostLink_(channelId, username, ids[0])];
+  });
+  return XL_SHEETS.map(function (def) {
+    var rows = sorted.filter(function (r) { return String(r.class_type || '').replace(/^#/, '') === def.type; }).map(function (r, i) {
+      var ids = safeJsonArr_(cellToStr_(r.channel_message_ids));
+      var x = {
+        n: i + 1, date: dateOf(r), city: cname[num_(r.city_id)] || '', subject: String(r.subject || ''),
+        teacher: String(r.instructor_name || ''), dur: num_(r.duration_min) || '', ppl: num_(r.participants) || '',
+        place: String(r.place || '').replace(/\s*[\r\n]+\s*/g, ' - '), link: channelPostLink_(channelId, username, ids[0])
+      };
+      return def.cols.map(function (c) { return c[2] ? x[c[2]] : ''; });
+    });
+    return { type: def.type, name: def.name, cols: def.cols, rows: rows };
   });
 }
-// همه فایل‌های داخل بسته xlsx (کمینه و استاندارد): یک برگه راست‌به‌چپ، سطر عنوان پررنگ و ثابت، لینک قابل کلیک
-function xlsxParts_(sheetName, header, rows, widths) {
+// همه فایل‌های داخل بسته xlsx: چند برگه راست‌به‌چپ، سطر عنوان ثابت، ظاهر مثل فایل نمونه (قلم B Titr، عنوان طلایی، کادر نازک)، لینک قابل کلیک
+function xlsxBook_(sheets) {
   var NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
   var RNS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
   var PR = 'http://schemas.openxmlformats.org/package/2006/relationships';
+  var CT = 'application/vnd.openxmlformats-officedocument.spreadsheetml.';
   var head = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
-  var links = [], sd = [];
   function strCell(ref, v, style) {
-    return '<c r="' + ref + '" t="inlineStr"' + (style ? ' s="' + style + '"' : '') + '><is><t xml:space="preserve">' + xmlEsc_(v) + '</t></is></c>';
+    return '<c r="' + ref + '" s="' + style + '" t="inlineStr"><is><t xml:space="preserve">' + xmlEsc_(v) + '</t></is></c>';
   }
-  sd.push('<row r="1">' + header.map(function (h, i) { return strCell(colLetter_(i) + '1', h, 1); }).join('') + '</row>');
-  rows.forEach(function (row, ri) {
-    var rn = ri + 2;
-    sd.push('<row r="' + rn + '">' + row.map(function (v, ci) {
-      var ref = colLetter_(ci) + rn;
-      if (typeof v === 'number') return '<c r="' + ref + '"><v>' + v + '</v></c>';
-      if (/^https?:\/\//.test(v)) { links.push({ ref: ref, url: v }); return strCell(ref, v, 2); }
-      return strCell(ref, v, 0);
-    }).join('') + '</row>');
+  var parts = [], overrides = [], wbSheets = [], wbRels = [], used = {};
+  sheets.forEach(function (sh, si) {
+    var n = si + 1, links = [], sd = [];
+    sd.push('<row r="1" ht="28.5" customHeight="1">' + sh.cols.map(function (c, i) { return strCell(colLetter_(i) + '1', c[0], 1); }).join('') + '</row>');
+    sh.rows.forEach(function (row, ri) {
+      var rn = ri + 2;
+      sd.push('<row r="' + rn + '">' + row.map(function (v, ci) {
+        var ref = colLetter_(ci) + rn;
+        if (v === '' || v === null || v === undefined) return '<c r="' + ref + '" s="2"/>';
+        if (typeof v === 'number') return '<c r="' + ref + '" s="2"><v>' + v + '</v></c>';
+        if (/^https?:\/\//.test(v)) { links.push({ ref: ref, url: v }); return strCell(ref, v, 3); }
+        return strCell(ref, v, 2);
+      }).join('') + '</row>');
+    });
+    var cols = '<cols>' + sh.cols.map(function (c, i) { return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + c[1] + '" customWidth="1"/>'; }).join('') + '</cols>';
+    parts.push({ name: 'xl/worksheets/sheet' + n + '.xml', content: head + '<worksheet xmlns="' + NS + '" xmlns:r="' + RNS + '">' +
+      '<sheetViews><sheetView rightToLeft="1"' + (n === 1 ? ' tabSelected="1"' : '') + ' workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' +
+      '<sheetFormatPr defaultRowHeight="20.25"/>' + cols + '<sheetData>' + sd.join('') + '</sheetData>' +
+      (links.length ? '<hyperlinks>' + links.map(function (l, i) { return '<hyperlink ref="' + l.ref + '" r:id="rId' + (i + 1) + '"/>'; }).join('') + '</hyperlinks>' : '') +
+      '</worksheet>' });
+    parts.push({ name: 'xl/worksheets/_rels/sheet' + n + '.xml.rels', content: head + '<Relationships xmlns="' + PR + '">' + links.map(function (l, i) {
+      return '<Relationship Id="rId' + (i + 1) + '" Type="' + RNS + '/hyperlink" Target="' + xmlEsc_(l.url) + '" TargetMode="External"/>';
+    }).join('') + '</Relationships>' });
+    overrides.push('<Override PartName="/xl/worksheets/sheet' + n + '.xml" ContentType="' + CT + 'worksheet+xml"/>');
+    var nm = String(sh.name || ('برگه ' + n)).replace(/[\[\]:*?\/\\]/g, ' ').trim().slice(0, 31);
+    while (used[nm]) nm = nm.slice(0, 28) + ' ' + n; // نام برگه‌ها باید یکتا باشد
+    used[nm] = 1;
+    wbSheets.push('<sheet name="' + xmlEsc_(nm) + '" sheetId="' + n + '" r:id="rId' + n + '"/>');
+    wbRels.push('<Relationship Id="rId' + n + '" Type="' + RNS + '/worksheet" Target="worksheets/sheet' + n + '.xml"/>');
   });
-  var cols = '<cols>' + (widths || []).map(function (w, i) {
-    return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>';
-  }).join('') + '</cols>';
-  var sheet = head + '<worksheet xmlns="' + NS + '" xmlns:r="' + RNS + '">' +
-    '<sheetViews><sheetView rightToLeft="1" workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' +
-    '<sheetFormatPr defaultRowHeight="15"/>' + ((widths && widths.length) ? cols : '') +
-    '<sheetData>' + sd.join('') + '</sheetData>' +
-    (links.length ? '<hyperlinks>' + links.map(function (l, i) { return '<hyperlink ref="' + l.ref + '" r:id="rId' + (i + 1) + '"/>'; }).join('') + '</hyperlinks>' : '') +
-    '</worksheet>';
-  var sheetRels = head + '<Relationships xmlns="' + PR + '">' + links.map(function (l, i) {
-    return '<Relationship Id="rId' + (i + 1) + '" Type="' + RNS + '/hyperlink" Target="' + xmlEsc_(l.url) + '" TargetMode="External"/>';
-  }).join('') + '</Relationships>';
+  var border = '<border><left style="thin"><color auto="1"/></left><right style="thin"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="thin"><color auto="1"/></bottom><diagonal/></border>';
   var styles = head + '<styleSheet xmlns="' + NS + '">' +
-    '<fonts count="3"><font><sz val="11"/><name val="Tahoma"/></font><font><b/><sz val="11"/><name val="Tahoma"/></font>' +
-    '<font><u/><sz val="11"/><color rgb="FF0563C1"/><name val="Tahoma"/></font></fonts>' +
-    '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>' +
-    '<fill><patternFill patternType="solid"><fgColor rgb="FFDDEBF7"/><bgColor indexed="64"/></patternFill></fill></fills>' +
-    '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+    '<fonts count="4"><font><sz val="11"/><name val="Calibri"/><family val="2"/></font>' +
+    '<font><sz val="14"/><name val="B Titr"/><charset val="178"/></font>' +
+    '<font><sz val="10"/><name val="B Titr"/><charset val="178"/></font>' +
+    '<font><u/><sz val="11"/><color rgb="FF0563C1"/><name val="Calibri"/><family val="2"/></font></fonts>' +
+    '<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>' +
+    '<fill><patternFill patternType="solid"><fgColor rgb="FFFFD966"/><bgColor indexed="64"/></patternFill></fill>' +
+    '<fill><patternFill patternType="solid"><fgColor rgb="FFF2F2F2"/><bgColor indexed="64"/></patternFill></fill></fills>' +
+    '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>' + border + '</borders>' +
     '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-    '<cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
-    '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>' +
-    '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs>' +
+    '<cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+    '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1" readingOrder="2"/></xf>' +
+    '<xf numFmtId="0" fontId="2" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1" readingOrder="2"/></xf>' +
+    '<xf numFmtId="0" fontId="3" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf></cellXfs>' +
     '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
-  var safeName = String(sheetName || 'گزارش‌ها').replace(/[\[\]:*?\/\\]/g, ' ').slice(0, 31);
+  var stylesId = sheets.length + 1;
   return [
     { name: '[Content_Types].xml', content: head + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
       '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
       '<Default Extension="xml" ContentType="application/xml"/>' +
-      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
-      '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
-      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>' },
+      '<Override PartName="/xl/workbook.xml" ContentType="' + CT + 'sheet.main+xml"/>' + overrides.join('') +
+      '<Override PartName="/xl/styles.xml" ContentType="' + CT + 'styles+xml"/></Types>' },
     { name: '_rels/.rels', content: head + '<Relationships xmlns="' + PR + '"><Relationship Id="rId1" Type="' + RNS + '/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
-    { name: 'xl/workbook.xml', content: head + '<workbook xmlns="' + NS + '" xmlns:r="' + RNS + '"><bookViews><workbookView/></bookViews>' +
-      '<sheets><sheet name="' + xmlEsc_(safeName) + '" sheetId="1" r:id="rId1"/></sheets></workbook>' },
-    { name: 'xl/_rels/workbook.xml.rels', content: head + '<Relationships xmlns="' + PR + '">' +
-      '<Relationship Id="rId1" Type="' + RNS + '/worksheet" Target="worksheets/sheet1.xml"/>' +
-      '<Relationship Id="rId2" Type="' + RNS + '/styles" Target="styles.xml"/></Relationships>' },
-    { name: 'xl/styles.xml', content: styles },
-    { name: 'xl/worksheets/sheet1.xml', content: sheet },
-    { name: 'xl/worksheets/_rels/sheet1.xml.rels', content: sheetRels }
-  ];
+    { name: 'xl/workbook.xml', content: head + '<workbook xmlns="' + NS + '" xmlns:r="' + RNS + '"><bookViews><workbookView activeTab="0"/></bookViews>' +
+      '<sheets>' + wbSheets.join('') + '</sheets></workbook>' },
+    { name: 'xl/_rels/workbook.xml.rels', content: head + '<Relationships xmlns="' + PR + '">' + wbRels.join('') +
+      '<Relationship Id="rId' + stylesId + '" Type="' + RNS + '/styles" Target="styles.xml"/></Relationships>' },
+    { name: 'xl/styles.xml', content: styles }
+  ].concat(parts);
 }
 
 // ---------- ارسال بی‌سروصدا (بدون نوشتن هر خطا در Logs) و ارسال فایل ----------
@@ -189,14 +277,33 @@ function tgSendDocument_(chatId, blob, caption) {
     return !!body.ok;
   } catch (e) { log_('error', 'telegram:sendDocument', e && e.message, ''); return false; }
 }
-function sendMonthExcel_(chatId, jy, jm) {
+function safeFileName_(s) { return String(s).replace(/[\\\/:*?"<>|\r\n]+/g, ' ').replace(/\s+/g, ' ').trim(); }
+// فایل اکسل یک دوره — cityId=0 همه شهرستان‌ها (همیشه تجمیعی)؛ side: 'a' تجمیعی، 's' خواهران، 'b' برادران
+function sendExcel_(chatId, jy, jm, cityId, side) {
+  cityId = num_(cityId);
+  side = (cityId && (side === 's' || side === 'b')) ? side : 'a';
   var channelId = getSettingNum_('channel_id'), chat = channelId ? tgGetChat_(channelId) : null;
-  var rows = monthExcelRows_(readTable_('Reports'), getCities_(), jy, jm, channelId, chat && chat.username ? chat.username : '');
-  var parts = xlsxParts_(JALALI_MONTHS[jm - 1] + ' ' + jy, XLSX_HEADER, rows, XLSX_WIDTHS);
-  var fileName = 'nasra-' + jy + '-' + pad2_(jm) + '.xlsx';
+  var reports = readTable_('Reports'), posByTg = positionsByTg_(readTable_('Users'));
+  var city = cityId ? getCityById_(cityId) : null;
+  var list = excelPick_(reports, posByTg, jy, jm, cityId, side);
+  var sheets = excelSheets_(list, cachedTable_('cities', 'Cities'), channelId, chat && chat.username ? chat.username : '');
+  var scope = cityId ? (city ? city.name : 'شهرستان ' + cityId) + ' - ' + EXCEL_SIDE_FA[side] : 'همه شهرستان‌ها';
+  var fileName = safeFileName_('گزارش ' + periodName_(jy, jm) + ' - ' + scope) + '.xlsx';
+  var parts = xlsxBook_(sheets);
   var blob = Utilities.zip(parts.map(function (p) { return Utilities.newBlob(p.content, 'application/xml', p.name); }), fileName);
   blob.setContentType('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  return tgSendDocument_(chatId, blob, '📥 گزارش‌های تاییدشده ' + JALALI_MONTHS[jm - 1] + ' ' + jy + ' — ' + rows.length + ' گزارش\n(فایل Excel؛ روی لینک‌ها بزنید تا پست کانال باز شود)');
+  var placed = 0, per = sheets.map(function (sh) { placed += sh.rows.length; return sh.type + ' ' + sh.rows.length; });
+  var note = '';
+  if (cityId) {
+    var sc = sideCounts_(reports, posByTg, jy, jm, cityId), other = sc.v + sc.none;
+    if (side === 'a' && other) note = '\nℹ️ شامل ' + (sc.v ? sc.v + ' گزارش مسئول فضای مجازی' : '') + (sc.v && sc.none ? ' و ' : '') + (sc.none ? sc.none + ' گزارش همکار بدون نقش' : '');
+    if (side !== 'a' && other) note = '\nℹ️ ' + other + ' گزارش این شهرستان (مسئول فضای مجازی یا همکار بدون نقش) فقط در فایل «تجمیعی» است.';
+  }
+  if (placed < list.length) note += '\n⚠️ ' + (list.length - placed) + ' گزارش نوع کلاس نامعتبر داشت و در هیچ برگه‌ای نیامد.';
+  return tgSendDocument_(chatId, blob, '📥 گزارش ' + periodName_(jy, jm) + ' — ' + scope +
+    '\n🗓 برنامه‌های ' + periodRangeText_(jy, jm) + ' (بر اساس تاریخ برگزاری)' +
+    '\nجمع: ' + list.length + ' گزارش تاییدشده — ' + per.join('، ') + note +
+    '\n(فایل Excel با ۵ برگه؛ روی لینک‌ها بزنید تا پست کانال باز شود)');
 }
 
 // ---------- بکاپ ----------
@@ -257,7 +364,7 @@ function installPhase3() {
     if (getSetting_(k) === null) setSetting_(k, AUTO.DEFAULTS[k], {
       backup_keep: 'تعداد بکاپ‌هایی که نگه داشته می‌شود',
       reminder_enabled: 'یادآوری ماهانه به شهرستان‌های بدون گزارش: 1 روشن، 0 خاموش',
-      reminder_days: 'روزهای ماه شمسی برای یادآوری، با ویرگول (مثلاً 20,27)',
+      reminder_days: 'روزهای ماه شمسی برای یادآوری، با ویرگول؛ دوره هر ماه روز ۲۰ تمام می‌شود (مثلاً 15,18)',
       pending_alert_hours: 'هشدار گزارش معطل در گروه بررسی بعد از این چند ساعت (0 = خاموش)'
     }[k]);
   });
@@ -271,11 +378,29 @@ function installPhase3() {
   Logger.log('حالا runTests را Run کنید و بعد Deploy ← Manage deployments ← Edit ← New version ← Deploy.');
 }
 
+// نصب فاز ۴ (دوره ۲۱ تا ۲۰، نقش‌ها، اکسل پنج‌برگه‌ای) — یک بار در ویرایشگر Run کنید؛ تکرارش بی‌خطر است.
+function installPhase4() {
+  ensureSheets_(); // ستون‌های تازه: Users.position (با فهرست کشویی نقش‌ها) و Reports.submitter_position
+  if (String(getSetting_('reminder_days') || '').replace(/\s/g, '') === '20,27') { // پیش‌فرض قدیمی با دوره ۲۱ تا ۲۰ جور نیست
+    setSetting_('reminder_days', AUTO.DEFAULTS.reminder_days, 'روزهای ماه شمسی برای یادآوری، با ویرگول؛ دوره هر ماه روز ۲۰ تمام می‌شود (مثلاً 15,18)');
+    Logger.log('روزهای یادآوری از 20,27 به ' + AUTO.DEFAULTS.reminder_days + ' تغییر کرد (چون دوره گزارش هر ماه روز ۲۰ تمام می‌شود).');
+  }
+  bustCache_();
+  var active = readTable_('Users').filter(isActiveEmployee_);
+  var noPos = active.filter(function (u) { return !positionOf_(u.position); }).length;
+  var cur = currentPeriod_();
+  Logger.log('✅ فاز ۴ نصب شد.');
+  Logger.log('دوره فعلی: گزارش ' + periodName_(cur.jy, cur.jm) + ' — برنامه‌های ' + periodRangeText_(cur.jy, cur.jm));
+  Logger.log('همکاران فعال: ' + active.length + ' — بدون نقش: ' + noPos + ' (نقش را در برگه Users، ستون position از فهرست کشویی بگذارید، یا در پنل /admin ← کاربران؛ وگرنه بات موقع اولین گزارش از خودشان می‌پرسد)');
+  Logger.log('حالا runTests را Run کنید و بعد Deploy ← Manage deployments ← Edit ← New version ← Deploy.');
+}
+
 // ---------- کارهای روزانه (تریگر ساعت ۱۰ صبح تهران) ----------
 function dailyJobs() {
   var t = todayJalali_(), todayKey = formatJalali_(t.jy, t.jm, t.jd);
   var reports = readTable_('Reports');
-  var doReminder = false, doSummary = false, pv = prevJalaliMonth_(t.jy, t.jm), pvKey = pv.jy + '-' + pad2_(pv.jm);
+  // خلاصه دوره: از روز ۲۱ (اولین اجرای بعد از پایان دوره ۲۱ تا ۲۰) برای همان ماه
+  var doReminder = false, doSummary = false, pv = { jy: t.jy, jm: t.jm }, pvKey = pv.jy + '-' + pad2_(pv.jm);
   // نشانه‌گذاری زیر قفل (تا با doPost هم‌زمان در Settings ننویسیم)؛ ارسال‌ها بیرون از قفل
   var lock = LockService.getScriptLock(), locked = lock.tryLock(30000);
   try {
@@ -284,7 +409,7 @@ function dailyJobs() {
       setSetting_('last_reminder_jdate', todayKey, 'آخرین یادآوری ماهانه — دست نزنید');
       doReminder = true;
     }
-    if (t.jd === 1 && getSetting_('last_monthly_summary') !== pvKey) {
+    if (t.jd > PERIOD_END_DAY && getSetting_('last_monthly_summary') !== pvKey) {
       setSetting_('last_monthly_summary', pvKey, 'آخرین خلاصه ماهانه ارسال‌شده — دست نزنید');
       doSummary = true;
     }
@@ -312,15 +437,16 @@ function pendingAlert_(reports) {
 }
 // previewOnlyTg: اگر عدد باشد، فقط پیش‌نمایش برای همان ادمین فرستاده می‌شود (هیچ پیامی به کارمندان نمی‌رود)
 function sendMonthlyReminder_(reports, t, previewOnlyTg) {
-  var target = reminderTargets_(reports, readTable_('Users'), getCities_(), t.jy, t.jm);
-  var monthName = JALALI_MONTHS[t.jm - 1];
+  var per = reportPeriodOf_(t.jy, t.jm, t.jd);
+  var target = reminderTargets_(reports, readTable_('Users'), getCities_(), per.jy, per.jm);
+  var monthName = JALALI_MONTHS[per.jm - 1], range = periodRangeText_(per.jy, per.jm);
   function textFor(cityName) {
-    return '🔔 یادآوری\nهمکار گرامی، تا امروز هیچ گزارشی از شهرستان ' + cityName + ' برای ماه ' + monthName + ' ثبت نشده است.\n' +
-      'لطفاً گزارش برنامه‌های این ماه را از دکمه «📝 ثبت گزارش جدید» ارسال کنید 🌿';
+    return '🔔 یادآوری\nهمکار گرامی، تا امروز هیچ گزارشی از شهرستان ' + cityName + ' برای «گزارش ' + monthName + '» (برنامه‌های ' + range + ') ثبت نشده است.\n' +
+      'لطفاً گزارش برنامه‌های این دوره را از دکمه «📝 ثبت گزارش جدید» ارسال کنید 🌿';
   }
   var noStaff = target.cities.filter(function (c) { return !c.recipients.length; }).map(function (c) { return c.name; });
   var withStaff = target.cities.filter(function (c) { return c.recipients.length; });
-  var summary = '🔔 یادآوری ماهانه (' + monthName + ' ' + t.jy + ')\n' +
+  var summary = '🔔 یادآوری ماهانه (گزارش ' + monthName + ' ' + per.jy + ' — ' + range + ')\n' +
     'شهرستان‌های بدون گزارش: ' + target.cities.length + ' — گیرندگان: ' + target.totalRecipients + ' نفر\n' +
     (withStaff.length ? '• ' + withStaff.map(function (c) { return c.name + ' (' + c.recipients.length + ')'; }).join('، ') + '\n' : '') +
     (noStaff.length ? '⚠️ بدون همکار فعال در بات: ' + noStaff.join('، ') + '\n' : '');
@@ -346,8 +472,8 @@ function sendMonthlyReminder_(reports, t, previewOnlyTg) {
 function sendMonthlySummary_(reports, jy, jm) {
   var text = monthStatsText_(reports, jy, jm);
   superadminTgs_().forEach(function (tg) {
-    tgSend_(tg, '🗓 خلاصه خودکار ماه گذشته\n\n' + text);
-    sendMonthExcel_(tg, jy, jm);
+    tgSend_(tg, '🗓 خلاصه خودکار — دوره گزارش ' + periodName_(jy, jm) + ' تمام شد\n\n' + text);
+    sendExcel_(tg, jy, jm, 0, 'a');
   });
 }
 

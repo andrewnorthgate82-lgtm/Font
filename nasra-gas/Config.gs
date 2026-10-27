@@ -33,7 +33,7 @@ var STATUS_EMOJI = { draft: '📝', pending: '⏳', approved: '✅', rejected: '
 var SHEETS = {
   Settings: ['key', 'value', 'note'],
   Cities: ['city_id', 'name', 'hashtag', 'is_active'],
-  Users: ['user_id', 'telegram_id', 'phone', 'full_name', 'city_id', 'role', 'status', 'reg_group_message_id', 'created_at', 'updated_at'],
+  Users: ['user_id', 'telegram_id', 'phone', 'full_name', 'city_id', 'role', 'status', 'reg_group_message_id', 'created_at', 'updated_at', 'position'],
   Whitelist: ['phone', 'full_name', 'city_name', 'city_id'],
   Admins: ['telegram_id', 'full_name', 'role', 'is_active', 'added_at'],
   Instructors: ['instructor_id', 'city_id', 'name', 'name_norm', 'is_active', 'created_by', 'created_at'],
@@ -41,12 +41,27 @@ var SHEETS = {
     'status', 'class_type', 'operation_name', 'subject', 'event_jalali', 'event_gregorian', 'event_year',
     'event_month', 'event_day', 'event_time', 'duration_min', 'participants', 'audience', 'place',
     'publish_jalali', 'published_caption', 'channel_message_ids', 'review_chat_id', 'review_album_ids',
-    'review_info_id', 'decided_by', 'decided_at', 'resubmit_count', 'created_at', 'updated_at'],
+    'review_info_id', 'decided_by', 'decided_at', 'resubmit_count', 'created_at', 'updated_at', 'submitter_position'],
   ReportPhotos: ['report_id', 'sort', 'file_id', 'file_unique_id'],
   RejectHistory: ['report_id', 'admin_telegram_id', 'reasons_json', 'manual_text', 'created_at'],
   Sessions: ['key', 'chat_id', 'user_id', 'state', 'data_json', 'updated_at'],
   Logs: ['ts', 'level', 'event', 'detail', 'update_id']
 };
+
+// نقش همکاران در هر شهرستان (ستون position برگه Users). «خواهر/برادر» فایل اکسل از همین نقش تعیین می‌شود؛
+// گزارش‌های «مسئول فضای مجازی» و همکاران بدون نقش فقط در «تجمیعی» و «همه شهرستان‌ها» می‌آیند.
+var POSITIONS = ['مسئول فضای مجازی', 'فرمانده گردان خواهر', 'مسئول نسرا خواهر', 'فرمانده گردان برادر', 'مسئول نسرا برادر'];
+function positionOf_(raw) { // متن نقش ← همان نام استاندارد (با تحمل نیم‌فاصله/فاصله/ی و ک عربی) یا ''
+  var n = normCmp_(raw);
+  if (!n) return '';
+  for (var i = 0; i < POSITIONS.length; i++) if (normCmp_(POSITIONS[i]) === n) return POSITIONS[i];
+  return '';
+}
+function positionSide_(raw) { // 's' خواهر ، 'b' برادر ، 'v' فضای مجازی ، '' بدون نقش
+  var p = positionOf_(raw);
+  if (!p) return '';
+  return p.indexOf('خواهر') !== -1 ? 's' : p.indexOf('برادر') !== -1 ? 'b' : 'v';
+}
 
 // ۳۲ شهرستان — هشتگ‌ها عیناً همین‌طور (بدون حذف «و» و بدون تغییر زیرخط)
 var CITIES_SEED = [
