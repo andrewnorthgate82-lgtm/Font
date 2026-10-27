@@ -1,5 +1,5 @@
 // Tests.gs — تست‌های پذیرش فاز ۱ تا ۴. در ویرایشگر Apps Script تابع runTests را Run کنید؛
-// در Execution log باید خروجی «23 passed» را ببینید (در صورت شکست، علت هر مورد نوشته می‌شود).
+// در Execution log باید خروجی «24 passed» را ببینید (در صورت شکست، علت هر مورد نوشته می‌شود).
 // تست‌های ۱۲ تا ۱۶ مال پنل مدیریت فاز ۲ (Admin.gs)، ۱۷ تا ۲۰ مال خودکارهای فاز ۳ و ۲۱ تا ۲۳ مال فاز ۴ (دوره ۲۱ تا ۲۰، نقش‌ها، اکسل) هستند؛
 // هیچ‌کدام پیامی به تلگرام نمی‌فرستند و به Google Drive دست نمی‌زنند.
 // نکته: پس از هر به‌روزرسانی کد، یک بار setup()‎ را هم Run کنید (بی‌خطر و تکراری است) تا فرمت متنی ستون‌ها اعمال شود.
@@ -475,6 +475,20 @@ function runTests() {
     eq(XL_SHEETS.map(function (s) { return s.type; }).join(','), CFG.CLASS_TYPES.join(','), 'هر هشتگ نوع کلاس برگه خودش را دارد');
     XL_SHEETS.forEach(function (s) { ok(s.name.length <= 31, 'طول نام برگه ' + s.name); });
     ok(SHEETS.Users.indexOf('position') !== -1 && SHEETS.Reports.indexOf('submitter_position') !== -1, 'ستون‌های تازه در اسکیمای برگه‌ها');
+  });
+
+  check('۲۴) کانال‌های اضافه: خواندن آیدی/لینک کانال، کنار گذاشتن کانال اصلی، طول دکمه‌ها', function () {
+    eq(parseChannelRef_('@isfahannasraa'), '@isfahannasraa', 'با @');
+    eq(parseChannelRef_('isfahannasraa'), '@isfahannasraa', 'بدون @');
+    eq(parseChannelRef_('https://t.me/isfahannasraa'), '@isfahannasraa', 'لینک کامل');
+    eq(parseChannelRef_('t.me/isfahannasraa/125'), '@isfahannasraa', 'لینک یک پست');
+    eq(parseChannelRef_('-1001234567890'), -1001234567890, 'آیدی عددی');
+    eq(parseChannelRef_('t.me/+AbCdEf'), null, 'لینک دعوت خصوصی پذیرفته نمی‌شود (باید فوروارد کرد)');
+    eq(parseChannelRef_('سلام'), null, 'متن نامعتبر');
+    eq(JSON.stringify(extraChannelMsgs_({ extra_channel_msgs: '{"-1009":[5,6]}' })), '{"-1009":[5,6]}', 'خواندن پیام‌های کانال اضافه');
+    eq(JSON.stringify(extraChannelMsgs_({ extra_channel_msgs: '' })), '{}', 'گزارش قدیمی بدون کانال اضافه');
+    ['A:c', 'A:ca', 'A:cr:-1001234567890123', 'A:cR:-1001234567890123'].forEach(function (d) { ok(unescape(encodeURIComponent(d)).length <= 64, 'طول ' + d); });
+    ok(SHEETS.Reports.indexOf('extra_channel_msgs') !== -1, 'ستون پیام‌های کانال اضافه');
   });
 
   if (failed.length) {

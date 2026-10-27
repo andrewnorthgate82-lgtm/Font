@@ -41,7 +41,7 @@ var SHEETS = {
     'status', 'class_type', 'operation_name', 'subject', 'event_jalali', 'event_gregorian', 'event_year',
     'event_month', 'event_day', 'event_time', 'duration_min', 'participants', 'audience', 'place',
     'publish_jalali', 'published_caption', 'channel_message_ids', 'review_chat_id', 'review_album_ids',
-    'review_info_id', 'decided_by', 'decided_at', 'resubmit_count', 'created_at', 'updated_at', 'submitter_position'],
+    'review_info_id', 'decided_by', 'decided_at', 'resubmit_count', 'created_at', 'updated_at', 'submitter_position', 'extra_channel_msgs'],
   ReportPhotos: ['report_id', 'sort', 'file_id', 'file_unique_id'],
   RejectHistory: ['report_id', 'admin_telegram_id', 'reasons_json', 'manual_text', 'created_at'],
   Sessions: ['key', 'chat_id', 'user_id', 'state', 'data_json', 'updated_at'],

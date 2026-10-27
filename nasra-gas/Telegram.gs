@@ -259,8 +259,8 @@ function routeCallback_(cb) {
 function isChannelForward_(msg, session, tg) {
   // فقط فورواردِ ادمین (در حال راه‌اندازی/تغییر کانال) «فوروارد کانال برای راه‌اندازی» است؛
   // عکس فورواردشده از کانال برای کارمند در فرم گزارش، عکس عادی فرم است و این‌جا گیر نمی‌کند.
-  if (msg.photo) return false;
   if (!isAdminTg_(tg)) return false;
+  if (msg.photo && !(session && session.state === 'adm:addChannel')) return false; // فوروارد پست عکس‌دار فقط هنگام «افزودن کانال» در پنل
   if (session && String(session.state || '').indexOf('form:') === 0) return false;
   var o = msg.forward_origin;
   if (o && o.type === 'channel' && o.chat) return true;

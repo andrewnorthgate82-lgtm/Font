@@ -48,10 +48,23 @@ function publishReport_(rep) {
   var caption = captionFromReport_(rep, publishDate);
   var album = tgSendAlbum_(channelId, photos, caption);
   if (!album) throw new Error('ارسال آلبوم به کانال ناموفق بود');
+  // انتشار همزمان در کانال‌های اضافه (📡 کانال‌ها در پنل) — شکست آن‌ها جلوی تایید را نمی‌گیرد، فقط هشدار می‌دهد
+  var extra = {}, failed = [];
+  extraChannels_().forEach(function (c) {
+    var a2 = tgSendAlbum_(num_(c.id), photos, caption);
+    if (a2) extra[String(c.id)] = a2.map(function (m) { return m.message_id; });
+    else failed.push(c.title || String(c.id));
+  });
   updateReport_(rep.report_id, {
     publish_jalali: publishDate, published_caption: caption,
-    channel_message_ids: JSON.stringify(album.map(function (m) { return m.message_id; }))
+    channel_message_ids: JSON.stringify(album.map(function (m) { return m.message_id; })),
+    extra_channel_msgs: JSON.stringify(extra)
   });
+  if (failed.length) {
+    var gid = getSettingNum_('review_group_id');
+    if (gid) tgSend_(gid, '⚠️ گزارش ' + rep.report_id + ' در کانال اصلی منتشر شد ولی در ' + failed.map(function (t) { return '«' + t + '»'; }).join('، ') +
+      ' نه.\nبات در آن کانال ادمین نیست یا اجازه ارسال پیام ندارد (پنل /admin ← 📡 کانال‌ها).');
+  }
   return album;
 }
 

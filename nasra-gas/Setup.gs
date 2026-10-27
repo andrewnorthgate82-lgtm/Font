@@ -141,6 +141,12 @@ function handleChannelForward_(msg) {
   var chatId = msg.chat.id, tg = msg.from.id;
   if (!isAdminTg_(tg)) return; // فقط ادمین در حال راه‌اندازی
   var session = getSession_(chatId, tg);
+  if (session.state === 'adm:addChannel') { // پنل ← 📡 کانال‌ها ← افزودن کانال (انتشار همزمان)
+    var ext = channelFromForward_(msg);
+    if (!ext || !isSuperTg_(tg)) { tgSend_(chatId, TXT.CHANNEL_FORWARD_BAD); return; }
+    addExtraChannel_(chatId, tg, ext.id, ext.title);
+    return;
+  }
   var inSetup = getSetting_('setup_done') !== '1';           // هنوز راه‌اندازی اولیه تمام نشده
   var explicitChange = session.state === 'setup:channel';    // دستور صریح /setchannel (فقط سوپرادمین)
   if (!inSetup && !explicitChange) {
@@ -215,6 +221,7 @@ function handleStatus_(msg) {
     '• سوپرادمین ثبت شده: ' + (hasSuperadmin_() ? 'بله ✅' : 'خیر ❌ (حالت راه‌اندازی)') + '\n' +
     '• گروه بررسی: ' + probe(groupId) + '\n' +
     '• کانال انتشار: ' + probe(channelId) + '\n' +
+    extraChannels_().map(function (c) { return '• کانال اضافه: ' + probe(num_(c.id)) + '\n'; }).join('') +
     '• شهرستان‌های فعال: ' + getCities_().length + '\n' +
     '• کاربران تاییدشده: ' + approved + '\n' +
     '• گزارش‌های در انتظار بررسی: ' + countReports_('pending') + '\n' +

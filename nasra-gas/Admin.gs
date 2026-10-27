@@ -95,7 +95,7 @@ function adminPanelKb_(tg) {
   ];
   if (isSuperTg_(tg)) {
     rows.push([btn_('📣 پیام همگانی', 'A:b'), btn_('💾 بکاپ و خودکارها', 'A:k')]);
-    rows.push([btn_('🛡 ادمین‌ها', 'A:a')]);
+    rows.push([btn_('🛡 ادمین‌ها', 'A:a'), btn_('📡 کانال‌ها', 'A:c')]);
   }
   rows.push([btn_('✖️ بستن پنل', 'A:x')]);
   return ikb_(rows);
@@ -145,7 +145,7 @@ function handleAdminCb_(cb, s, data) {
     if (patch.error) { tgAnswerCb_(cb.id, patch.error, true); return; }
     tgAnswerCb_(cb.id, 'در حال ویرایش پست کانال…');
     var res = applyReportEdit_(num_(a), patch.patch);
-    tgSend_(chatId, res.ok ? '✅ کپشن پست کانال به‌روز شد.' : '⚠️ ' + res.msg);
+    tgSend_(chatId, res.ok ? '✅ کپشن پست کانال به‌روز شد.' + (res.warn ? '\n⚠️ ' + res.warn : '') : '⚠️ ' + res.msg);
     showReportCard_(chatId, num_(a), 0);
     return;
   }
@@ -172,6 +172,13 @@ function handleAdminCb_(cb, s, data) {
   if (/^(b|ba|bm|bc|bC|bs|k|kb|kr|kt)$/.test(p)) {
     if (!isSuperTg_(tg)) { tgAnswerCb_(cb.id, 'این بخش فقط برای سوپرادمین است.', true); return; }
     handlePhase3Cb_(cb, s, prev, p, a, chatId, tg, mid);
+    return;
+  }
+
+  // کانال‌های انتشار همزمان (فقط سوپرادمین)
+  if (/^(c|ca|cr|cR)$/.test(p)) {
+    if (!isSuperTg_(tg)) { tgAnswerCb_(cb.id, 'این بخش فقط برای سوپرادمین است.', true); return; }
+    handleChannelsCb_(cb, s, p, a, chatId, tg, mid);
     return;
   }
 
@@ -272,7 +279,7 @@ function handleAdminText_(msg, s) {
     if (patch.error) { tgSend_(chatId, '⚠️ ' + patch.error + '\nدوباره بنویسید یا /admin بزنید.'); return; }
     clearSession_(chatId, tg);
     var res = applyReportEdit_(num_(d.rid), patch.patch);
-    tgSend_(chatId, res.ok ? '✅ کپشن پست کانال به‌روز شد.' : '⚠️ ' + res.msg);
+    tgSend_(chatId, res.ok ? '✅ کپشن پست کانال به‌روز شد.' + (res.warn ? '\n⚠️ ' + res.warn : '') : '⚠️ ' + res.msg);
     showReportCard_(chatId, num_(d.rid), 0);
     return;
   }
@@ -313,6 +320,15 @@ function handleAdminText_(msg, s) {
     saveSession_(chatId, tg, s);
     tgSend_(chatId, '👁 پیش‌نمایش پیام همگانی — گیرندگان: ' + d.label + ' (' + ids.length + ' نفر)\n—\n📣 پیام از معاونت نسرا:\n\n' + body + '\n—',
       ikb_([[btn_('✅ ارسال برای ' + ids.length + ' نفر', 'A:bs')], [btn_('✏️ نوشتن دوباره', 'A:b'), btn_('❌ انصراف', 'A:m')]]));
+    return;
+  }
+  if (st === 'adm:addChannel') {
+    if (!isSuperTg_(tg)) { clearSession_(chatId, tg); tgSend_(chatId, TXT.NO_ACCESS); return; }
+    var ref = parseChannelRef_(text);
+    if (!ref) { tgSend_(chatId, '⚠️ آیدی کانال را مثل ‎@channel_name‎ یا لینک ‎t.me/channel_name‎ بفرستید، یا یک پست متنی از کانال را فوروارد کنید. (انصراف: /admin)'); return; }
+    var ch = tgGetChat_(ref);
+    if (!ch || ch.type !== 'channel') { tgSend_(chatId, '⚠️ کانالی با «' + ref + '» پیدا نشد یا بات عضو آن نیست. بات را در کانال ادمین کنید و دوباره بفرستید. (انصراف: /admin)'); return; }
+    addExtraChannel_(chatId, tg, ch.id, ch.title || ref);
     return;
   }
   if (st === 'adm:addAdmin') {
@@ -488,27 +504,36 @@ function applyReportEdit_(rid, patch) {
   var merged = {};
   Object.keys(rep).forEach(function (k) { merged[k] = rep[k]; });
   Object.keys(patch).forEach(function (k) { merged[k] = patch[k]; });
-  var caption = captionFromReport_(merged, String(cellToStr_(rep.publish_jalali)));
+  var caption = captionFromReport_(merged, String(cellToStr_(rep.publish_jalali))), bad = [];
   if (caption.length > CFG.CAPTION_LIMIT) return { ok: false, msg: 'کپشن جدید از حد مجاز ' + CFG.CAPTION_LIMIT + ' حرف بلندتر می‌شود؛ متن را کوتاه‌تر کنید.' };
   if (caption !== String(rep.published_caption || '')) {
     var res = tgCall_('editMessageCaption', { chat_id: channelId, message_id: num_(ids[0]), caption: caption });
     if (!res) return { ok: false, msg: 'ویرایش پست در کانال ناموفق بود. مطمئن شوید بات در کانال ادمین است و اجازه «ویرایش پیام» دارد.' };
+    var extra = extraChannelMsgs_(rep);
+    Object.keys(extra).forEach(function (cid) {
+      var mids = safeJsonArr_(JSON.stringify(extra[cid]));
+      if (mids.length && !tgCall_('editMessageCaption', { chat_id: num_(cid), message_id: num_(mids[0]), caption: caption })) bad.push('«' + extraChannelTitle_(cid) + '»');
+    });
   }
   var full = {};
   Object.keys(patch).forEach(function (k) { full[k] = patch[k]; });
   full.published_caption = caption;
   updateReport_(rid, full);
-  return { ok: true, caption: caption };
+  return { ok: true, caption: caption, warn: bad.length ? 'کپشن در ' + bad.join('، ') + ' ویرایش نشد (بات آن‌جا اجازه «ویرایش پیام» ندارد).' : '' };
 }
 function deletePublishedReport_(rid, adminTg) {
   var rep = getReport_(rid);
   if (!rep || rep.status !== 'approved') return { ok: false, msg: 'این گزارش در وضعیت «تایید‌شده» نیست.' };
   var ids = safeJsonArr_(cellToStr_(rep.channel_message_ids)), channelId = getSettingNum_('channel_id'), failed = 0;
   ids.forEach(function (id) { if (!channelId || !tgDelete_(channelId, num_(id))) failed++; });
+  var extra = extraChannelMsgs_(rep), total = ids.length; // همان پست در کانال‌های اضافه
+  Object.keys(extra).forEach(function (cid) {
+    safeJsonArr_(JSON.stringify(extra[cid])).forEach(function (id) { total++; if (!tgDelete_(num_(cid), num_(id))) failed++; });
+  });
   updateReport_(rid, { status: 'deleted' });
   log_('warn', 'admin-delete', 'report ' + rid + ' by ' + adminTg + (failed ? ' (not deleted from channel: ' + failed + ')' : ''), '');
   tgSend_(rep.submitter_telegram_id, '🗑 گزارش شما با موضوع «' + rep.subject + '» توسط ادمین از کانال حذف شد.\nبرای پیگیری با ادمین در تماس باشید.');
-  return { ok: true, failed: failed, total: ids.length };
+  return { ok: true, failed: failed, total: total };
 }
 
 // ---------- آمار ----------
@@ -882,4 +907,91 @@ function handleExcelCb_(cb, parts, chatId, mid) {
     return;
   }
   tgAnswerCb_(cb.id);
+}
+
+// ---------- کانال‌های اضافه (انتشار همزمان) — فقط سوپرادمین ----------
+// کانال اصلی همان channel_id است (لینک‌های فایل اکسل به آن است)؛ کانال‌های اضافه در Settings کلید extra_channels به‌صورت JSON.
+function extraChannels_() {
+  var main = num_(getSettingNum_('channel_id'));
+  try {
+    var a = JSON.parse(getSetting_('extra_channels') || '[]');
+    return Array.isArray(a) ? a.filter(function (c) { return c && num_(c.id) && num_(c.id) !== main; }) : [];
+  } catch (e) { return []; }
+}
+function saveExtraChannels_(list) {
+  setSetting_('extra_channels', JSON.stringify(list.map(function (c) { return { id: num_(c.id), title: String(c.title || '') }; })),
+    'کانال‌های اضافه برای انتشار همزمان — از پنل /admin ← 📡 کانال‌ها تغییر دهید');
+}
+// «@name» یا «t.me/name» یا «https://t.me/name/123» یا آیدی عددی ‎-100…‎ ← چیزی که getChat می‌فهمد؛ نامعتبر ← null
+function parseChannelRef_(raw) {
+  var s = toEnDigits_(cleanText_(raw)).trim();
+  var m = /^-100\d{5,}$/.exec(s);
+  if (m) return num_(s);
+  m = /^(?:https?:\/\/)?(?:www\.)?(?:t|telegram)\.me\/(?:s\/)?([A-Za-z][A-Za-z0-9_]{3,31})(?:[\/?#].*)?$/i.exec(s) || /^@?([A-Za-z][A-Za-z0-9_]{3,31})$/.exec(s);
+  if (!m || /^(c|joinchat|\+)$/i.test(m[1])) return null;
+  return '@' + m[1];
+}
+// آزمایش ارسال/ویرایش/حذف و افزودن به فهرست
+function addExtraChannel_(chatId, tg, id, title) {
+  id = num_(id);
+  if (!id) { tgSend_(chatId, '⚠️ کانال پیدا نشد.'); return; }
+  if (id === num_(getSettingNum_('channel_id'))) { tgSend_(chatId, 'ℹ️ این همان کانال اصلی است؛ گزارش‌ها همین الان هم آن‌جا منتشر می‌شوند.'); return; }
+  var list = extraChannels_();
+  if (list.some(function (c) { return num_(c.id) === id; })) { clearSession_(chatId, tg); tgSend_(chatId, 'ℹ️ کانال «' + title + '» از قبل در فهرست است.'); showChannels_(chatId, 0); return; }
+  var m = tgSend_(id, '🤖 پیام آزمایشی بات نسرا (چند ثانیه دیگر حذف می‌شود)');
+  if (!m) {
+    tgSend_(chatId, '❌ بات نتوانست در «' + title + '» پیام بفرستد.\nدر کانال ← Administrators ← بات را ادمین کنید و اجازه «ارسال پیام» (Post Messages)، «ویرایش پیام» و «حذف پیام» را روشن کنید؛ بعد دوباره امتحان کنید.');
+    return;
+  }
+  var edited = tgEdit_(id, m.message_id, '🤖 پیام آزمایشی بات نسرا ✅ (چند ثانیه دیگر حذف می‌شود)', null), deleted = tgDelete_(id, m.message_id);
+  list.push({ id: id, title: title || String(id) });
+  saveExtraChannels_(list);
+  clearSession_(chatId, tg);
+  tgSend_(chatId, '✅ کانال «' + (title || id) + '» اضافه شد. از این به بعد هر گزارش تاییدشده همزمان در این کانال هم منتشر می‌شود.' +
+    (edited ? '' : '\n⚠️ بات اجازه «ویرایش پیام» در این کانال را ندارد؛ ویرایش کپشن از پنل آن‌جا اعمال نمی‌شود.') +
+    (deleted ? '' : '\n⚠️ بات اجازه «حذف پیام» در این کانال را ندارد؛ پیام آزمایشی را دستی پاک کنید و این اجازه را روشن کنید.') +
+    '\n(گزارش‌هایی که قبلاً منتشر شده‌اند، در کانال تازه فرستاده نمی‌شوند.)');
+  showChannels_(chatId, 0);
+}
+function showChannels_(chatId, mid) {
+  var main = getSettingNum_('channel_id'), list = extraChannels_();
+  var lines = ['📡 کانال‌های انتشار', '• کانال اصلی: «' + (getSetting_('channel_title') || main || '—') + '» (لینک‌های فایل اکسل به همین کانال است)'];
+  if (list.length) list.forEach(function (c, i) { lines.push('• کانال اضافه ' + (i + 1) + ': «' + (c.title || c.id) + '»'); });
+  else lines.push('• کانال اضافه: — هنوز ندارید');
+  lines.push('', 'هر گزارش تاییدشده همزمان در همه این کانال‌ها منتشر می‌شود؛ ویرایش کپشن و حذف از پنل هم در همه اعمال می‌شود.');
+  var rows = list.map(function (c) { return [btn_('🗑 برداشتن «' + cut_(c.title || c.id, 24) + '»', 'A:cr:' + c.id)]; });
+  rows.push([btn_('➕ افزودن کانال', 'A:ca')], homeRow_());
+  panelOut_(chatId, mid, lines.join('\n'), ikb_(rows));
+}
+function handleChannelsCb_(cb, s, p, a, chatId, tg, mid) {
+  if (p === 'c') { tgAnswerCb_(cb.id); showChannels_(chatId, mid); return; }
+  if (p === 'ca') {
+    s.state = 'adm:addChannel'; s.data = {}; saveSession_(chatId, tg, s);
+    tgAnswerCb_(cb.id);
+    panelOut_(chatId, mid, '➕ افزودن کانال برای انتشار همزمان\n\n۱) بات باید در کانال جدید «ادمین» باشد با اجازه‌های ارسال، ویرایش و حذف پیام.\n۲) بعد یکی از این دو کار را بکنید:\n• آیدی کانال را بفرستید؛ مثل ‎@channel_name‎ یا لینک ‎t.me/channel_name‎\n• یا اگر کانال خصوصی است: یک پست «متنی» (بدون عکس) از همان کانال را این‌جا فوروارد کنید.',
+      ikb_([[btn_('↩️ انصراف', 'A:c')]]));
+    return;
+  }
+  if (p === 'cr') {
+    var c = extraChannels_().filter(function (x) { return String(x.id) === String(a); })[0];
+    if (!c) { tgAnswerCb_(cb.id, 'این کانال در فهرست نیست.', true); showChannels_(chatId, mid); return; }
+    tgAnswerCb_(cb.id);
+    panelOut_(chatId, mid, '🗑 کانال «' + (c.title || c.id) + '» از انتشار همزمان برداشته شود؟\nپست‌های قبلی در آن کانال می‌مانند (و ویرایش/حذفشان از پنل همچنان کار می‌کند)؛ فقط گزارش‌های تازه دیگر آن‌جا فرستاده نمی‌شوند.',
+      ikb_([[btn_('✅ بله، بردار', 'A:cR:' + c.id)], [btn_('↩️ نه', 'A:c')]]));
+    return;
+  }
+  if (p === 'cR') {
+    var rest = extraChannels_().filter(function (x) { return String(x.id) !== String(a); });
+    saveExtraChannels_(rest);
+    tgAnswerCb_(cb.id, 'برداشته شد');
+    showChannels_(chatId, mid);
+  }
+}
+// پیام‌های این گزارش در کانال‌های اضافه: {"‎-100…‎": [message_id, …]}
+function extraChannelMsgs_(rep) {
+  try { var o = JSON.parse(cellToStr_(rep && rep.extra_channel_msgs) || '{}'); return (o && typeof o === 'object' && !Array.isArray(o)) ? o : {}; } catch (e) { return {}; }
+}
+function extraChannelTitle_(id) {
+  var c = extraChannels_().filter(function (x) { return String(x.id) === String(id); })[0];
+  return c ? (c.title || String(id)) : String(id);
 }
