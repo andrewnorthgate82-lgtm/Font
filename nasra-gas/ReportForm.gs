@@ -219,7 +219,7 @@ function handleFormCb_(cb, s, data) {
 
   if (p === 'po') { // انتخاب نقش (فاز ۴)
     var pos = /^\d$/.test(String(v)) ? POSITIONS[num_(v)] : null;
-    if (step !== 'position' || !pos) { tgAnswerCb_(cb.id, 'این دکمه دیگر فعال نیست؛ دوباره «📝 ثبت گزارش جدید» را بزنید.', true); return; }
+    if (step !== 'position' || !pos) { tgAnswerCb_(cb.id, 'این دکمه دیگر فعال نیست؛ دوباره «' + MENU.NEW_REPORT + '» را بزنید.', true); return; }
     if (!positionOf_(u.position)) updateUser_(u.user_id, tg, { position: pos }); // اگر ادمین در این فاصله نقش گذاشته، همان می‌ماند
     tgAnswerCb_(cb.id, 'ثبت شد');
     var fresh = getUserByTg_(tg);

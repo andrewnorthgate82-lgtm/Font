@@ -109,7 +109,7 @@ function contactKb_() {
 }
 function mainMenuKb_() {
   return {
-    keyboard: [[{ text: '📝 ثبت گزارش جدید' }], [{ text: '📋 گزارش‌های من' }, { text: '👨‍🏫 مدرسان من' }]],
+    keyboard: [[{ text: MENU.NEW_REPORT }, { text: MENU.SAMPLES }], [{ text: MENU.MY_REPORTS }, { text: MENU.MY_TEACHERS }]],
     resize_keyboard: true
   };
 }
@@ -179,6 +179,11 @@ function routePrivateMessage_(msg) {
   if (!tg) return;
   var session = getSession_(chatId, tg);
 
+  // ادمین در حال ثبت «نمونه گزارش»: هر پیام (متن/عکس/آلبوم/فوروارد کانال) جزو نمونه است؛ جز دستورها و دکمه‌های منو
+  if (session.state === 'adm:sample') {
+    var raw = String(msg.text || '').trim(), isMenu = Object.keys(MENU).some(function (k) { return MENU[k] === raw; });
+    if (raw.charAt(0) !== '/' && !isMenu) { handleSampleMsg_(msg, session); return; }
+  }
   if (isChannelForward_(msg, session, tg)) { handleChannelForward_(msg); return; }
   if (msg.contact) {
     if (session.state === 'adm:addAdmin') { handleAdminContact_(msg, session); return; } // فاز ۲: افزودن ادمین با مخاطب
@@ -187,7 +192,7 @@ function routePrivateMessage_(msg) {
 
   if (msg.photo) {
     if (session.state === 'form:photos') { handleFormPhoto_(msg, session); return; }
-    tgSend_(chatId, 'برای ثبت گزارش، از دکمه «📝 ثبت گزارش جدید» شروع کنید.', mainMenuKb_());
+    tgSend_(chatId, 'برای ارسال گزارش، از دکمه «' + MENU.NEW_REPORT + '» شروع کنید.', mainMenuKb_());
     return;
   }
   if (msg.document && session.state === 'form:photos') { tgSend_(chatId, TXT.SEND_AS_PHOTO); return; }
@@ -221,9 +226,10 @@ function routePrivateMessage_(msg) {
     tgSend_(chatId, TXT.CANCELLED, isActiveEmployee_(u) || isAdminTg_(tg) ? mainMenuKb_() : removeKb_());
     return;
   }
-  if (text === '📝 ثبت گزارش جدید') { menuNewReport_(msg); return; }
-  if (text === '📋 گزارش‌های من') { menuMyReports_(msg); return; }
-  if (text === '👨‍🏫 مدرسان من') { menuMyTeachers_(msg); return; }
+  if (text === MENU.NEW_REPORT || text === MENU.NEW_REPORT_OLD) { menuNewReport_(msg); return; }
+  if (text === MENU.SAMPLES) { menuSamples_(msg); return; }
+  if (text === MENU.MY_REPORTS) { menuMyReports_(msg); return; }
+  if (text === MENU.MY_TEACHERS) { menuMyTeachers_(msg); return; }
 
   if (session.state === 'reg:name') { handleRegName_(msg, session); return; }
   if (session.state.indexOf('adm:') === 0) { handleAdminText_(msg, session); return; } // فاز ۲: ورودی‌های پنل
@@ -252,6 +258,7 @@ function routeCallback_(cb) {
   if (data.indexOf('rc:') === 0 || data.indexOf('pg:rc:') === 0) return handleRegCityCb_(cb, session, data);
   if (data.indexOf('ga:') === 0 || data.indexOf('gd:') === 0) return handleRegDecisionCb_(cb, data);
   if (data.indexOf('re:') === 0) return handleResubmitCb_(cb, session, data);
+  if (data.indexOf('sm:') === 0) return handleSampleCb_(cb, data); // نمونه گزارش‌ها
   if (/^(ok|rj|mn|rs|rd|rb|rm):/.test(data)) return handleReviewCb_(cb, session, data);
   return handleFormCb_(cb, session, data); // بقیه کال‌بک‌ها مال فرم گزارش‌اند
 }

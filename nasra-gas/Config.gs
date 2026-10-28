@@ -45,7 +45,14 @@ var SHEETS = {
   ReportPhotos: ['report_id', 'sort', 'file_id', 'file_unique_id'],
   RejectHistory: ['report_id', 'admin_telegram_id', 'reasons_json', 'manual_text', 'created_at'],
   Sessions: ['key', 'chat_id', 'user_id', 'state', 'data_json', 'updated_at'],
-  Logs: ['ts', 'level', 'event', 'detail', 'update_id']
+  Logs: ['ts', 'level', 'event', 'detail', 'update_id'],
+  Samples: ['class_type', 'items_json', 'updated_by', 'updated_at'] // نمونه گزارش‌ها (پست آموزشی هر نوع برنامه) — از پنل پر می‌شود
+};
+
+// دکمه‌های منوی اصلی همکاران (برچسب قدیمی هم پذیرفته می‌شود تا کیبوردهای قدیمی کار کنند)
+var MENU = {
+  NEW_REPORT: '📝 ارسال گزارش', NEW_REPORT_OLD: '📝 ثبت گزارش جدید', SAMPLES: '📚 نمونه گزارش‌ها',
+  MY_REPORTS: '📋 گزارش‌های من', MY_TEACHERS: '👨‍🏫 مدرسان من'
 };
 
 // نقش همکاران در هر شهرستان (ستون position برگه Users). «خواهر/برادر» فایل اکسل از همین نقش تعیین می‌شود؛
@@ -108,7 +115,7 @@ var TXT = {
   NO_ACCESS: '⛔️ شما به این بخش دسترسی ندارید.',
   GENERIC_ERROR: '⚠️ یک خطای غیرمنتظره رخ داد. لطفاً چند دقیقه دیگر دوباره تلاش کنید؛ اگر تکرار شد به ادمین اطلاع دهید.',
   CANCELLED: 'لغو شد. از منوی اصلی انتخاب کنید:',
-  FORM_START: '📝 ثبت گزارش جدید\n\nقدم ۱ از ۱۱ — عکس‌ها 📷\n۱ تا ۵ عکس برنامه را بفرستید (تکی یا آلبوم).\nوقتی تمام شد دکمه «✅ پایان ارسال عکس» را بزنید.',
+  FORM_START: '📝 ارسال گزارش\n\nقدم ۱ از ۱۱ — عکس‌ها 📷\n۱ تا ۵ عکس برنامه را بفرستید (تکی یا آلبوم).\nوقتی تمام شد دکمه «✅ پایان ارسال عکس» را بزنید.',
   PHOTO_NEED_ONE: '⚠️ حداقل یک عکس لازم است.',
   SEND_AS_PHOTO: '⚠️ لطفاً عکس را به‌صورت «عکس» بفرستید، نه فایل/سند.',
   ASK_CLASS: 'قدم ۲ از ۱۱ — نوع کلاس/برنامه را انتخاب کنید:',

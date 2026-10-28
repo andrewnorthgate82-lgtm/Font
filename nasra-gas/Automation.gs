@@ -391,6 +391,7 @@ function installPhase4() {
   var cur = currentPeriod_();
   Logger.log('✅ فاز ۴ نصب شد.');
   Logger.log('دوره فعلی: گزارش ' + periodName_(cur.jy, cur.jm) + ' — برنامه‌های ' + periodRangeText_(cur.jy, cur.jm));
+  Logger.log('برگه Samples (نمونه گزارش‌ها) آماده است؛ نمونه‌ها را از پنل /admin ← 📚 نمونه گزارش‌ها ثبت کنید.');
   Logger.log('همکاران فعال: ' + active.length + ' — بدون نقش: ' + noPos + ' (نقش را در برگه Users، ستون position از فهرست کشویی بگذارید، یا در پنل /admin ← کاربران؛ وگرنه بات موقع اولین گزارش از خودشان می‌پرسد)');
   Logger.log('حالا runTests را Run کنید و بعد Deploy ← Manage deployments ← Edit ← New version ← Deploy.');
 }
@@ -442,7 +443,7 @@ function sendMonthlyReminder_(reports, t, previewOnlyTg) {
   var monthName = JALALI_MONTHS[per.jm - 1], range = periodRangeText_(per.jy, per.jm);
   function textFor(cityName) {
     return '🔔 یادآوری\nهمکار گرامی، تا امروز هیچ گزارشی از شهرستان ' + cityName + ' برای «گزارش ' + monthName + '» (برنامه‌های ' + range + ') ثبت نشده است.\n' +
-      'لطفاً گزارش برنامه‌های این دوره را از دکمه «📝 ثبت گزارش جدید» ارسال کنید 🌿';
+      'لطفاً گزارش برنامه‌های این دوره را از دکمه «' + MENU.NEW_REPORT + '» بفرستید 🌿';
   }
   var noStaff = target.cities.filter(function (c) { return !c.recipients.length; }).map(function (c) { return c.name; });
   var withStaff = target.cities.filter(function (c) { return c.recipients.length; });
@@ -495,7 +496,7 @@ function processBroadcastQueue() {
   var start = Date.now(), msg = '📣 پیام از معاونت نسرا:\n\n' + job.text, sentNow = 0;
   while (job.pos < job.ids.length && (Date.now() - start < AUTO.RUN_BUDGET_MS || sentNow === 0)) { // هر اجرا حداقل یک پیام جلو می‌رود
     sentNow++;
-    if (tgSendQuiet_(job.ids[job.pos], msg)) job.ok++; else job.fail++;
+    if (tgSendQuiet_(job.ids[job.pos], msg, mainMenuKb_())) job.ok++; else job.fail++; // منوی تازه هم همراه پیام می‌رسد
     job.pos++;
     if (job.pos % 20 === 0) setProp_(AUTO.BC_PROP, JSON.stringify(job)); // ذخیره پیشرفت
     Utilities.sleep(40);

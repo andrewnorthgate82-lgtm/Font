@@ -1,5 +1,5 @@
 // Tests.gs — تست‌های پذیرش فاز ۱ تا ۴. در ویرایشگر Apps Script تابع runTests را Run کنید؛
-// در Execution log باید خروجی «24 passed» را ببینید (در صورت شکست، علت هر مورد نوشته می‌شود).
+// در Execution log باید خروجی «25 passed» را ببینید (در صورت شکست، علت هر مورد نوشته می‌شود).
 // تست‌های ۱۲ تا ۱۶ مال پنل مدیریت فاز ۲ (Admin.gs)، ۱۷ تا ۲۰ مال خودکارهای فاز ۳ و ۲۱ تا ۲۳ مال فاز ۴ (دوره ۲۱ تا ۲۰، نقش‌ها، اکسل) هستند؛
 // هیچ‌کدام پیامی به تلگرام نمی‌فرستند و به Google Drive دست نمی‌زنند.
 // نکته: پس از هر به‌روزرسانی کد، یک بار setup()‎ را هم Run کنید (بی‌خطر و تکراری است) تا فرمت متنی ستون‌ها اعمال شود.
@@ -489,6 +489,33 @@ function runTests() {
     eq(JSON.stringify(extraChannelMsgs_({ extra_channel_msgs: '' })), '{}', 'گزارش قدیمی بدون کانال اضافه');
     ['A:c', 'A:ca', 'A:cr:-1001234567890123', 'A:cR:-1001234567890123'].forEach(function (d) { ok(unescape(encodeURIComponent(d)).length <= 64, 'طول ' + d); });
     ok(SHEETS.Reports.indexOf('extra_channel_msgs') !== -1, 'ستون پیام‌های کانال اضافه');
+  });
+
+  check('۲۵) نمونه گزارش‌ها: ذخیره پست/آلبوم با کپشن و قالب‌بندی، بازسازی آلبوم، منوی تازه', function () {
+    var ce = [{ type: 'bold', offset: 0, length: 4 }, { type: 'custom_emoji', offset: 5, length: 2, custom_emoji_id: '1' }];
+    var p1 = sampleItemFromMsg_({ message_id: 11, media_group_id: 'G', caption: 'نمونه ✨', caption_entities: ce, photo: [{ file_id: 'small' }, { file_id: 'big' }] });
+    eq(p1.k + '|' + p1.f + '|' + p1.g, 'photo|big|G', 'عکس: بزرگ‌ترین اندازه + شناسه آلبوم');
+    eq(p1.e.length, 1, 'ایموجی اختصاصی (پریمیوم) حذف و پررنگ حفظ می‌شود');
+    var p2 = sampleItemFromMsg_({ message_id: 12, media_group_id: 'G', photo: [{ file_id: 'p2' }] });
+    eq(sampleItemFromMsg_({ message_id: 13, animation: { file_id: 'gif' }, document: { file_id: 'gif' } }).k, 'animation', 'گیف به‌صورت گیف (نه فایل)');
+    var t = sampleItemFromMsg_({ message_id: 10, text: 'متن آموزشی', entities: [{ type: 'text_link', offset: 0, length: 3, url: 'https://t.me/x' }] });
+    var v = sampleItemFromMsg_({ message_id: 14, video: { file_id: 'vid' }, caption: 'ویدیو' });
+    eq(sampleItemFromMsg_({ message_id: 15, sticker: { file_id: 's' } }), null, 'استیکر پشتیبانی نمی‌شود');
+    var plan = sampleSendPlan_([t, p1, p2, v]);
+    eq(plan.map(function (x) { return x.method; }).join(','), 'sendMessage,sendMediaGroup,sendVideo', 'متن، آلبوم دو عکسی، ویدیو');
+    eq(plan[0].p.entities[0].url, 'https://t.me/x', 'لینک داخل متن حفظ می‌شود');
+    eq(plan[1].p.media.length + '|' + plan[1].p.media[0].caption + '|' + plan[1].p.media[0].caption_entities.length + '|' + (plan[1].p.media[1].caption || ''), '2|نمونه ✨|1|', 'کپشن روی عکس اول آلبوم');
+    eq(sampleSendPlan_([p2]).map(function (x) { return x.method; }).join(','), 'sendPhoto', 'آلبوم تک‌عکسی ← sendPhoto');
+    var kb = mainMenuKb_().keyboard, labels = [].concat.apply([], kb).map(function (b) { return b.text; });
+    ok(labels.indexOf('📝 ارسال گزارش') !== -1 && labels.indexOf('📚 نمونه گزارش‌ها') !== -1, 'منوی اصلی: «ارسال گزارش» و «نمونه گزارش‌ها»');
+    ok(labels.indexOf(MENU.NEW_REPORT_OLD) === -1, 'برچسب قدیمی در منو نیست (ولی هنوز پذیرفته می‌شود)');
+    var datas = ['A:e', 'A:es'];
+    CFG.CLASS_TYPES.forEach(function (x, i) { ['A:et:', 'A:ep:', 'A:er:', 'A:ed:', 'A:eD:', 'sm:'].forEach(function (pre) { datas.push(pre + i); }); });
+    samplesMenuKb_().inline_keyboard.forEach(function (row) { row.forEach(function (b) { datas.push(b.callback_data); }); });
+    datas.forEach(function (d) { ok(unescape(encodeURIComponent(d)).length <= 64, 'طول ' + d); });
+    eq(CFG.CLASS_TYPES.join(','), 'حضوری,مجازی,توانمندسازی,خلاقانه,تولیدات', 'پنج نوع نمونه');
+    ok(JSON.stringify([t, p1, p2, v, v, v, v, v, v, v]).length < 45000, '۱۰ مورد در یک خانه برگه جا می‌شود');
+    ok(SHEETS.Samples && SHEETS.Samples.indexOf('items_json') !== -1, 'برگه Samples در اسکیما');
   });
 
   if (failed.length) {

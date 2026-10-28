@@ -9,6 +9,7 @@ var HEADER_NOTES = {
   Instructors: { city_id: 'شماره شهرستان', name: 'نام مدرس/سخنران', name_norm: 'فرم نرمال نام برای جلوگیری از تکراری — دست نزنید' },
   Reports: { status: 'pending/approved/rejected/deleted', event_jalali: 'تاریخ برگزاری شمسی', publish_jalali: 'تاریخ درج در کانال (لحظه تایید)', resubmit_count: 'تعداد ارسال مجدد بعد از رد', submitter_position: 'نقش فرستنده در لحظه ارسال گزارش' },
   Sessions: { state: 'قدم فعلی فرم کاربر — دست نزنید', data_json: 'داده‌های فرم نیمه‌کاره — دست نزنید' },
+  Samples: { class_type: 'نوع برنامه — دست نزنید', items_json: 'محتوای نمونه (از پنل /admin ← 📚 نمونه گزارش‌ها ثبت می‌شود) — دست نزنید' },
   Logs: { event: 'فقط هشدار و خطا این‌جا ثبت می‌شود؛ آمار آپدیت‌ها در کش و در ‪/status‬ است' }
 };
 

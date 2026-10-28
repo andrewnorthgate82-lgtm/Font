@@ -91,7 +91,8 @@ function adminPanelKb_(tg) {
   var rows = [
     [btn_('⏳ در انتظار بررسی', 'A:p'), btn_('📢 منتشرشده‌ها', 'A:rl')],
     [btn_('🔎 گزارش با شماره', 'A:rf'), btn_('📊 آمار ماهانه', 'A:s:' + t.jy + ':' + t.jm)],
-    [btn_('👤 کاربران', 'A:u'), btn_('👨‍🏫 مدرسان', 'A:t:0')]
+    [btn_('👤 کاربران', 'A:u'), btn_('👨‍🏫 مدرسان', 'A:t:0')],
+    [btn_('📚 نمونه گزارش‌ها', 'A:e')]
   ];
   if (isSuperTg_(tg)) {
     rows.push([btn_('📣 پیام همگانی', 'A:b'), btn_('💾 بکاپ و خودکارها', 'A:k')]);
@@ -174,6 +175,9 @@ function handleAdminCb_(cb, s, data) {
     handlePhase3Cb_(cb, s, prev, p, a, chatId, tg, mid);
     return;
   }
+
+  // نمونه گزارش‌ها (همه ادمین‌ها)
+  if (/^(e|et|ep|er|es|ed|eD)$/.test(p)) { handleSamplesAdminCb_(cb, s, prev, p, a, chatId, tg, mid); return; }
 
   // کانال‌های انتشار همزمان (فقط سوپرادمین)
   if (/^(c|ca|cr|cR)$/.test(p)) {
@@ -994,4 +998,172 @@ function extraChannelMsgs_(rep) {
 function extraChannelTitle_(id) {
   var c = extraChannels_().filter(function (x) { return String(x.id) === String(id); })[0];
   return c ? (c.title || String(id)) : String(id);
+}
+
+// ---------- نمونه گزارش‌ها (پست آموزشی برای هر نوع برنامه) ----------
+// ادمین از پنل ← 📚 نمونه گزارش‌ها پست را می‌فرستد یا از کانال فوروارد می‌کند؛ خودِ محتوا (شناسه فایل عکس/ویدیو + کپشن و قالب‌بندی)
+// در برگه Samples ذخیره می‌شود تا با پاک‌شدن پست کانال یا چت ادمین از بین نرود. همکار از منوی «📚 نمونه گزارش‌ها» همان را می‌گیرد.
+var SAMPLE_MAX_ITEMS = 10;
+var SAMPLE_GROUPABLE = { photo: 1, video: 1, document: 1, audio: 1 };
+function cleanEntities_(arr) { // ایموجی‌های اختصاصی (پریمیوم) را بات نمی‌تواند بفرستد
+  return (arr || []).filter(function (e) { return e && e.type !== 'custom_emoji'; });
+}
+// یک پیام تلگرام ← یک مورد نمونه (یا null اگر نوعش پشتیبانی نشود)
+function sampleItemFromMsg_(msg) {
+  var g = msg.media_group_id ? String(msg.media_group_id) : '', c = msg.caption || '', e = cleanEntities_(msg.caption_entities);
+  function media(k, f) { return { k: k, f: f, c: c, e: e, g: g, m: msg.message_id }; }
+  if (msg.photo && msg.photo.length) return media('photo', msg.photo[msg.photo.length - 1].file_id);
+  if (msg.video) return media('video', msg.video.file_id);
+  if (msg.animation) return media('animation', msg.animation.file_id); // قبل از document (گیف هر دو را دارد)
+  if (msg.document) return media('document', msg.document.file_id);
+  if (msg.audio) return media('audio', msg.audio.file_id);
+  if (msg.voice) return media('voice', msg.voice.file_id);
+  if (msg.text) return { k: 'text', t: msg.text, e: cleanEntities_(msg.entities), m: msg.message_id };
+  return null;
+}
+// موردها ← فهرست فراخوانی‌های تلگرام (آلبوم‌ها دوباره آلبوم می‌شوند)
+function sampleSendPlan_(items) {
+  var plan = [], i = 0;
+  function withCap(p, it, capKey) { if (it.c) { p[capKey || 'caption'] = it.c; if (it.e && it.e.length) p.caption_entities = it.e; } return p; }
+  while (i < items.length) {
+    var it = items[i];
+    if (it.g && SAMPLE_GROUPABLE[it.k]) {
+      var grp = [it], j = i + 1;
+      while (j < items.length && items[j].g === it.g && SAMPLE_GROUPABLE[items[j].k]) grp.push(items[j++]);
+      if (grp.length > 1) {
+        plan.push({ method: 'sendMediaGroup', p: { media: grp.slice(0, 10).map(function (x) { return withCap({ type: x.k, media: x.f }, x); }) } });
+        i = j; continue;
+      }
+    }
+    if (it.k === 'text') { var tp = { text: it.t }; if (it.e && it.e.length) tp.entities = it.e; plan.push({ method: 'sendMessage', p: tp }); }
+    else {
+      var m = { photo: 'sendPhoto', video: 'sendVideo', animation: 'sendAnimation', document: 'sendDocument', audio: 'sendAudio', voice: 'sendVoice' }[it.k];
+      if (m) { var mp = {}; mp[it.k] = it.f; plan.push({ method: m, p: withCap(mp, it) }); }
+    }
+    i++;
+  }
+  return plan;
+}
+function sendSampleItems_(chatId, items) {
+  var ok = 0, plan = sampleSendPlan_(items);
+  plan.forEach(function (x) { x.p.chat_id = chatId; if (tgCall_(x.method, x.p)) ok++; });
+  return { ok: ok, total: plan.length };
+}
+function getSample_(i) {
+  var type = CFG.CLASS_TYPES[num_(i)];
+  if (!type) return null;
+  var row = readTable_('Samples').filter(function (r) { return String(r.class_type) === type; })[0];
+  var items = row ? safeJsonArr_(cellToStr_(row.items_json)) : [];
+  return { type: type, items: items, row: row || null };
+}
+function saveSample_(i, items, tg) {
+  var type = CFG.CLASS_TYPES[num_(i)];
+  if (!sheet_('Samples')) ensureSheets_(); // اگر installPhase4 هنوز اجرا نشده
+  var json = items.length ? JSON.stringify(items) : '';
+  if (json.length > 45000) return { ok: false, msg: 'این نمونه خیلی بزرگ است (متن‌های طولانی زیاد)؛ با مورد کمتری دوباره ثبت کنید.' };
+  var row = getSample_(i).row, data = { class_type: type, items_json: json, updated_by: tg, updated_at: nowStr_() };
+  if (row) updateRow_('Samples', row._row, data); else appendRow_('Samples', data);
+  return { ok: true };
+}
+// --- سمت همکار ---
+function samplesMenuKb_() {
+  var rows = [], row = [];
+  CFG.CLASS_TYPES.forEach(function (t, i) { row.push(btn_(t, 'sm:' + i)); if (row.length === 2) { rows.push(row); row = []; } });
+  if (row.length) rows.push(row);
+  return ikb_(rows);
+}
+function menuSamples_(msg) {
+  var chatId = msg.chat.id, tg = msg.from.id;
+  if (!isAdminTg_(tg) && !denyEmployee_(chatId, tg)) return;
+  tgSend_(chatId, '📚 نمونه گزارش‌ها\nنوع برنامه را انتخاب کنید تا یک نمونه گزارش درست (پست آموزشی) برایتان فرستاده شود:', samplesMenuKb_());
+}
+function handleSampleCb_(cb, data) {
+  var chatId = cb.message.chat.id, tg = cb.from.id;
+  if (!isAdminTg_(tg) && !isActiveEmployee_(getUserByTg_(tg))) { tgAnswerCb_(cb.id, TXT.NO_ACCESS, true); return; }
+  var smp = getSample_(data.split(':')[1]);
+  if (!smp) { tgAnswerCb_(cb.id); return; }
+  if (!smp.items.length) { tgAnswerCb_(cb.id, 'نمونه «' + smp.type + '» هنوز توسط ادمین ثبت نشده است.', true); return; }
+  tgAnswerCb_(cb.id, 'نمونه «' + smp.type + '»');
+  tgSend_(chatId, '📚 نمونه گزارش «' + smp.type + '» 👇');
+  sendSampleItems_(chatId, smp.items);
+}
+// --- سمت ادمین (پنل) ---
+function showSamplesAdmin_(chatId, mid) {
+  var lines = ['📚 نمونه گزارش‌ها (پست آموزشی برای همکاران)', 'همکاران از منوی «📚 نمونه گزارش‌ها» نوع برنامه را انتخاب می‌کنند و همین پست برایشان فرستاده می‌شود.', ''];
+  var rows = [], row = [];
+  CFG.CLASS_TYPES.forEach(function (t, i) {
+    var n = getSample_(i).items.length;
+    lines.push('• ' + t + ': ' + (n ? '✅ ثبت شده (' + n + ' مورد)' : '⚪️ هنوز ثبت نشده'));
+    row.push(btn_((n ? '✅ ' : '⚪️ ') + t, 'A:et:' + i));
+    if (row.length === 2) { rows.push(row); row = []; }
+  });
+  if (row.length) rows.push(row);
+  rows.push(homeRow_());
+  panelOut_(chatId, mid, lines.join('\n'), ikb_(rows));
+}
+function showSampleCard_(chatId, i, mid) {
+  var smp = getSample_(i);
+  if (!smp) { showSamplesAdmin_(chatId, mid); return; }
+  var n = smp.items.length, rows = [[btn_(n ? '✏️ جایگزینی نمونه' : '✏️ ثبت نمونه', 'A:er:' + i)]];
+  if (n) rows.push([btn_('👁 پیش‌نمایش', 'A:ep:' + i), btn_('🗑 حذف نمونه', 'A:ed:' + i)]);
+  rows.push([btn_('↩️ بازگشت', 'A:e')]);
+  panelOut_(chatId, mid, '📚 نمونه «' + smp.type + '»\n' + (n ? '✅ ثبت شده — ' + n + ' مورد' + (smp.row && smp.row.updated_at ? '\nآخرین تغییر: ' + String(cellToStr_(smp.row.updated_at)).slice(0, 16) : '') : '⚪️ هنوز ثبت نشده؛ همکاران با زدن این گزینه پیام «هنوز ثبت نشده» می‌بینند.'), ikb_(rows));
+}
+function handleSamplesAdminCb_(cb, s, prev, p, a, chatId, tg, mid) {
+  if (p === 'e') { tgAnswerCb_(cb.id); showSamplesAdmin_(chatId, mid); return; }
+  if (p === 'es') { // ذخیره — موردها در حالت قبلی (adm:sample) هستند
+    var d = prev.data || {};
+    if (prev.state !== 'adm:sample' || !(d.items && d.items.length)) { tgAnswerCb_(cb.id, 'چیزی برای ذخیره نیست؛ از «📚 نمونه گزارش‌ها» دوباره شروع کنید.', true); return; }
+    d.items.sort(function (x, y) { return (num_(x.m) || 0) - (num_(y.m) || 0); }); // عکس‌های آلبوم ممکن است نامرتب برسند
+    var sv = saveSample_(d.i, d.items, tg);
+    if (!sv.ok) { tgAnswerCb_(cb.id, sv.msg, true); return; }
+    tgAnswerCb_(cb.id, 'ذخیره شد');
+    tgSend_(chatId, '✅ نمونه «' + CFG.CLASS_TYPES[num_(d.i)] + '» ذخیره شد. همکاران دقیقاً این را می‌بینند 👇');
+    sendSampleItems_(chatId, d.items);
+    showSampleCard_(chatId, d.i, 0);
+    return;
+  }
+  var i = num_(a), type = CFG.CLASS_TYPES[i];
+  if (!type || !/^\d+$/.test(String(a))) { tgAnswerCb_(cb.id, 'نوع نامعتبر.', true); return; }
+  if (p === 'et') { tgAnswerCb_(cb.id); showSampleCard_(chatId, i, mid); return; }
+  if (p === 'ep') {
+    var smp = getSample_(i);
+    if (!smp.items.length) { tgAnswerCb_(cb.id, 'هنوز نمونه‌ای ثبت نشده.', true); return; }
+    tgAnswerCb_(cb.id);
+    sendSampleItems_(chatId, smp.items);
+    showSampleCard_(chatId, i, 0);
+    return;
+  }
+  if (p === 'er') {
+    s.state = 'adm:sample'; s.data = { i: i, items: [], lastG: '' }; saveSession_(chatId, tg, s);
+    tgAnswerCb_(cb.id);
+    panelOut_(chatId, mid, '✏️ ثبت نمونه «' + type + '»\nپست آموزشی را همین‌جا بفرستید یا از کانال فوروارد کنید:\n• متن، عکس، آلبوم، ویدیو، گیف یا فایل — با همان کپشن و قالب‌بندی (پررنگ، لینک و…)\n• می‌توانید چند پیام پشت سر هم بفرستید (حداکثر ' + SAMPLE_MAX_ITEMS + ' مورد)\nدر پایان «✅ ذخیره» را بزنید. نمونه قبلی تا وقتی ذخیره نکنید عوض نمی‌شود.',
+      ikb_([[btn_('❌ انصراف', 'A:et:' + i)]]));
+    return;
+  }
+  if (p === 'ed') {
+    tgAnswerCb_(cb.id);
+    panelOut_(chatId, mid, '🗑 نمونه «' + type + '» حذف شود؟', ikb_([[btn_('✅ بله، حذف کن', 'A:eD:' + i)], [btn_('↩️ نه', 'A:et:' + i)]]));
+    return;
+  }
+  if (p === 'eD') {
+    if (getSample_(i).row) saveSample_(i, [], tg);
+    tgAnswerCb_(cb.id, 'حذف شد');
+    showSampleCard_(chatId, i, mid);
+  }
+}
+// هر پیامی که ادمین در حالت adm:sample بفرستد (متن، عکس، آلبوم، فوروارد کانال…)
+function handleSampleMsg_(msg, s) {
+  var chatId = msg.chat.id, tg = msg.from.id, d = s.data || {};
+  if (!isAdminTg_(tg)) { clearSession_(chatId, tg); return; }
+  var item = sampleItemFromMsg_(msg);
+  if (!item) { tgSend_(chatId, '⚠️ این نوع پیام پشتیبانی نمی‌شود؛ متن، عکس، ویدیو، گیف، فایل یا صدا بفرستید.'); return; }
+  d.items = d.items || [];
+  if (d.items.length >= SAMPLE_MAX_ITEMS) { tgSend_(chatId, '⚠️ حداکثر ' + SAMPLE_MAX_ITEMS + ' مورد؛ «✅ ذخیره» را بزنید.', ikb_([[btn_('✅ ذخیره', 'A:es')]])); return; }
+  d.items.push(item);
+  var sameAlbum = item.g && item.g === d.lastG; // برای هر عکسِ یک آلبوم جدا پیام «دریافت شد» نفرست
+  d.lastG = item.g || '';
+  s.data = d; saveSession_(chatId, tg, s);
+  if (!sameAlbum) tgSend_(chatId, '📥 دریافت شد. پیام بعدی را بفرستید یا ذخیره کنید:',
+    ikb_([[btn_('✅ ذخیره', 'A:es'), btn_('❌ انصراف', 'A:et:' + num_(d.i))]]));
 }
