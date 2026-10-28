@@ -3,3 +3,4 @@
 
     node tools/sim/run.js            # runTests() ← باید «N passed» چاپ شود
     node tools/sim/scenario_samples.js
+    node tools/sim/scenario_form.js

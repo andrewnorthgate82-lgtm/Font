@@ -21,7 +21,7 @@ var REPORT_EDIT_FIELDS = [
 var REPORT_EDIT_PROMPTS = {
   subject: 'موضوع جدید را بنویسید:',
   operation: 'نام عملیات جدید را بنویسید.\n(برای خالی‌کردن «نام عملیات» فقط یک خط تیره - بفرستید)',
-  teacher: 'نام و نام‌خانوادگی مدرس/سخنران را بنویسید:',
+  teacher: 'نام و نام خانوادگی مدرس/سخنران را بنویسید:\n⚠️ بدون عنوان، لقب، مسئولیت، درجه یا رتبه.\n✅ درست: حامد کمال\n❌ غلط: دکتر کمال، آقای کمال، دکتر حامد کمال',
   date: 'تاریخ برگزاری را به شکل 1405/07/23 بنویسید (تاریخ آینده پذیرفته نمی‌شود):',
   time: 'ساعت برگزاری را به شکل 21:00 بنویسید:',
   participants: 'تعداد شرکت‌کنندگان را با عدد بنویسید (۱ تا ۵۰۰۰):',
@@ -228,7 +228,7 @@ function handleAdminCb_(cb, s, data) {
     if (!ins) { tgAnswerCb_(cb.id, 'مدرس پیدا نشد.', true); return; }
     s.state = 'adm:tRename'; s.data = { iid: num_(a) }; saveSession_(chatId, tg, s);
     tgAnswerCb_(cb.id);
-    panelOut_(chatId, mid, '✏️ نام فعلی: ' + ins.name + '\nنام جدید مدرس را بنویسید:\n(نام در گزارش‌های قبلی عوض نمی‌شود؛ فقط از این به بعد)', ikb_([[btn_('↩️ انصراف', 'A:ti:' + a)]]));
+    panelOut_(chatId, mid, '✏️ نام فعلی: ' + ins.name + '\nنام جدید مدرس را بنویسید:\n(نام در گزارش‌های قبلی عوض نمی‌شود؛ فقط از این به بعد)\n\n' + TXT.TEACHER_NAME_RULE, ikb_([[btn_('↩️ انصراف', 'A:ti:' + a)]]));
     return;
   }
   if (p === 'tt') { toggleInstructor_(cb, chatId, num_(a), mid); return; }
@@ -236,7 +236,7 @@ function handleAdminCb_(cb, s, data) {
     s.state = 'adm:tAdd'; s.data = { cityId: num_(a) }; saveSession_(chatId, tg, s);
     tgAnswerCb_(cb.id);
     var cty = getCityById_(num_(a));
-    panelOut_(chatId, mid, '➕ افزودن مدرس به شهرستان ' + (cty ? cty.name : '') + '\nنام و نام‌خانوادگی مدرس را بنویسید:', ikb_([[btn_('↩️ انصراف', 'A:tc:' + a + ':0')]]));
+    panelOut_(chatId, mid, '➕ افزودن مدرس به شهرستان ' + (cty ? cty.name : '') + '\nنام و نام خانوادگی مدرس را بنویسید:\n\n' + TXT.TEACHER_NAME_RULE, ikb_([[btn_('↩️ انصراف', 'A:tc:' + a + ':0')]]));
     return;
   }
 
@@ -492,8 +492,8 @@ function reportPatchFor_(rep, field, raw, adminTg) {
     } };
   }
   if (field === 'teacher') {
-    var name = normalizeName_(t);
-    if (name.length < 3) return { error: 'نام مدرس را کامل بنویسید.' };
+    var name = normalizeName_(t), issue = instructorNameIssue_(name);
+    if (issue) return { error: issue + '\n' + TXT.TEACHER_NAME_RULE };
     var ins = getOrCreateInstructor_(rep.city_id, name, adminTg); // مدرس در فهرست همان شهرستان هم ثبت/پیدا می‌شود
     return { patch: { instructor_id: ins.instructor_id, instructor_name: ins.name } };
   }
@@ -700,8 +700,8 @@ function toggleInstructor_(cb, chatId, iid, mid) {
 function renameInstructor_(iid, raw) {
   var ins = getInstructorAny_(iid);
   if (!ins) return { ok: false, msg: 'مدرس پیدا نشد.' };
-  var name = normalizeName_(raw), norm = normCmp_(name);
-  if (name.length < 3) return { ok: false, msg: 'نام را کامل بنویسید (حداقل ۳ حرف).' };
+  var name = normalizeName_(raw), norm = normCmp_(name), issue = instructorNameIssue_(name);
+  if (issue) return { ok: false, msg: issue + '\n' + TXT.TEACHER_NAME_RULE };
   var clash = readTable_('Instructors').filter(function (r) {
     return num_(r.city_id) === num_(ins.city_id) && String(r.name_norm) === norm && num_(r.instructor_id) !== num_(iid);
   })[0];
@@ -712,8 +712,8 @@ function renameInstructor_(iid, raw) {
 }
 function addInstructorAdmin_(cityId, raw, adminTg) {
   if (!getCityById_(cityId)) return { ok: false, msg: 'شهرستان پیدا نشد.' };
-  var name = normalizeName_(raw), norm = normCmp_(name);
-  if (name.length < 3) return { ok: false, msg: 'نام را کامل بنویسید (حداقل ۳ حرف).' };
+  var name = normalizeName_(raw), norm = normCmp_(name), issue = instructorNameIssue_(name);
+  if (issue) return { ok: false, msg: issue + '\n' + TXT.TEACHER_NAME_RULE };
   var same = readTable_('Instructors').filter(function (r) { return num_(r.city_id) === num_(cityId) && String(r.name_norm) === norm; })[0];
   if (same && String(same.is_active) !== '0') return { ok: false, msg: 'این مدرس از قبل در فهرست هست.' };
   if (same) { updateRow_('Instructors', same._row, { is_active: '1' }); bustCache_(); return { ok: true, msg: 'مدرس «' + same.name + '» دوباره فعال شد.' }; }

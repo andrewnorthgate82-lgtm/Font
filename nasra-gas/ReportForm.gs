@@ -55,7 +55,8 @@ function showStep_(chatId, tg, s, step, editId) {
   } else if (step === 'operation') {
     text = TXT.ASK_OPERATION; rows = [[btn_('ندارد', 'op0')]];
   } else if (step === 'subject') {
-    text = TXT.ASK_SUBJECT; rows = [];
+    text = TXT.ASK_SUBJECT;
+    rows = SUBJECT_SUGGESTIONS.map(function (sj, idx) { return [btn_(sj, 'sj:' + idx)]; });
   } else if (step === 'teacher') {
     text = TXT.ASK_TEACHER;
     var p = paginate_(listInstructors_(u.city_id), s.data.tp || 0, CFG.TEACHERS_PER_PAGE);
@@ -181,8 +182,8 @@ function handleFormText_(msg, s) {
     s.data.subject = msg.text.trim(); saveSession_(chatId, tg, s);
     goNext_(chatId, tg, s, 'teacher', 0);
   } else if (step === 'teacherNew') {
-    var name = normalizeName_(msg.text);
-    if (name.length < 3) { tgSend_(chatId, 'نام مدرس را کامل بنویسید:'); return; }
+    var name = normalizeName_(msg.text), issue = instructorNameIssue_(name);
+    if (issue) { tgSend_(chatId, '⚠️ ' + issue + '\n\n' + TXT.TEACHER_NAME_RULE + '\n\nدوباره بنویسید:'); return; }
     var t = getOrCreateInstructor_(u.city_id, name, tg);
     s.data.instructor_id = t.instructor_id; s.data.instructor_name = t.name;
     saveSession_(chatId, tg, s);
@@ -241,6 +242,12 @@ function handleFormCb_(cb, s, data) {
     tgAnswerCb_(cb.id); goNext_(chatId, tg, s, 'class', 0); return;
   }
   if (p === 'ct') { s.data.class_type = CFG.CLASS_TYPES[num_(v)]; saveSession_(chatId, tg, s); tgAnswerCb_(cb.id); goNext_(chatId, tg, s, 'operation', mid); return; }
+  if (p === 'sj') { // پیشنهاد موضوع (قدم ۴)
+    var subj = /^\d+$/.test(String(v)) ? SUBJECT_SUGGESTIONS[num_(v)] : null;
+    if (step !== 'subject' || !subj) { tgAnswerCb_(cb.id, 'این دکمه دیگر فعال نیست.', true); return; }
+    s.data.subject = subj; saveSession_(chatId, tg, s); tgAnswerCb_(cb.id, subj);
+    goNext_(chatId, tg, s, 'teacher', mid); return;
+  }
   if (data === 'op0') { s.data.operation_name = ''; saveSession_(chatId, tg, s); tgAnswerCb_(cb.id); goNext_(chatId, tg, s, 'subject', mid); return; }
   if (p === 'tp') { s.data.tp = num_(v); saveSession_(chatId, tg, s); tgAnswerCb_(cb.id); showStep_(chatId, tg, s, 'teacher', mid); return; }
   if (data === 'tn') { tgAnswerCb_(cb.id); showStep_(chatId, tg, s, 'teacherNew', mid); return; }
