@@ -1,19 +1,8 @@
-// ReportForm.gs — فرم ۱۱ قدمی ثبت گزارش + پیش‌نمایش + ویرایش تک‌فیلدی + اصلاحیه پس از رد
+// ReportForm.gs — فرم ثبت گزارش (قدم‌ها برای هر نوع برنامه جداست؛ تعریفشان در Caption.gs) + پیش‌نمایش + ویرایش + اصلاحیه پس از رد
 // در هر قدم «↩️ بازگشت» و «❌ انصراف» هست. قدم‌های دکمه‌ای پیام قبلی را ویرایش می‌کنند تا مصرف سهمیه کم شود.
+// حالت ویرایش (از پیش‌نمایش یا اصلاحیه): بعد از هر قدم فقط بخش‌های ناقص پرسیده می‌شود و بعد پیش‌نمایش.
 
-var FORM_BACK = {
-  class: 'photos', operation: 'class', subject: 'operation', teacher: 'subject',
-  teacherNew: 'teacher', date: 'teacher', year: 'date', month: 'year', day: 'month',
-  hour: 'date', minute: 'hour', duration: 'hour', participants: 'duration',
-  audience: 'participants', place: 'audience', preview: 'place'
-};
-var FORM_SUBSTEPS = { year: 1, month: 1, day: 1, minute: 1 };
-var EDIT_FIELDS = [
-  ['photos', '📷 عکس‌ها'], ['class', 'نوع کلاس/برنامه'], ['operation', 'نام عملیات'],
-  ['subject', 'موضوع'], ['teacher', 'مدرس/سخنران'], ['date', 'تاریخ برگزاری'],
-  ['hour', 'ساعت برگزاری'], ['duration', 'مدت زمان'], ['participants', 'تعداد شرکت‌کنندگان'],
-  ['audience', 'نوع مخاطبین'], ['place', 'مکان برگزاری']
-];
+var FORM_SUBSTEPS = { year: 1, month: 1, day: 1, minute: 1, teacherNew: 1 };
 
 function startReport_(chatId, tg, user) {
   if (!positionOf_(user && user.position)) { askPosition_(chatId, tg); return; } // فاز ۴: نقش فقط یک بار پرسیده می‌شود
@@ -38,38 +27,72 @@ function photosKb_(n) {
 }
 function stepOf_(session) { return String(session.state || '').replace('form:', ''); }
 
+
+// گزینه‌های «بستر» برای همین گزارش (کلاس مجازی ← پلتفرم‌ها، انتشار شبکه اجتماعی ← شبکه‌ها، بقیه خلاقانه ← فقط نوشتنی)
+function platformOptions_(d) {
+  if (isOnlineClass_(d.class_type, d.class_sub)) return ONLINE_PLATFORMS;
+  if (d.class_type === 'خلاقانه' && d.class_sub === CLASS_SUBS['خلاقانه'][0]) return SOCIAL_PLATFORMS;
+  return [];
+}
+function platformPrompt_(d) {
+  if (isOnlineClass_(d.class_type, d.class_sub)) return TXT.ASK_PLATFORM_ONLINE;
+  return platformOptions_(d).length ? TXT.ASK_PLATFORM_SOCIAL : TXT.ASK_PLATFORM_CREATIVE;
+}
+// بخش‌هایی که به «نوع» بستگی دارند؛ با عوض شدن نوع پاک می‌شوند تا دوباره (و درست) پرسیده شوند
+function resetTypeFields_(d) {
+  ['class_sub', 'operation_name', 'event_year', 'event_month', 'event_day', 'event_time', 'hour', 'duration_min',
+    'participants', 'audience', 'place', 'link', 'tmpY', 'tmpM'].forEach(function (k) { delete d[k]; });
+}
+// تولیدات قدم تاریخ ندارد: تاریخ = روز ارسال (برای دوره گزارش، ماه کپشن و فایل اکسل)
+function fillAutoFields_(d) {
+  if (d.class_type && formFlow_(d).indexOf('date') === -1 && !(num_(d.event_year) > 0)) {
+    var t = todayJalali_();
+    d.event_year = t.jy; d.event_month = t.jm; d.event_day = t.jd;
+  }
+}
+function rowsOf_(labels, prefix, perRow) {
+  var rows = [], row = [];
+  labels.forEach(function (l, i) { row.push(btn_(l, prefix + i)); if (row.length === perRow) { rows.push(row); row = []; } });
+  if (row.length) rows.push(row);
+  return rows;
+}
+
 function showStep_(chatId, tg, s, step, editId) {
-  var u = getUserByTg_(tg), text = '', rows = null, i;
+  var u = getUserByTg_(tg), d = s.data, type = d.class_type, text = '', rows = null, i;
   s.state = 'form:' + step;
   if (step === 'photos') {
-    var n = (s.data.photos || []).length;
+    var n = (d.photos || []).length;
     text = n === 0 ? TXT.FORM_START : '📷 تا حالا ' + n + ' عکس دریافت شد (حداکثر ' + CFG.MAX_PHOTOS + '). عکس بعدی را بفرستید یا «پایان ارسال عکس» را بزنید.';
     var sent = tgSend_(chatId, text, photosKb_(n));
-    if (sent) s.data.photosMsg = sent.message_id;
+    if (sent) d.photosMsg = sent.message_id;
     saveSession_(chatId, tg, s);
     return;
   }
   if (step === 'class') {
     text = TXT.ASK_CLASS; rows = [];
     CFG.CLASS_TYPES.forEach(function (ct, idx) { rows.push([btn_(ct, 'ct:' + idx)]); });
+  } else if (step === 'sub') {
+    var subs = (CLASS_SUBS[type] || []).map(subLabel_);
+    text = type === 'توانمندسازی' ? TXT.ASK_SUB_EMPOWER : type === 'تولیدات' ? TXT.ASK_SUB_PRODUCT : TXT.ASK_SUB_CREATIVE;
+    rows = rowsOf_(subs, 'sb:', 2);
   } else if (step === 'operation') {
     text = TXT.ASK_OPERATION; rows = [[btn_('ندارد', 'op0')]];
   } else if (step === 'subject') {
-    text = TXT.ASK_SUBJECT;
+    text = type === 'تولیدات' ? TXT.ASK_SUBJECT_PRODUCT : TXT.ASK_SUBJECT;
     rows = SUBJECT_SUGGESTIONS.map(function (sj, idx) { return [btn_(sj, 'sj:' + idx)]; });
   } else if (step === 'teacher') {
-    text = TXT.ASK_TEACHER;
-    var p = paginate_(listInstructors_(u.city_id), s.data.tp || 0, CFG.TEACHERS_PER_PAGE);
+    text = type === 'تولیدات' ? TXT.ASK_PRODUCER : TXT.ASK_TEACHER;
+    var p = paginate_(listInstructors_(u.city_id), d.tp || 0, CFG.TEACHERS_PER_PAGE);
     rows = p.chunk.map(function (t) { return [btn_(t.name, 'te:' + t.instructor_id)]; });
-    rows.push([btn_('➕ مدرس جدید', 'tn')]);
+    rows.push([btn_(type === 'تولیدات' ? '➕ تولید کننده جدید' : '➕ مدرس جدید', 'tn')]);
     var nav = [];
     if (p.page > 0) nav.push(btn_('⬅️ قبلی', 'tp:' + (p.page - 1)));
     if (p.page < p.total - 1) nav.push(btn_('بعدی ➡️', 'tp:' + (p.page + 1)));
     if (nav.length) rows.push(nav);
   } else if (step === 'teacherNew') {
-    text = TXT.ASK_TEACHER_NEW; rows = [];
+    text = type === 'تولیدات' ? TXT.ASK_PRODUCER_NEW : TXT.ASK_TEACHER_NEW; rows = [];
   } else if (step === 'date') {
-    text = TXT.ASK_DATE;
+    text = type === 'خلاقانه' ? TXT.ASK_DATE_PUBLISH : TXT.ASK_DATE;
     rows = [[btn_('امروز', 'dq:0'), btn_('دیروز', 'dq:-1'), btn_('۲ روز پیش', 'dq:-2')], [btn_('📅 تاریخ دیگر', 'dc')]];
   } else if (step === 'year') {
     text = TXT.ASK_YEAR; rows = []; var r3 = [], cur = todayJalali_().jy;
@@ -80,7 +103,7 @@ function showStep_(chatId, tg, s, step, editId) {
     JALALI_MONTHS.forEach(function (m, idx) { rm.push(btn_(m, 'dm:' + (idx + 1))); if (rm.length === 3) { rows.push(rm); rm = []; } });
     if (rm.length) rows.push(rm);
   } else if (step === 'day') {
-    text = TXT.ASK_DAY; rows = []; var rd = [], nd = daysInJalaliMonth_(s.data.tmpY, s.data.tmpM);
+    text = TXT.ASK_DAY; rows = []; var rd = [], nd = daysInJalaliMonth_(d.tmpY, d.tmpM);
     for (i = 1; i <= nd; i++) { rd.push(btn_(String(i), 'dd:' + i)); if (rd.length === 7) { rows.push(rd); rd = []; } }
     if (rd.length) rows.push(rd);
   } else if (step === 'hour') {
@@ -92,41 +115,60 @@ function showStep_(chatId, tg, s, step, editId) {
     rows = [CFG.MINUTES.map(function (m) { return btn_(m, 'tm:' + m); })];
   } else if (step === 'duration') {
     text = TXT.ASK_DURATION;
-    rows = [CFG.DURATIONS_MIN.map(function (d) { return btn_(d + ' دقیقه', 'du:' + d); })];
+    rows = [CFG.DURATIONS_MIN.map(function (x) { return btn_(x + ' دقیقه', 'du:' + x); })];
   } else if (step === 'participants') {
     text = TXT.ASK_PARTICIPANTS; rows = [];
+  } else if (step === 'views') {
+    text = TXT.ASK_VIEWS; rows = [];
   } else if (step === 'audience') {
     text = TXT.ASK_AUDIENCE;
     rows = [CFG.AUDIENCES.map(function (a, idx) { return btn_(a, 'au:' + idx); })];
   } else if (step === 'place') {
     text = TXT.ASK_PLACE; rows = [];
+  } else if (step === 'platform') {
+    text = platformPrompt_(d); rows = rowsOf_(platformOptions_(d), 'pf:', 3);
+  } else if (step === 'link') {
+    text = type === 'خلاقانه' ? TXT.ASK_LINK_CREATIVE : TXT.ASK_LINK_ONLINE; rows = [[btn_('ندارد', 'lk0')]];
   }
+  if (!FORM_SUBSTEPS[step]) text = stepNo_(d, step) + ' — ' + text;
   rows = (rows || []).concat(backCancelRows_());
   var kb = ikb_(rows), res = null;
   if (editId) res = tgEdit_(chatId, editId, text, kb);
-  if (!res) { res = tgSend_(chatId, text, kb); if (res) s.data.lastMsg = res.message_id; }
+  if (!res) { res = tgSend_(chatId, text, kb); if (res) d.lastMsg = res.message_id; }
   saveSession_(chatId, tg, s);
 }
 
-function goNext_(chatId, tg, s, normalNext, editId) {
-  if (s.data.editing) {
-    s.data.editing = false; saveSession_(chatId, tg, s);
+// بعد از کامل شدن یک قدم: حالت عادی ← قدم بعدیِ همین نوع ؛ حالت ویرایش ← اولین بخش ناقص یا پیش‌نمایش
+function goNext_(chatId, tg, s, doneStep, editId) {
+  var d = s.data, nx;
+  if (d.editing) {
+    nx = firstMissing_(d);
+    if (nx) { saveSession_(chatId, tg, s); showStep_(chatId, tg, s, nx, editId); return; }
+    d.editing = false; saveSession_(chatId, tg, s);
     showPreview_(chatId, tg, s);
-  } else showStep_(chatId, tg, s, normalNext, editId);
+    return;
+  }
+  nx = nextStep_(d, doneStep);
+  if (nx === 'preview') nx = firstMissing_(d) || 'preview';
+  if (nx === 'preview') showPreview_(chatId, tg, s);
+  else showStep_(chatId, tg, s, nx, editId);
 }
 
 function showPreview_(chatId, tg, s) {
-  var u = getUserByTg_(tg), city = getCityById_(u.city_id);
-  s.state = 'form:preview'; saveSession_(chatId, tg, s);
-  var d = s.data;
-  if (!d.event_year || !d.duration_min || !d.participants || !(d.photos || []).length) {
-    tgSend_(chatId, '⚠️ بعضی اطلاعات فرم ناقص است. از «✏️ ویرایش» بخش ناقص را کامل کنید.', editFieldsKb_());
+  var u = getUserByTg_(tg), city = getCityById_(u.city_id), d = s.data;
+  fillAutoFields_(d);
+  var miss = firstMissing_(d);
+  if (miss) {
+    d.editing = true; saveSession_(chatId, tg, s);
+    tgSend_(chatId, '⚠️ بخش «' + stepLabel_(d.class_type, miss) + '» هنوز کامل نشده است:');
+    showStep_(chatId, tg, s, miss, 0);
     return;
   }
+  s.state = 'form:preview'; saveSession_(chatId, tg, s);
   var caption = captionFromData_(d, city ? city.hashtag : '', todayJalaliStr_()); // پیش‌نمایش: تاریخ درج = امروز
   if (caption.length > CFG.CAPTION_LIMIT) {
     tgSend_(chatId, '⚠️ متن کپشن از حد مجاز تلگرام (' + CFG.CAPTION_LIMIT + ' حرف) بلندتر شده است (' +
-      caption.length + ' حرف).\nلطفاً «موضوع» یا «مکان» را کوتاه‌تر کنید.', editFieldsKb_());
+      caption.length + ' حرف).\nلطفاً «موضوع» یا «بستر / مکان» را کوتاه‌تر کنید.', editFieldsKb_(d));
     return;
   }
   tgSendAlbum_(chatId, d.photos, caption);
@@ -135,10 +177,10 @@ function showPreview_(chatId, tg, s) {
     [btn_('✏️ ویرایش', 'pe'), btn_('❌ انصراف', 'cx')]
   ]));
 }
-function editFieldsKb_() {
+function editFieldsKb_(d) {
   var rows = [], row = [];
-  EDIT_FIELDS.forEach(function (f) {
-    row.push(btn_(f[1], 'ef:' + f[0]));
+  formFlow_(d).forEach(function (st) {
+    row.push(btn_(stepLabel_(d.class_type, st), 'ef:' + st));
     if (row.length === 2) { rows.push(row); row = []; }
   });
   if (row.length) rows.push(row);
@@ -171,35 +213,45 @@ function handleFormPhoto_(msg, s) {
 
 // ---------- قدم‌های متنی ----------
 function handleFormText_(msg, s) {
-  var chatId = msg.chat.id, tg = msg.from.id, step = stepOf_(s);
-  var u = getUserByTg_(tg);
+  var chatId = msg.chat.id, tg = msg.from.id, step = stepOf_(s), d = s.data;
+  var u = getUserByTg_(tg), raw = String(msg.text || '').trim(), n;
   if (!isActiveEmployee_(u)) { denyEmployee_(chatId, tg); return; }
   if (step === 'operation') {
-    s.data.operation_name = msg.text.trim(); saveSession_(chatId, tg, s);
-    goNext_(chatId, tg, s, 'subject', 0);
+    d.operation_name = raw; saveSession_(chatId, tg, s);
+    goNext_(chatId, tg, s, 'operation', 0);
   } else if (step === 'subject') {
-    if (!msg.text.trim()) { tgSend_(chatId, TXT.ASK_SUBJECT); return; }
-    s.data.subject = msg.text.trim(); saveSession_(chatId, tg, s);
-    goNext_(chatId, tg, s, 'teacher', 0);
+    if (!raw) { tgSend_(chatId, TXT.ASK_SUBJECT); return; }
+    d.subject = raw; saveSession_(chatId, tg, s);
+    goNext_(chatId, tg, s, 'subject', 0);
   } else if (step === 'teacherNew') {
-    var name = normalizeName_(msg.text), issue = instructorNameIssue_(name);
+    var name = normalizeName_(raw), issue = instructorNameIssue_(name);
     if (issue) { tgSend_(chatId, '⚠️ ' + issue + '\n\n' + TXT.TEACHER_NAME_RULE + '\n\nدوباره بنویسید:'); return; }
     var t = getOrCreateInstructor_(u.city_id, name, tg);
-    s.data.instructor_id = t.instructor_id; s.data.instructor_name = t.name;
+    d.instructor_id = t.instructor_id; d.instructor_name = t.name;
     saveSession_(chatId, tg, s);
-    goNext_(chatId, tg, s, 'date', 0);
+    goNext_(chatId, tg, s, 'teacher', 0);
   } else if (step === 'participants') {
-    var n = parseIntFa_(msg.text);
+    n = parseIntFa_(raw);
     if (n === null || n < CFG.MIN_PARTICIPANTS || n > CFG.MAX_PARTICIPANTS) { tgSend_(chatId, TXT.PARTICIPANTS_BAD); return; }
-    s.data.participants = n; saveSession_(chatId, tg, s);
-    goNext_(chatId, tg, s, 'audience', 0);
-  } else if (step === 'place') {
-    if (!msg.text.trim()) { tgSend_(chatId, TXT.ASK_PLACE); return; }
-    s.data.place = msg.text.trim(); s.data.editing = false; saveSession_(chatId, tg, s);
-    showPreview_(chatId, tg, s);
+    d.participants = n; saveSession_(chatId, tg, s);
+    goNext_(chatId, tg, s, 'participants', 0);
+  } else if (step === 'views') {
+    n = parseIntFa_(raw);
+    if (n === null || n < 1 || n > MAX_VIEWS) { tgSend_(chatId, TXT.VIEWS_BAD); return; }
+    d.participants = n; saveSession_(chatId, tg, s);
+    goNext_(chatId, tg, s, 'views', 0);
+  } else if (step === 'place' || step === 'platform') {
+    if (!raw) { tgSend_(chatId, step === 'place' ? TXT.ASK_PLACE : platformPrompt_(d)); return; }
+    d.place = raw; saveSession_(chatId, tg, s);
+    goNext_(chatId, tg, s, step, 0);
+  } else if (step === 'link') {
+    var lk = parseLinkInput_(raw);
+    if (lk.error) { tgSend_(chatId, '⚠️ ' + lk.error, ikb_([[btn_('ندارد', 'lk0')]])); return; }
+    d.link = lk.link; saveSession_(chatId, tg, s);
+    goNext_(chatId, tg, s, 'link', 0);
   } else if (step === 'photos') {
     tgSend_(chatId, 'عکس‌ها را بفرستید یا روی «✅ پایان ارسال عکس» بزنید.');
-  } else { // قدم‌های دکمه‌ای: نوع کلاس، مدرس، تاریخ، ساعت، مدت، مخاطب، پیش‌نمایش
+  } else { // قدم‌های دکمه‌ای: نوع، زیرشاخه، مدرس، تاریخ، ساعت، مدت، مخاطب، پیش‌نمایش
     tgSend_(chatId, 'لطفاً در این قدم از دکمه‌ها استفاده کنید 🙏');
   }
 }
@@ -216,7 +268,8 @@ function handleFormCb_(cb, s, data) {
     return;
   }
   if (!isActiveEmployee_(u)) { tgAnswerCb_(cb.id, TXT.NO_ACCESS, true); return; }
-  var step = stepOf_(s), parts = data.split(':'), p = parts[0], v = parts[1];
+  var step = stepOf_(s), parts = data.split(':'), p = parts[0], v = parts[1], d = s.data || {};
+  function stale() { tgAnswerCb_(cb.id, 'این دکمه دیگر فعال نیست.', true); }
 
   if (p === 'po') { // انتخاب نقش (فاز ۴)
     var pos = /^\d$/.test(String(v)) ? POSITIONS[num_(v)] : null;
@@ -228,92 +281,135 @@ function handleFormCb_(cb, s, data) {
     startReport_(chatId, tg, fresh);
     return;
   }
+  if (String(s.state || '').indexOf('form:') !== 0) { stale(); return; } // دکمه فرمِ تمام‌شده یا لغوشده
 
   if (data === 'bk') {
     tgAnswerCb_(cb.id);
-    if (s.data.editing && !FORM_SUBSTEPS[step]) {
-      s.data.editing = false; saveSession_(chatId, tg, s);
+    if (d.editing && !FORM_SUBSTEPS[step] && !firstMissing_(d)) {
+      d.editing = false; saveSession_(chatId, tg, s);
       showPreview_(chatId, tg, s);
-    } else showStep_(chatId, tg, s, FORM_BACK[step] || 'photos', mid);
+    } else showStep_(chatId, tg, s, prevStep_(d, step), mid);
     return;
   }
   if (data === 'pd') {
-    if (!(s.data.photos || []).length) { tgAnswerCb_(cb.id, TXT.PHOTO_NEED_ONE, true); return; }
-    tgAnswerCb_(cb.id); goNext_(chatId, tg, s, 'class', 0); return;
+    if (step !== 'photos') { stale(); return; }
+    if (!(d.photos || []).length) { tgAnswerCb_(cb.id, TXT.PHOTO_NEED_ONE, true); return; }
+    tgAnswerCb_(cb.id); goNext_(chatId, tg, s, 'photos', 0); return;
   }
-  if (p === 'ct') { s.data.class_type = CFG.CLASS_TYPES[num_(v)]; saveSession_(chatId, tg, s); tgAnswerCb_(cb.id); goNext_(chatId, tg, s, 'operation', mid); return; }
-  if (p === 'sj') { // پیشنهاد موضوع (قدم ۴)
+  if (p === 'ct') {
+    var nt = /^\d+$/.test(String(v)) ? CFG.CLASS_TYPES[num_(v)] : null;
+    if (step !== 'class' || !nt) { stale(); return; }
+    if (nt !== d.class_type) resetTypeFields_(d); // نوع عوض شد: بخش‌های وابسته به نوع دوباره پرسیده می‌شوند
+    d.class_type = nt; saveSession_(chatId, tg, s); tgAnswerCb_(cb.id);
+    goNext_(chatId, tg, s, 'class', mid); return;
+  }
+  if (p === 'sb') {
+    var subs = CLASS_SUBS[d.class_type] || [], sub = /^\d+$/.test(String(v)) ? subs[num_(v)] : null;
+    if (step !== 'sub' || !sub) { stale(); return; }
+    if (d.class_type === 'توانمندسازی' && sub !== d.class_sub) { delete d.operation_name; delete d.place; delete d.link; } // حضوری ↔ مجازی
+    d.class_sub = sub; saveSession_(chatId, tg, s); tgAnswerCb_(cb.id, subLabel_(sub));
+    goNext_(chatId, tg, s, 'sub', mid); return;
+  }
+  if (data === 'op0') {
+    if (step !== 'operation') { stale(); return; }
+    d.operation_name = ''; saveSession_(chatId, tg, s); tgAnswerCb_(cb.id); goNext_(chatId, tg, s, 'operation', mid); return;
+  }
+  if (p === 'sj') { // پیشنهاد موضوع
     var subj = /^\d+$/.test(String(v)) ? SUBJECT_SUGGESTIONS[num_(v)] : null;
-    if (step !== 'subject' || !subj) { tgAnswerCb_(cb.id, 'این دکمه دیگر فعال نیست.', true); return; }
-    s.data.subject = subj; saveSession_(chatId, tg, s); tgAnswerCb_(cb.id, subj);
-    goNext_(chatId, tg, s, 'teacher', mid); return;
+    if (step !== 'subject' || !subj) { stale(); return; }
+    d.subject = subj; saveSession_(chatId, tg, s); tgAnswerCb_(cb.id, subj);
+    goNext_(chatId, tg, s, 'subject', mid); return;
   }
-  if (data === 'op0') { s.data.operation_name = ''; saveSession_(chatId, tg, s); tgAnswerCb_(cb.id); goNext_(chatId, tg, s, 'subject', mid); return; }
-  if (p === 'tp') { s.data.tp = num_(v); saveSession_(chatId, tg, s); tgAnswerCb_(cb.id); showStep_(chatId, tg, s, 'teacher', mid); return; }
-  if (data === 'tn') { tgAnswerCb_(cb.id); showStep_(chatId, tg, s, 'teacherNew', mid); return; }
+  if (p === 'tp') { if (step !== 'teacher') { stale(); return; } d.tp = num_(v); saveSession_(chatId, tg, s); tgAnswerCb_(cb.id); showStep_(chatId, tg, s, 'teacher', mid); return; }
+  if (data === 'tn') { if (step !== 'teacher') { stale(); return; } tgAnswerCb_(cb.id); showStep_(chatId, tg, s, 'teacherNew', mid); return; }
   if (p === 'te') {
+    if (step !== 'teacher') { stale(); return; }
     var t = getInstructorInCity_(num_(v), u.city_id); // فقط شهرستان خود کارمند
-    if (!t) { tgAnswerCb_(cb.id, 'این مدرس در شهرستان شما یافت نشد.', true); return; }
-    s.data.instructor_id = t.instructor_id; s.data.instructor_name = t.name;
+    if (!t) { tgAnswerCb_(cb.id, 'این نام در فهرست شهرستان شما یافت نشد.', true); return; }
+    d.instructor_id = t.instructor_id; d.instructor_name = t.name;
+    saveSession_(chatId, tg, s); tgAnswerCb_(cb.id); goNext_(chatId, tg, s, 'teacher', mid); return;
+  }
+  if (data === 'dc') { if (step !== 'date') { stale(); return; } tgAnswerCb_(cb.id); showStep_(chatId, tg, s, 'year', mid); return; }
+  if (p === 'dq') {
+    if (step !== 'date') { stale(); return; }
+    var dq = jalaliOffset_(Math.max(-2, Math.min(0, num_(v))));
+    d.event_year = dq.jy; d.event_month = dq.jm; d.event_day = dq.jd;
     saveSession_(chatId, tg, s); tgAnswerCb_(cb.id); goNext_(chatId, tg, s, 'date', mid); return;
   }
-  if (data === 'dc') { tgAnswerCb_(cb.id); showStep_(chatId, tg, s, 'year', mid); return; }
-  if (p === 'dq') {
-    var d = jalaliOffset_(num_(v));
-    s.data.event_year = d.jy; s.data.event_month = d.jm; s.data.event_day = d.jd;
-    saveSession_(chatId, tg, s); tgAnswerCb_(cb.id); goNext_(chatId, tg, s, 'hour', mid); return;
-  }
-  if (p === 'dy') { s.data.tmpY = num_(v); saveSession_(chatId, tg, s); tgAnswerCb_(cb.id); showStep_(chatId, tg, s, 'month', mid); return; }
-  if (p === 'dm') { s.data.tmpM = num_(v); saveSession_(chatId, tg, s); tgAnswerCb_(cb.id); showStep_(chatId, tg, s, 'day', mid); return; }
+  if (p === 'dy') { if (step !== 'year') { stale(); return; } d.tmpY = num_(v); saveSession_(chatId, tg, s); tgAnswerCb_(cb.id); showStep_(chatId, tg, s, 'month', mid); return; }
+  if (p === 'dm') { if (step !== 'month') { stale(); return; } d.tmpM = num_(v); saveSession_(chatId, tg, s); tgAnswerCb_(cb.id); showStep_(chatId, tg, s, 'day', mid); return; }
   if (p === 'dd') {
-    if (isFutureJalali_(s.data.tmpY, s.data.tmpM, num_(v))) {
+    if (step !== 'day') { stale(); return; }
+    if (isFutureJalali_(d.tmpY, d.tmpM, num_(v))) {
       tgAnswerCb_(cb.id, TXT.DATE_FUTURE, true);
       showStep_(chatId, tg, s, 'date', mid); return;
     }
-    s.data.event_year = s.data.tmpY; s.data.event_month = s.data.tmpM; s.data.event_day = num_(v);
+    d.event_year = d.tmpY; d.event_month = d.tmpM; d.event_day = num_(v);
+    saveSession_(chatId, tg, s); tgAnswerCb_(cb.id); goNext_(chatId, tg, s, 'date', mid); return;
+  }
+  if (p === 'th') { if (step !== 'hour') { stale(); return; } d.hour = v; saveSession_(chatId, tg, s); tgAnswerCb_(cb.id); showStep_(chatId, tg, s, 'minute', mid); return; }
+  if (p === 'tm') {
+    if (step !== 'minute') { stale(); return; }
+    d.event_time = (d.hour || '00') + ':' + v;
     saveSession_(chatId, tg, s); tgAnswerCb_(cb.id); goNext_(chatId, tg, s, 'hour', mid); return;
   }
-  if (p === 'th') { s.data.hour = v; saveSession_(chatId, tg, s); tgAnswerCb_(cb.id); showStep_(chatId, tg, s, 'minute', mid); return; }
-  if (p === 'tm') {
-    s.data.event_time = (s.data.hour || '00') + ':' + v;
-    saveSession_(chatId, tg, s); tgAnswerCb_(cb.id); goNext_(chatId, tg, s, 'duration', mid); return;
+  if (p === 'du') { if (step !== 'duration') { stale(); return; } d.duration_min = num_(v); saveSession_(chatId, tg, s); tgAnswerCb_(cb.id); goNext_(chatId, tg, s, 'duration', mid); return; }
+  if (p === 'au') {
+    var au = CFG.AUDIENCES[num_(v)];
+    if (step !== 'audience' || !au) { stale(); return; }
+    d.audience = au; saveSession_(chatId, tg, s); tgAnswerCb_(cb.id); goNext_(chatId, tg, s, 'audience', mid); return;
   }
-  if (p === 'du') { s.data.duration_min = num_(v); saveSession_(chatId, tg, s); tgAnswerCb_(cb.id); goNext_(chatId, tg, s, 'participants', mid); return; }
-  if (p === 'au') { s.data.audience = CFG.AUDIENCES[num_(v)]; saveSession_(chatId, tg, s); tgAnswerCb_(cb.id); goNext_(chatId, tg, s, 'place', mid); return; }
-  if (data === 'pe') { tgAnswerCb_(cb.id); tgSend_(chatId, TXT.EDIT_ASK, editFieldsKb_()); return; }
+  if (p === 'pf') {
+    var pf = /^\d+$/.test(String(v)) ? platformOptions_(d)[num_(v)] : null;
+    if (step !== 'platform' || !pf) { stale(); return; }
+    d.place = pf; saveSession_(chatId, tg, s); tgAnswerCb_(cb.id, pf); goNext_(chatId, tg, s, 'platform', mid); return;
+  }
+  if (data === 'lk0') {
+    if (step !== 'link') { stale(); return; }
+    d.link = ''; saveSession_(chatId, tg, s); tgAnswerCb_(cb.id); goNext_(chatId, tg, s, 'link', mid); return;
+  }
+  if (data === 'pe') { tgAnswerCb_(cb.id); tgSend_(chatId, TXT.EDIT_ASK, editFieldsKb_(d)); return; }
   if (data === 'pw') { tgAnswerCb_(cb.id); showPreview_(chatId, tg, s); return; }
   if (p === 'ef') {
-    s.data.editing = true;
-    if (v === 'photos') { s.data.replacePhotos = true; tgAnswerCb_(cb.id, 'عکس‌های جدید را بفرستید؛ با اولین عکس جدید جایگزین قبلی‌ها می‌شوند. اگر پشیمان شدید «بازگشت» بزنید تا قبلی‌ها بمانند.'); }
+    if (formFlow_(d).indexOf(v) === -1) { stale(); return; } // بخشی که در این نوع نیست
+    d.editing = true;
+    if (v === 'photos') { d.replacePhotos = true; tgAnswerCb_(cb.id, 'عکس‌های جدید را بفرستید؛ با اولین عکس جدید جایگزین قبلی‌ها می‌شوند. اگر پشیمان شدید «بازگشت» بزنید تا قبلی‌ها بمانند.'); }
     else tgAnswerCb_(cb.id);
     saveSession_(chatId, tg, s);
     showStep_(chatId, tg, s, v, 0);
     return;
   }
-  if (data === 'ps') { submitReport_(cb, s, u); return; }
+  if (data === 'ps') { if (step !== 'preview') { stale(); return; } submitReport_(cb, s, u); return; }
   tgAnswerCb_(cb.id);
 }
 
 function submitReport_(cb, s, u) {
-  var chatId = cb.message.chat.id, tg = cb.from.id;
+  var chatId = cb.message.chat.id, tg = cb.from.id, d = s.data;
   if (!submitAllowed_(tg)) {
     tgAnswerCb_(cb.id, '⚠️ خیلی تند! در هر دقیقه حداکثر ' + CFG.MAX_REPORTS_PER_MINUTE + ' گزارش می‌توانید برای بررسی بفرستید. کمی صبر کنید.', true);
     return;
   }
-  var d = s.data, city = getCityById_(u.city_id);
+  fillAutoFields_(d);
+  if (firstMissing_(d)) { tgAnswerCb_(cb.id); showPreview_(chatId, tg, s); return; }
+  var city = getCityById_(u.city_id);
   var caption = captionFromData_(d, city ? city.hashtag : '', todayJalaliStr_());
-  if (caption.length > CFG.CAPTION_LIMIT) { tgAnswerCb_(cb.id, 'کپشن بلندتر از حد مجاز است؛ موضوع یا مکان را کوتاه کنید.', true); return; }
+  if (caption.length > CFG.CAPTION_LIMIT) { tgAnswerCb_(cb.id, 'کپشن بلندتر از حد مجاز است؛ موضوع یا بستر / مکان را کوتاه کنید.', true); return; }
   tgAnswerCb_(cb.id, 'در حال ارسال برای بررسی…');
-  var rep = {
+  var flow = formFlow_(d);
+  function has(x) { return flow.indexOf(x) !== -1; }
+  var rep = { // فقط بخش‌های همین نوع ذخیره می‌شوند (بقیه خالی)
     submitter_telegram_id: tg, employee_name: u.full_name, city_id: u.city_id,
-    instructor_id: d.instructor_id || '', instructor_name: d.instructor_name || '',
-    status: 'pending', class_type: d.class_type, operation_name: d.operation_name || '',
+    instructor_id: has('teacher') ? d.instructor_id || '' : '', instructor_name: has('teacher') ? d.instructor_name || '' : '',
+    status: 'pending', class_type: d.class_type, class_sub: has('sub') ? d.class_sub : '',
+    operation_name: has('operation') ? d.operation_name || '' : '',
     subject: d.subject,
     event_jalali: formatJalali_(d.event_year, d.event_month, d.event_day),
     event_gregorian: jalaliToGregStr_(d.event_year, d.event_month, d.event_day),
     event_year: d.event_year, event_month: d.event_month, event_day: d.event_day,
-    event_time: d.event_time, duration_min: d.duration_min, participants: d.participants,
-    audience: d.audience, place: d.place,
+    event_time: has('hour') ? d.event_time : '', duration_min: has('duration') ? d.duration_min : '',
+    participants: has('participants') || has('views') ? d.participants : '',
+    audience: has('audience') ? d.audience : '', place: has('place') || has('platform') ? d.place : '',
+    link: has('link') ? d.link || '' : '', form_v: FORM_VERSION,
     publish_jalali: '', published_caption: '', channel_message_ids: '[]',
     review_chat_id: '', review_album_ids: '[]', review_info_id: '',
     decided_by: '', decided_at: '', resubmit_count: 0,
@@ -341,7 +437,8 @@ function submitReport_(cb, s, u) {
   });
 }
 
-// اصلاح و ارسال مجدد — فرم با داده‌های قبلی باز می‌شود (نه از صفر)
+// اصلاح و ارسال مجدد — فرم با داده‌های قبلی باز می‌شود (نه از صفر). گزارش قدیمی (پیش از کپشن‌های جداگانه) با فرم تازه
+// باز می‌شود و بخش‌های تازه‌اش (مثلاً زیرشاخه یا لینک) پرسیده می‌شود.
 function handleResubmitCb_(cb, session, data) {
   var chatId = cb.message.chat.id, tg = cb.from.id;
   var u = getUserByTg_(tg);
@@ -352,17 +449,19 @@ function handleResubmitCb_(cb, session, data) {
     tgAnswerCb_(cb.id, TXT.NO_ACCESS, true); return;
   }
   if (r.status !== 'rejected') { tgAnswerCb_(cb.id, 'این گزارش در وضعیت ردشده نیست و قابل اصلاح نمی‌باشد.', true); return; }
-  var s = getSession_(chatId, tg);
+  var s = getSession_(chatId, tg), v2 = isV2_(r);
   s.data = {
     photos: getReportPhotos_(rid).map(function (p) { return { file_id: String(p.file_id), file_unique_id: String(p.file_unique_id || '') }; }),
     editing: false, rid: rid, tp: 0,
-    class_type: r.class_type, operation_name: r.operation_name || '', subject: r.subject,
-    instructor_id: r.instructor_id, instructor_name: r.instructor_name,
+    class_type: String(r.class_type || '').replace(/^#/, ''), operation_name: String(r.operation_name || ''), subject: String(r.subject || ''),
+    instructor_id: r.instructor_id, instructor_name: String(r.instructor_name || ''),
     event_year: num_(r.event_year), event_month: num_(r.event_month), event_day: num_(r.event_day),
-    event_time: String(r.event_time), hour: String(r.event_time || '00:00').split(':')[0],
+    event_time: String(cellToStr_(r.event_time) || ''), hour: String(cellToStr_(r.event_time) || '00:00').split(':')[0],
     duration_min: num_(r.duration_min), participants: num_(r.participants),
-    audience: r.audience, place: r.place
+    audience: String(r.audience || ''), place: String(r.place || '')
   };
+  if (r.class_sub) s.data.class_sub = String(r.class_sub);
+  if (v2) s.data.link = String(r.link || ''); // گزارش قدیمی لینک نداشت ← پرسیده می‌شود
   s.state = 'form:preview';
   saveSession_(chatId, tg, s);
   tgAnswerCb_(cb.id);

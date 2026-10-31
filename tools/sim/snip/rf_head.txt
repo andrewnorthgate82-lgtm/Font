@@ -1,0 +1,23 @@
+function startReport_(chatId, tg, user) {
+  if (!positionOf_(user && user.position)) { askPosition_(chatId, tg); return; } // فاز ۴: نقش فقط یک بار پرسیده می‌شود
+  var s = getSession_(chatId, tg);
+  s.state = 'form:photos';
+  s.data = { photos: [], replacePhotos: false, editing: false, rid: 0, tp: 0 };
+  saveSession_(chatId, tg, s);
+  showStep_(chatId, tg, s, 'photos', 0);
+}
+
+// فاز ۴: همکاری که هنوز نقش ندارد، قبل از اولین گزارش نقش خودش را انتخاب می‌کند (بعداً فقط ادمین عوضش می‌کند)
+function askPosition_(chatId, tg) {
+  var s = getSession_(chatId, tg);
+  s.state = 'form:position'; s.data = {};
+  saveSession_(chatId, tg, s);
+  var rows = POSITIONS.map(function (p, i) { return [btn_(p, 'po:' + i)]; });
+  rows.push([btn_('❌ انصراف', 'cx')]);
+  tgSend_(chatId, '🎖 پیش از ثبت گزارش، نقش خودتان را در شهرستان انتخاب کنید:\n(فقط همین یک بار پرسیده می‌شود؛ برای تغییرِ بعدی به ادمین بگویید.)', ikb_(rows));
+}
+function photosKb_(n) {
+  return ikb_([[btn_('✅ پایان ارسال عکس (' + n + ')', 'pd')], [btn_('❌ انصراف', 'cx')]]);
+}
+function stepOf_(session) { return String(session.state || '').replace('form:', ''); }
+

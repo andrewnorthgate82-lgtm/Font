@@ -1,0 +1,21 @@
+// ---------- عکس‌ها (تکی یا آلبوم؛ شمارنده با ویرایش همان پیام بالا می‌رود) ----------
+function handleFormPhoto_(msg, s) {
+  var chatId = msg.chat.id, tg = msg.from.id;
+  s.data.photos = s.data.photos || [];
+  if (s.data.replacePhotos) { // در ویرایش عکس‌ها: قبلی‌ها فقط با رسیدن اولین عکس جدید کنار می‌روند
+    s.data.photos = [];
+    s.data.replacePhotos = false;
+  }
+  if (s.data.photos.length >= CFG.MAX_PHOTOS) {
+    if (!msg.media_group_id) tgSend_(chatId, '⚠️ حداکثر ' + CFG.MAX_PHOTOS + ' عکس مجاز است؛ عکس‌های اضافه پذیرفته نشدند.', photosKb_(s.data.photos.length));
+    return;
+  }
+  var best = msg.photo[msg.photo.length - 1];
+  s.data.photos.push({ file_id: best.file_id, file_unique_id: best.file_unique_id || '' });
+  var n = s.data.photos.length;
+  var text = '📷 تا حالا ' + n + ' عکس دریافت شد (حداکثر ' + CFG.MAX_PHOTOS + '). عکس بعدی را بفرستید یا «پایان ارسال عکس» را بزنید.';
+  var done = false;
+  if (s.data.photosMsg) done = !!tgEdit_(chatId, s.data.photosMsg, text, photosKb_(n));
+  if (!done) { var sent = tgSend_(chatId, text, photosKb_(n)); if (sent) s.data.photosMsg = sent.message_id; }
+  saveSession_(chatId, tg, s);
+}

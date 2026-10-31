@@ -25,8 +25,24 @@ var REPORT_EDIT_PROMPTS = {
   date: 'تاریخ برگزاری را به شکل 1405/07/23 بنویسید (تاریخ آینده پذیرفته نمی‌شود):',
   time: 'ساعت برگزاری را به شکل 21:00 بنویسید:',
   participants: 'تعداد شرکت‌کنندگان را با عدد بنویسید (۱ تا ۵۰۰۰):',
-  place: 'بستر / مکان برگزاری جدید را بنویسید:'
+  place: 'بستر / مکان برگزاری جدید را بنویسید:',
+  views: 'تعداد بازدید را با عدد بنویسید:',
+  platform: 'بستر برگزاری / انتشار جدید را بنویسید:',
+  link: 'لینک جدید را بفرستید (برای «ندارد» فقط یک خط تیره - بفرستید):'
 };
+// بخش‌های قابل ویرایش هر گزارش در پنل: گزارش قدیمی ← همان فهرست قبلی ؛ گزارش تازه ← دقیقاً بخش‌های کپشن همان نوع
+var STEP_TO_EDIT_FIELD = { class: 'class', sub: 'sub', operation: 'operation', subject: 'subject', teacher: 'teacher', date: 'date',
+  hour: 'time', duration: 'duration', participants: 'participants', views: 'views', audience: 'audience', place: 'place',
+  platform: 'platform', link: 'link' };
+var EDIT_BTN_FIELDS = { class: 1, sub: 1, audience: 1, duration: 1 };
+function reportEditFields_(rep) {
+  if (!isV2_(rep)) return REPORT_EDIT_FIELDS;
+  var type = String(rep.class_type || '');
+  return ['class'].concat(typeFlow_(type, rep.class_sub)).map(function (st) {
+    var f = STEP_TO_EDIT_FIELD[st];
+    return [f, stepLabel_(type, st), EDIT_BTN_FIELDS[f] ? 'btn' : 'text'];
+  });
+}
 
 // ---------- ابزارهای خالص (در runTests تست می‌شوند) ----------
 function parseJalaliInput_(raw) {
@@ -49,19 +65,20 @@ function parseTimeInput_(raw) {
 function monthStats_(reports, cities, jy, jm) {
   var by = {};
   cities.forEach(function (c) { by[num_(c.city_id)] = { name: c.name, count: 0, people: 0 }; });
-  var total = 0, people = 0;
+  var total = 0, people = 0, views = 0;
   reports.forEach(function (r) {
     if (r.status !== 'approved' || !inPeriod_(r, jy, jm)) return;
     var b = by[num_(r.city_id)];
     if (!b) return;
-    b.count++; b.people += num_(r.participants);
-    total++; people += num_(r.participants);
+    b.count++; total++;
+    if (isV2_(r) && r.class_type === 'خلاقانه') { views += num_(r.participants); return; } // «تعداد بازدید» شرکت‌کننده حساب نمی‌شود
+    b.people += num_(r.participants); people += num_(r.participants);
   });
   var rows = Object.keys(by).map(function (k) { return by[k]; });
   var active = rows.filter(function (r) { return r.count > 0; })
     .sort(function (a, b) { return b.count - a.count || b.people - a.people; });
   var zero = rows.filter(function (r) { return r.count === 0; }).map(function (r) { return r.name; });
-  return { rows: active, zero: zero, total: total, people: people };
+  return { rows: active, zero: zero, total: total, people: people, views: views };
 }
 function prevJalaliMonth_(jy, jm) { return jm === 1 ? { jy: jy - 1, jm: 12 } : { jy: jy, jm: jm - 1 }; }
 function nextJalaliMonth_(jy, jm) { return jm === 12 ? { jy: jy + 1, jm: 1 } : { jy: jy, jm: jm + 1 }; }
@@ -141,6 +158,27 @@ function handleAdminCb_(cb, s, data) {
     return;
   }
   if (p === 'rx') { tgAnswerCb_(cb.id); startReportFieldEdit_(chatId, tg, s, num_(a), b, mid); return; }
+  if (p === 'rv' && b === 'class') { // گزارش تازه: نوعی که زیرشاخه دارد، اول زیرشاخه‌اش انتخاب شود
+    var rp0 = getReport_(num_(a)), nt0 = CFG.CLASS_TYPES[num_(c)];
+    if (rp0 && isV2_(rp0) && nt0 && hasSubs_(nt0)) {
+      tgAnswerCb_(cb.id);
+      var srows = [], srow = [];
+      CLASS_SUBS[nt0].forEach(function (x, i) { srow.push(btn_(subLabel_(x), 'A:rw:' + a + ':' + num_(c) + ':' + i)); if (srow.length === 2) { srows.push(srow); srow = []; } });
+      if (srow.length) srows.push(srow);
+      srows.push([btn_('↩️ بازگشت', 'A:re:' + a)]);
+      panelOut_(chatId, mid, '«' + nt0 + '» — کدام بخش؟', ikb_(srows));
+      return;
+    }
+  }
+  if (p === 'rw') { // تغییر نوع + زیرشاخه با هم
+    var nt1 = CFG.CLASS_TYPES[num_(b)], sb1 = nt1 && CLASS_SUBS[nt1] ? CLASS_SUBS[nt1][num_(c)] : null, rp1 = getReport_(num_(a));
+    if (!sb1 || !rp1 || rp1.status !== 'approved') { tgAnswerCb_(cb.id, 'گزینه نامعتبر است.', true); return; }
+    tgAnswerCb_(cb.id, 'در حال ویرایش پست کانال…');
+    var res1 = applyReportEdit_(num_(a), { class_type: nt1, class_sub: sb1 });
+    tgSend_(chatId, res1.ok ? '✅ کپشن پست کانال به‌روز شد.' + (res1.warn ? '\n⚠️ ' + res1.warn : '') + '\nاگر بخشی از کپشن تازه خالی مانده، از «✏️ ویرایش کپشن» تکمیلش کنید.' : '⚠️ ' + res1.msg);
+    showReportCard_(chatId, num_(a), 0);
+    return;
+  }
   if (p === 'rv') {
     var patch = reportPatchFor_(getReport_(num_(a)), b, num_(c), tg);
     if (patch.error) { tgAnswerCb_(cb.id, patch.error, true); return; }
@@ -396,16 +434,31 @@ function reportCardText_(rep) {
     (STATUS_EMOJI[rep.status] || '') + ' گزارش شماره ' + rep.report_id + ' — ' + (STATUS_FA[rep.status] || rep.status),
     'کارمند: ' + rep.employee_name,
     'شهرستان: ' + (cty ? cty.name : '—'),
+  ].concat(reportSummaryLines_(rep), ['دفعات ارسال مجدد: ' + num_(rep.resubmit_count)]);
+  if (rep.status === 'approved') lines.push('تاریخ درج در کانال: ' + String(cellToStr_(rep.publish_jalali)));
+  if (rep.status === 'pending') lines.push('\nتصمیم درباره این گزارش در گروه بررسی گرفته می‌شود.');
+  return lines.join('\n');
+}
+// خلاصه گزارش برای کارت پنل — فقط بخش‌های همان نوع
+function reportSummaryLines_(rep) {
+  if (!isV2_(rep)) return [
     'نوع: ' + rep.class_type + ' — مخاطب: ' + rep.audience,
     'موضوع: ' + rep.subject,
     'مدرس: ' + rep.instructor_name,
     'برگزاری: ' + String(cellToStr_(rep.event_jalali)) + ' ساعت ' + String(cellToStr_(rep.event_time)) + ' — ' + rep.duration_min + ' دقیقه',
-    'تعداد: ' + rep.participants + ' نفر',
-    'دفعات ارسال مجدد: ' + num_(rep.resubmit_count)
+    'تعداد: ' + rep.participants + ' نفر'
   ];
-  if (rep.status === 'approved') lines.push('تاریخ درج در کانال: ' + String(cellToStr_(rep.publish_jalali)));
-  if (rep.status === 'pending') lines.push('\nتصمیم درباره این گزارش در گروه بررسی گرفته می‌شود.');
-  return lines.join('\n');
+  var type = String(rep.class_type || ''), flow = typeFlow_(type, rep.class_sub), out = ['نوع: ' + classFullLabel_(type, rep.class_sub)];
+  function lbl(st) { return stepLabel_(type, st).replace(/^\S+\s/, ''); } // بدون ایموجی
+  flow.forEach(function (st) {
+    var v = { operation: rep.operation_name || 'ندارد', subject: rep.subject, teacher: rep.instructor_name,
+      date: String(cellToStr_(rep.event_jalali)), hour: String(cellToStr_(rep.event_time)), duration: rep.duration_min + ' دقیقه',
+      participants: rep.participants + ' نفر', views: rep.participants, audience: rep.audience, place: rep.place, platform: rep.place,
+      link: rep.link || 'ندارد' }[st];
+    if (v !== undefined) out.push(lbl(st) + ': ' + String(v).replace(/\s*[\r\n]+\s*/g, ' - '));
+  });
+  if (flow.indexOf('date') === -1) out.push('تاریخ (روز ارسال): ' + String(cellToStr_(rep.event_jalali)));
+  return out;
 }
 function reportCardKb_(rep) {
   var rows = [];
@@ -422,8 +475,8 @@ function showReportCard_(chatId, rid, mid) {
   panelOut_(chatId, mid, reportCardText_(rep), reportCardKb_(rep));
 }
 function reportEditKb_(rid) {
-  var rows = [], row = [];
-  REPORT_EDIT_FIELDS.forEach(function (f) {
+  var rows = [], row = [], rep = getReport_(rid);
+  reportEditFields_(rep || {}).forEach(function (f) {
     row.push(btn_(f[1], 'A:rx:' + rid + ':' + f[0]));
     if (row.length === 2) { rows.push(row); row = []; }
   });
@@ -431,14 +484,15 @@ function reportEditKb_(rid) {
   rows.push([btn_('↩️ بازگشت به گزارش', 'A:r:' + rid)]);
   return ikb_(rows);
 }
-function fieldOptions_(field) {
+function fieldOptions_(field, rep) {
+  if (field === 'sub') return (CLASS_SUBS[String(rep && rep.class_type || '')] || []).map(subLabel_);
   if (field === 'class') return CFG.CLASS_TYPES;
   if (field === 'audience') return CFG.AUDIENCES;
   if (field === 'duration') return CFG.DURATIONS_MIN.map(function (x) { return x + ' دقیقه'; });
   return null;
 }
 function fieldOptionsKb_(rid, field) {
-  var opts = fieldOptions_(field) || [], rows = [], row = [];
+  var opts = fieldOptions_(field, getReport_(rid)) || [], rows = [], row = [];
   opts.forEach(function (o, i) {
     row.push(btn_(o, 'A:rv:' + rid + ':' + field + ':' + i));
     if (row.length === 3) { rows.push(row); row = []; }
@@ -450,7 +504,9 @@ function fieldOptionsKb_(rid, field) {
 function startReportFieldEdit_(chatId, tg, s, rid, field, mid) {
   var rep = getReport_(rid);
   if (!rep || rep.status !== 'approved') { panelOut_(chatId, mid, 'فقط گزارش «تایید‌شده» را می‌توان ویرایش کرد.', ikb_([homeRow_()])); return; }
-  if (fieldOptions_(field)) {
+  var allowed = reportEditFields_(rep).some(function (f) { return f[0] === field; });
+  if (!allowed) { panelOut_(chatId, mid, 'این بخش در کپشن این نوع گزارش نیست.', reportEditKb_(rid)); return; }
+  if (fieldOptions_(field, rep)) {
     panelOut_(chatId, mid, 'مقدار جدید را انتخاب کنید:', fieldOptionsKb_(rid, field));
     return;
   }
@@ -466,10 +522,21 @@ function reportPatchFor_(rep, field, raw, adminTg) {
     opts = field === 'class' ? CFG.CLASS_TYPES : field === 'audience' ? CFG.AUDIENCES : CFG.DURATIONS_MIN;
     var v = opts[num_(raw)];
     if (v === undefined) return { error: 'گزینه نامعتبر است.' };
-    if (field === 'class') return { patch: { class_type: v } };
+    if (field === 'class') return { patch: isV2_(rep) ? { class_type: v, class_sub: '' } : { class_type: v } }; // نوع‌های زیرشاخه‌دار از مسیر A:rw
     if (field === 'audience') return { patch: { audience: v } };
     return { patch: { duration_min: v } };
   }
+  if (field === 'sub') {
+    var so = CLASS_SUBS[String(rep.class_type || '')] || [], sv = so[num_(raw)];
+    return sv === undefined ? { error: 'گزینه نامعتبر است.' } : { patch: { class_sub: sv } };
+  }
+  if (field === 'views') {
+    var nv = parseIntFa_(t);
+    if (nv === null || nv < 1 || nv > MAX_VIEWS) return { error: 'عدد معتبر نیست؛ تعداد بازدید را با عدد بنویسید.' };
+    return { patch: { participants: nv } };
+  }
+  if (field === 'platform') return t ? { patch: { place: t } } : { error: 'بستر نمی‌تواند خالی باشد.' };
+  if (field === 'link') { var lk = parseLinkInput_(t); return lk.error ? { error: lk.error } : { patch: { link: lk.link } }; }
   if (field === 'subject') return t ? { patch: { subject: t } } : { error: 'موضوع نمی‌تواند خالی باشد.' };
   if (field === 'place') return t ? { patch: { place: t } } : { error: 'مکان نمی‌تواند خالی باشد.' };
   if (field === 'operation') return { patch: { operation_name: (t === '-' || t === '—' || t === 'ندارد') ? '' : t } };
@@ -547,7 +614,7 @@ function monthStatsText_(reports, jy, jm) {
   var sides = sideCounts_(reports, positionsByTg_(readTable_('Users')), jy, jm, 0);
   var lines = ['📊 گزارش ' + periodName_(jy, jm) + ' — تاییدشده‌ها',
     '🗓 برنامه‌های ' + periodRangeText_(jy, jm) + ' (بر اساس تاریخ برگزاری)',
-    'جمع: ' + st.total + ' گزارش — ' + st.people + ' نفر شرکت‌کننده',
+    'جمع: ' + st.total + ' گزارش — ' + st.people + ' نفر شرکت‌کننده' + (st.views ? ' — ' + st.views + ' بازدید (خلاقانه)' : ''),
     'خواهران: ' + sides.s + ' — برادران: ' + sides.b + ' — فضای مجازی: ' + sides.v + (sides.none ? ' — بدون نقش: ' + sides.none : ''), ''];
   st.rows.forEach(function (r, i) {
     lines.push((i === 0 ? '🏆 ' : (i + 1) + ') ') + r.name + ': ' + r.count + ' گزارش (' + r.people + ' نفر)');

@@ -119,6 +119,7 @@ function sideCounts_(reports, posByTg, jy, jm, cityId) {
 // CSV در ویندوزِ فارسی همه ستون‌ها را در یک سلول می‌ریزد؛ xlsx همه‌جا درست باز می‌شود.
 // پنج برگه دقیقاً مثل فایل نمونه؛ هر گزارش بر اساس هشتگ «نوع کلاس/برنامه» در برگه خودش می‌رود.
 // هر ستون: [عنوان، عرض، فیلد]. فیلد خالی = این اطلاعات در فرم بات پرسیده نمی‌شود و ستون برای پرکردن دستی خالی می‌ماند.
+// sub = زیرشاخه (حضوری/مجازی توانمندسازی، نوع محتوای تولیدات) ؛ cplace = بخش خلاقانه + بستر انتشار.
 var XL_SHEETS = [
   { type: 'حضوری', name: 'سوادرسانه حضوری', cols: [['ردیف', 7, 'n'], ['تاریخ', 13, 'date'], ['نام ناحیه', 18, 'city'],
     ['موضوع', 34, 'subject'], ['نام سخنران / مدرس', 22, 'teacher'], ['مدت (دقیقه)', 12, 'dur'], ['تعداد نفرات', 12, 'ppl'],
@@ -128,11 +129,11 @@ var XL_SHEETS = [
     ['بستر برگزاری', 30, 'place'], ['لینک مستندات', 34, 'link']] },
   { type: 'توانمندسازی', name: 'توانمندسازی گردان', cols: [['ردیف', 7, 'n'], ['تاریخ', 13, 'date'], ['برگزار کننده', 18, 'city'],
     ['موضوع', 34, 'subject'], ['نام سخنران / مدرس', 22, 'teacher'], ['مدت (دقیقه)', 12, 'dur'], ['تعداد نفرات', 12, 'ppl'],
-    ['مکان برگزاری', 30, 'place'], ['لینک مستندات', 34, 'link'], ['نوع کلاس', 16, '']] },
+    ['مکان برگزاری', 30, 'place'], ['لینک مستندات', 34, 'link'], ['نوع کلاس', 16, 'sub']] },
   { type: 'خلاقانه', name: 'سواد رسانه خلاقانه', cols: [['ردیف', 7, 'n'], ['تاریخ', 13, 'date'], ['ناحیه برگزار کننده', 18, 'city'],
-    ['موضوع', 34, 'subject'], ['تعداد نفرات / تعداد بازدید', 18, 'ppl'], ['بستر برگزاری', 30, 'place'], ['لینک مستندات', 34, 'link']] },
+    ['موضوع', 34, 'subject'], ['تعداد نفرات / تعداد بازدید', 18, 'ppl'], ['بستر برگزاری', 30, 'cplace'], ['لینک مستندات', 34, 'link']] },
   { type: 'تولیدات', name: 'تولیدات', cols: [['ردیف', 7, 'n'], ['تاریخ محتوای تولید شده', 16, 'date'], ['تولید کننده', 18, 'city'],
-    ['موضوع', 34, 'subject'], ['نام تولید کننده محتوا', 22, 'teacher'], ['نوع تولید محتوا', 16, ''], ['تعداد صفحات', 12, ''],
+    ['موضوع', 34, 'subject'], ['نام تولید کننده محتوا', 22, 'teacher'], ['نوع تولید محتوا', 16, 'sub'], ['تعداد صفحات', 12, ''],
     ['لینک مستندات', 34, 'link']] }
 ];
 var EXCEL_SIDE_FA = { a: 'تجمیعی', s: 'خواهران', b: 'برادران' };
@@ -168,8 +169,10 @@ function excelSheets_(list, cities, channelId, username) {
       var x = {
         n: i + 1, date: dateOf(r), city: cname[num_(r.city_id)] || '', subject: String(r.subject || ''),
         teacher: String(r.instructor_name || ''), dur: num_(r.duration_min) || '', ppl: num_(r.participants) || '',
-        place: String(r.place || '').replace(/\s*[\r\n]+\s*/g, ' - '), link: channelPostLink_(channelId, username, ids[0])
+        place: String(r.place || '').replace(/\s*[\r\n]+\s*/g, ' - '), link: channelPostLink_(channelId, username, ids[0]),
+        sub: subLabel_(r.class_sub) // حضوری/مجازیِ توانمندسازی ، نوع محتوای تولیدات
       };
+      x.cplace = x.sub ? x.sub + (x.place ? ' — ' + x.place : '') : x.place; // خلاقانه: «چاپ بنر — میدان امام»
       return def.cols.map(function (c) { return c[2] ? x[c[2]] : ''; });
     });
     return { type: def.type, name: def.name, cols: def.cols, rows: rows };
@@ -391,6 +394,7 @@ function installPhase4() {
   var cur = currentPeriod_();
   Logger.log('✅ فاز ۴ نصب شد.');
   Logger.log('دوره فعلی: گزارش ' + periodName_(cur.jy, cur.jm) + ' — برنامه‌های ' + periodRangeText_(cur.jy, cur.jm));
+  Logger.log('ستون‌های class_sub ، link و form_v (کپشن جداگانه هر نوع) به برگه Reports اضافه شد.');
   Logger.log('برگه Samples (نمونه گزارش‌ها) آماده است؛ نمونه‌ها را از پنل /admin ← 📚 نمونه گزارش‌ها ثبت کنید.');
   Logger.log('همکاران فعال: ' + active.length + ' — بدون نقش: ' + noPos + ' (نقش را در برگه Users، ستون position از فهرست کشویی بگذارید، یا در پنل /admin ← کاربران؛ وگرنه بات موقع اولین گزارش از خودشان می‌پرسد)');
   Logger.log('حالا runTests را Run کنید و بعد Deploy ← Manage deployments ← Edit ← New version ← Deploy.');

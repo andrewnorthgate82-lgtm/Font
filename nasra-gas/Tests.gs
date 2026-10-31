@@ -1,5 +1,5 @@
 // Tests.gs — تست‌های پذیرش فاز ۱ تا ۴. در ویرایشگر Apps Script تابع runTests را Run کنید؛
-// در Execution log باید خروجی «26 passed» را ببینید (در صورت شکست، علت هر مورد نوشته می‌شود).
+// در Execution log باید خروجی «27 passed» را ببینید (در صورت شکست، علت هر مورد نوشته می‌شود).
 // تست‌های ۱۲ تا ۱۶ مال پنل مدیریت فاز ۲ (Admin.gs)، ۱۷ تا ۲۰ مال خودکارهای فاز ۳ و ۲۱ تا ۲۳ مال فاز ۴ (دوره ۲۱ تا ۲۰، نقش‌ها، اکسل) هستند؛
 // هیچ‌کدام پیامی به تلگرام نمی‌فرستند و به Google Drive دست نمی‌زنند.
 // نکته: پس از هر به‌روزرسانی کد، یک بار setup()‎ را هم Run کنید (بی‌خطر و تکراری است) تا فرمت متنی ستون‌ها اعمال شود.
@@ -14,8 +14,8 @@ function runTests() {
   function eq(a, b, what) { if (a !== b) throw new Error(what + ' — got: ' + a + ' want: ' + b); }
   function ok(v, what) { if (!v) throw new Error(what); }
 
-  check('۱) قالب دقیق کپشن', function () {
-    var got = buildCaption_({
+  check('۱) قالب دقیق کپشن قدیمی (گزارش‌های پیش از کپشن‌های جداگانه)', function () {
+    var got = buildCaptionV1_({
       publish_jalali: '1405/07/25', city_hashtag: '#نجف_آباد', class_type: 'حضوری',
       operation_name: '', subject: 'آموزش سواد رسانه', instructor_name: 'محمد احمدی',
       event_year: 1405, event_month: 7, event_day: 23, event_time: '21:00',
@@ -531,6 +531,69 @@ function runTests() {
     eq(SUBJECT_SUGGESTIONS.join('|'), 'سواد رسانه عمومی|توانمندسازی گردان سایبری|جنگ شناختی|آموزش اینستاگرام|آموزش توییتر|آموزش نرم افزارهای موبایلی', 'شش پیشنهاد موضوع');
     SUBJECT_SUGGESTIONS.forEach(function (x, i) { ok(unescape(encodeURIComponent('sj:' + i)).length <= 64, 'طول sj:' + i); });
     ok(TXT.FORM_START.indexOf('حتماً بنر نماد نسرا به همراه موضوع و تاریخ در تصاویر باشد.') !== -1, 'متن تازه قدم عکس');
+  });
+
+  check('۲۷) کپشن جداگانه هر نوع + قدم‌های فرم هر نوع + ویرایش پنل + اکسل + آمار بازدید', function () {
+    var base = { publish_jalali: '1405/08/06', city_hashtag: '#نجف_آباد', event_year: 1405, event_month: 8, event_day: 3, subject: 'جنگ شناختی',
+      instructor_name: 'حامد کمال', event_time: '18:30', duration_min: 60, participants: 40, audience: 'گردان', place: 'اسکای روم', link: 'https://skyroom.online/ch/x' };
+    function cap(extra) { var f = {}; Object.keys(base).forEach(function (k) { f[k] = base[k]; }); Object.keys(extra).forEach(function (k) { f[k] = extra[k]; }); return buildCaption_(f); }
+    var head = '📅 تاریخ درج در کانال: 1405/08/06\n✅ نام استان: #اصفهان\n✅ معاونت: #نسرا\n🗓 ماه: #آبان1405\n📍 ناحیه برگزار کننده: #نجف_آباد\n';
+    eq(cap({ class_type: 'حضوری', operation_name: '', place: 'مسجد جامع' }), head + '⭕️ نوع کلاس/ برنامه: #حضوری\n💢 نام عملیات: ندارد\n📄 موضوع: جنگ شناختی\n' +
+      '👨‍🏫 مدرس یا سخنران: حامد کمال\n📆 تاریخ برگزاری: 1405/08/03\n⏰ ساعت برگزاری: 18:30\n⏳ مدت زمان برگزاری: 60 دقیقه\n' +
+      '🚻 تعداد نفرات شرکت کننده: 40 نفر\n👥 نوع مخاطبین: #گردان\n🏫 بستر / مکان برگزاری: مسجد جامع', 'کپشن حضوری');
+    eq(cap({ class_type: 'مجازی' }), head + '⭕️ نوع کلاس: #مجازی\n📄 موضوع: جنگ شناختی\n👨‍🏫 مدرس یا سخنران: حامد کمال\n📆 تاریخ برگزاری: 1405/08/03\n' +
+      '⏳ مدت زمان برگزاری: 60 دقیقه\n🚻 تعداد نفرات شرکت کننده: 40 نفر\n👥 نوع مخاطبین: #گردان\n💻 بستر برگزاری: اسکای روم\n🔗 لینک برگزاری: https://skyroom.online/ch/x', 'کپشن مجازی (بدون ساعت)');
+    eq(cap({ class_type: 'توانمندسازی', class_sub: 'مجازی', link: '' }), head + '⭕️ نوع کلاس: #توانمندسازی (مجازی)\n📄 موضوع: جنگ شناختی\n👨‍🏫 مدرس یا سخنران: حامد کمال\n' +
+      '📆 تاریخ برگزاری: 1405/08/03\n⏰ ساعت برگزاری: 18:30\n⏳ مدت زمان برگزاری: 60 دقیقه\n🚻 تعداد نفرات شرکت کننده: 40 نفر\n👥 نوع مخاطبین: #گردان\n' +
+      '💻 بستر برگزاری: اسکای روم\n🔗 لینک برگزاری: ندارد', 'کپشن توانمندسازی مجازی (با ساعت، لینک ندارد)');
+    ok(cap({ class_type: 'توانمندسازی', class_sub: 'حضوری', operation_name: 'بصیرت', place: 'پایگاه\nسالن ۲' }).indexOf('⭕️ نوع کلاس/ برنامه: #توانمندسازی (حضوری)\n💢 نام عملیات: بصیرت') !== -1, 'توانمندسازی حضوری = قالب حضوری');
+    ok(/🏫 بستر \/ مکان برگزاری:\nپایگاه\nسالن ۲$/.test(cap({ class_type: 'حضوری', place: 'پایگاه\nسالن ۲' })), 'مکان چندخطی از خط بعد');
+    eq(cap({ class_type: 'خلاقانه', class_sub: '#چاپ_بنر', participants: 3000, place: 'میدان امام', link: '' }), head + '⭕️ نوع فعالیت: #خلاقانه #چاپ_بنر\n📄 موضوع: جنگ شناختی\n' +
+      '📆 تاریخ انتشار: 1405/08/03\n👁 تعداد بازدید: 3000\n📢 بستر انتشار: میدان امام\n🔗 لینک پست: ندارد', 'کپشن خلاقانه');
+    eq(cap({ class_type: 'تولیدات', class_sub: '#موشن_گرافیک' }), head + '⭕️ نوع فعالیت: #تولیدات\n👨‍🏫 تولید کننده: حامد کمال\n📄 موضوع محتوا: جنگ شناختی\n🎞 نوع محتوا: #موشن_گرافیک', 'کپشن تولیدات');
+    // همه هشتگ‌های زیرشاخه معتبرند (بدون فاصله)
+    Object.keys(CLASS_SUBS).forEach(function (t) { CLASS_SUBS[t].forEach(function (x) { if (x.charAt(0) === '#') ok(validHashtag_(x), 'هشتگ ' + x); }); });
+    // قدم‌ها
+    eq(typeFlow_('حضوری').length + 2, 11, 'حضوری ۱۱ قدم');
+    eq(formFlow_({ class_type: 'مجازی' }).join(','), 'photos,class,subject,teacher,date,duration,participants,audience,platform,link', 'قدم‌های مجازی');
+    eq(formFlow_({ class_type: 'خلاقانه' }).join(','), 'photos,class,sub,subject,date,views,platform,link', 'قدم‌های خلاقانه');
+    eq(formFlow_({ class_type: 'تولیدات' }).join(','), 'photos,class,sub,teacher,subject', 'قدم‌های تولیدات');
+    eq(formFlow_({ class_type: 'توانمندسازی', class_sub: 'مجازی' }).length, 12, 'توانمندسازی مجازی ۱۲ قدم');
+    eq(stepNo_({ class_type: 'خلاقانه' }, 'views'), 'قدم ۶ از ۸', 'شماره قدم');
+    eq(stepNo_({}, 'class'), 'قدم ۲', 'قبل از انتخاب نوع، تعداد کل نامعلوم');
+    eq(stepNo_({ class_type: 'حضوری' }, 'minute'), 'قدم ۷ از ۱۱', 'زیرقدم دقیقه = قدم ساعت');
+    var d = { photos: [1], class_type: 'خلاقانه', class_sub: '#نمایشگاه', subject: 'x', event_year: 1405, event_month: 8, event_day: 1, participants: 5, place: 'y' };
+    eq(firstMissing_(d), 'link', 'اولین بخش ناقص');
+    d.link = ''; eq(firstMissing_(d), '', '«ندارد» یعنی کامل');
+    d.class_sub = '#کلیپ'; eq(firstMissing_(d), 'sub', 'زیرشاخه نامعتبر برای این نوع = ناقص');
+    eq(nextStep_({ class_type: 'مجازی' }, 'day'), 'duration', 'بعد از روز (تاریخ) در مجازی ← مدت');
+    eq(prevStep_({ class_type: 'تولیدات' }, 'teacher'), 'sub', 'بازگشت');
+    // لینک
+    eq(parseLinkInput_('https://instagram.com/p/abc').link, 'https://instagram.com/p/abc', 'لینک کامل');
+    eq(parseLinkInput_('t.me/isfahannasraa/12').link, 't.me/isfahannasraa/12', 'لینک بدون https');
+    eq(parseLinkInput_('ندارد').link, '', 'ندارد');
+    ok(parseLinkInput_('سلام خوبی').error, 'متن بی‌ربط رد می‌شود');
+    // ویرایش پنل
+    var rv1 = { status: 'approved', class_type: 'خلاقانه', class_sub: '#چاپ_بنر', form_v: '2' };
+    eq(reportEditFields_(rv1).map(function (f) { return f[0]; }).join(','), 'class,sub,subject,date,views,platform,link', 'بخش‌های ویرایش خلاقانه');
+    eq(reportEditFields_({ class_type: 'حضوری' }).length, REPORT_EDIT_FIELDS.length, 'گزارش قدیمی ← فهرست قبلی');
+    eq(reportPatchFor_(rv1, 'views', '۲۵۰۰', 0).patch.participants, 2500, 'پچ بازدید');
+    eq(reportPatchFor_(rv1, 'sub', 2, 0).patch.class_sub, '#بروشور', 'پچ زیرشاخه');
+    eq(reportPatchFor_(rv1, 'link', '-', 0).patch.link, '', 'پچ لینک ندارد');
+    eq(reportPatchFor_(rv1, 'platform', 'ورودی شهر', 0).patch.place, 'ورودی شهر', 'پچ بستر');
+    eq(captionFromReport_({ class_type: 'حضوری', city_id: 0, event_year: 1405, event_month: 8, event_day: 1 }, 'x').indexOf('⚜️ نام استان : #اصفهان') !== -1, true, 'گزارش قدیمی ← قالب قدیمی');
+    ['A:rw:99999:4:6', 'A:rv:99999:sub:6', 'A:rx:99999:platform', 'sb:6', 'pf:5', 'lk0'].forEach(function (x) { ok(unescape(encodeURIComponent(x)).length <= 64, 'طول ' + x); });
+    // اکسل: زیرشاخه در ستون‌های الگو
+    var reps = [
+      { report_id: 1, status: 'approved', class_type: 'توانمندسازی', class_sub: 'مجازی', city_id: 1, event_jalali: '1405/08/01', place: 'اسکای روم', participants: 9, form_v: '2' },
+      { report_id: 2, status: 'approved', class_type: 'خلاقانه', class_sub: '#چاپ_بنر', city_id: 1, event_jalali: '1405/08/01', place: 'میدان', participants: 900, form_v: '2' },
+      { report_id: 3, status: 'approved', class_type: 'تولیدات', class_sub: '#کلیپ', city_id: 1, event_jalali: '1405/08/01', instructor_name: 'حامد کمال', form_v: '2' }];
+    var sh = excelSheets_(reps, [{ city_id: 1, name: 'هرند' }], -100123, '');
+    eq(sh[2].rows[0][sh[2].cols.length - 1], 'مجازی', 'توانمندسازی ← ستون «نوع کلاس»');
+    eq(sh[3].rows[0][5], 'چاپ بنر — میدان', 'خلاقانه ← بخش + بستر');
+    eq(sh[4].rows[0][5], 'کلیپ', 'تولیدات ← «نوع تولید محتوا»');
+    var ms = monthStats_(reps.map(function (r) { r.event_year = 1405; r.event_month = 8; r.event_day = 1; return r; }), [{ city_id: 1, name: 'هرند' }], 1405, 8);
+    eq(ms.people + '|' + ms.views + '|' + ms.total, '9|900|3', 'بازدید خلاقانه جدا از شرکت‌کننده');
   });
 
   if (failed.length) {
