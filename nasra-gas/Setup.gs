@@ -235,3 +235,37 @@ function handleStatus_(msg) {
     '• بکاپ شبانه و کارهای روزانه: ' + (triggerStatus_().backup && triggerStatus_().daily ? 'فعال ✅' : 'کامل نصب نشده ⚠️ (installPhase3)') + '\n' +
     'برای سلامت وبهوک در ویرایشگر Apps Script تابع checkWebhook را Run کنید.');
 }
+
+// ---------- بررسی نصب: کدام فایل جا افتاده، ناقص چسبانده شده یا هنوز نسخه قدیمی است ----------
+// فقط از typeof استفاده می‌کند تا حتی وقتی فایلی کلاً نیست، خودش خطا ندهد. Run ← checkInstall
+var INSTALL_MARKERS = [
+  ['Config', ['getProp_', 'normalizeName_', 'instructorNameIssue_', 'SUBJECT_SUGGESTIONS', 'TXT', 'CFG', 'SHEETS', 'MENU']],
+  ['Caption', ['buildCaption_', 'buildCaptionV1_', 'typeFlow_', 'CLASS_SUBS']],
+  ['Db', ['ss_', 'readTable_', 'appendRow_', 'getSession_']],
+  ['Jalali', ['monthTag_', 'todayJalali_']],
+  ['Telegram', ['doPost', 'tgCall_', 'mainMenuKb_', 'routeCallback_']],
+  ['Registration', ['menuMyReports_', 'menuMyTeachers_']],
+  ['ReportForm', ['startReport_', 'showStep_', 'platformOptions_', 'resetTypeFields_']],
+  ['Review', ['publishReport_', 'sendReportToReview_']],
+  ['Admin', ['handleAdminCb_', 'reportEditFields_', 'handleSampleCb_', 'extraChannels_']],
+  ['Automation', ['installPhase4', 'excelSheets_', 'dailyJobs', 'nightlyBackup']],
+  ['Setup', ['setup', 'ensureSheets_', 'setWebhook']],
+  ['Tests', ['runTests']]
+];
+function installProblems_() {
+  var g = (typeof globalThis !== 'undefined') ? globalThis : (function () { return this; })();
+  var out = [];
+  INSTALL_MARKERS.forEach(function (m) {
+    var miss = m[1].filter(function (n) { return typeof g[n] === 'undefined'; });
+    if (miss.length) out.push('❌ فایل ' + m[0] + (miss.length === m[1].length ? ' پیدا نشد (یا کامل جا افتاده)' : ' ناقص یا نسخه قدیمی است') + ' — نبود: ' + miss.join('، '));
+  });
+  return out;
+}
+function checkInstall() {
+  var p = installProblems_();
+  if (!p.length) { Logger.log('✅ همه ' + INSTALL_MARKERS.length + ' فایل کامل و نسخه تازه‌اند.'); return true; }
+  Logger.log(p.join('\n'));
+  Logger.log('راه حل: فایل(های) بالا را باز کن ← Ctrl+A ← Delete ← نسخه کامل را بچسبان ← 💾 ← دوباره Run.\n' +
+    'نکته: فایل باید از نوع Script باشد (کنار نامش .gs)، نه HTML؛ و اسمش دقیقاً همین باشد.');
+  return false;
+}

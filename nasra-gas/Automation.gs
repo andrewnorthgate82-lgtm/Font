@@ -383,6 +383,7 @@ function installPhase3() {
 
 // نصب فاز ۴ (دوره ۲۱ تا ۲۰، نقش‌ها، اکسل پنج‌برگه‌ای) — یک بار در ویرایشگر Run کنید؛ تکرارش بی‌خطر است.
 function installPhase4() {
+  if (!checkInstall()) { Logger.log('⛔️ نصب انجام نشد؛ اول فایل‌های بالا را درست کن.'); return; }
   ensureSheets_(); // ستون‌های تازه: Users.position (با فهرست کشویی نقش‌ها) و Reports.submitter_position
   if (String(getSetting_('reminder_days') || '').replace(/\s/g, '') === '20,27') { // پیش‌فرض قدیمی با دوره ۲۱ تا ۲۰ جور نیست
     setSetting_('reminder_days', AUTO.DEFAULTS.reminder_days, 'روزهای ماه شمسی برای یادآوری، با ویرگول؛ دوره هر ماه روز ۲۰ تمام می‌شود (مثلاً 15,18)');

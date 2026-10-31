@@ -5,6 +5,7 @@
 // نکته: پس از هر به‌روزرسانی کد، یک بار setup()‎ را هم Run کنید (بی‌خطر و تکراری است) تا فرمت متنی ستون‌ها اعمال شود.
 
 function runTests() {
+  if (typeof checkInstall === 'function' && !checkInstall()) return; // اول ببین همه فایل‌ها کامل‌اند
   var passed = 0, total = 0, failed = [];
   function check(name, fn) {
     total++;
