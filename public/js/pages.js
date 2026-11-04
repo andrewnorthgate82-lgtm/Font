@@ -301,7 +301,7 @@ async function selftestPage() {
   }));
 }
 
-export async function renderRoute(route) {
+export async function renderPageRoute(route) {
   if (route.name === 'dashboard') return dashboardPage();
   if (route.name === 'approvals') return approvalsPage();
   if (route.name === 'pipeline') return pipelinePage();
