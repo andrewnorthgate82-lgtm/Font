@@ -1,0 +1,5 @@
+.preview/
+.DS_Store
+*.log
+nasra-backup-*.json
+node_modules/
