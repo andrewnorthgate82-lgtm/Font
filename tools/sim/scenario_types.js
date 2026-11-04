@@ -38,8 +38,8 @@ start(); cb('ct:1'); ok(/^قدم ۳ از ۱۰ — موضوع/.test(lastText()), 
 cb('sj:2'); cb('tn'); msg('زهرا احمدی'); cb('dq:0');
 ok(/^قدم ۶ از ۱۰ — مدت/.test(lastText()), 'مجازی بدون ساعت ← مدت: ' + lastText().slice(0, 25));
 cb('du:90'); msg('120'); cb('au:1');
-ok(kb().includes('pf:0=اسکای روم'), 'دکمه‌های بستر برگزاری');
-cb('pf:0'); ok(/لینک برگزاری/.test(lastText()) && kb().includes('lk0=ندارد'), 'قدم لینک');
+ok(kb().filter(x => x.startsWith('pf:')).join('|') === 'pf:0=ایتا|pf:1=روبیکا|pf:2=اسکای روم|pf:3=سامانه نسرا|pf:4=اینستاگرام|pf:5=بله', 'دکمه‌های بستر برگزاری به ترتیب: ' + kb().join('|'));
+cb('pf:2'); ok(/لینک برگزاری/.test(lastText()) && kb().includes('lk0=ندارد'), 'قدم لینک');
 msg('سلام'); ok(st().state === 'form:link' && /معتبر نیست/.test(lastText()), 'لینک نامعتبر رد شد');
 msg('https://www.skyroom.online/ch/nasra/room1'); ok(st().state === 'form:preview', 'مجازی ← پیش‌نمایش');
 cb('ps'); a = approveLast();
