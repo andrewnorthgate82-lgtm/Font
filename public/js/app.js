@@ -31,7 +31,10 @@ export async function api(path, options = {}) {
   const headers = new Headers(options.headers || {});
   if (options.body && typeof options.body !== 'string' && !(options.body instanceof FormData)) { headers.set('Content-Type', 'application/json'); options = { ...options, body: JSON.stringify(options.body) }; }
   if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && state.csrf && !path.includes('/auth/login')) headers.set('X-CSRF-Token', state.csrf);
-  if (state.sessionToken && !path.includes('/auth/login')) headers.set('Authorization', `Bearer ${state.sessionToken}`);
+  if (state.sessionToken && !path.includes('/auth/login')) {
+    headers.set('X-Nasra-Session', state.sessionToken);
+    headers.set('Authorization', `Bearer ${state.sessionToken}`);
+  }
   const response = await fetch(`${API_BASE}${path}`, { ...options, method, headers, credentials: 'include' });
   const text = await response.text(); let payload;
   try { payload = text ? JSON.parse(text) : {}; } catch { payload = { ok: false, error: { message: text.slice(0, 300) } }; }
@@ -42,7 +45,10 @@ export async function api(path, options = {}) {
 }
 export async function apiBlob(path) {
   const headers = new Headers();
-  if (state.sessionToken) headers.set('Authorization', `Bearer ${state.sessionToken}`);
+  if (state.sessionToken) {
+    headers.set('X-Nasra-Session', state.sessionToken);
+    headers.set('Authorization', `Bearer ${state.sessionToken}`);
+  }
   const response = await fetch(`${API_BASE}${path}`, { headers, credentials: 'include' });
   if (!response.ok) throw new Error('دانلود ناموفق بود');
   return await response.blob();
@@ -70,7 +76,7 @@ export async function renderRoute() {
   $('#page-kicker').textContent = route.name === 'content' ? 'NASRA / CONTENT DETAIL' : `NASRA / ${route.name.toUpperCase()}`;
   $('#sidebar').classList.remove('open'); $('#sidebar-backdrop').classList.add('hidden');
   const app = $('#app'); app.innerHTML = loading(); state.pageLoading = true;
-  try { const module = await import('./pages.js?v=20261105-auth'); const page = await module.renderPageRoute(route); app.innerHTML = page.html; if (page.mount) await page.mount(); }
+  try { const module = await import('./pages.js?v=20261105-session-header'); const page = await module.renderPageRoute(route); app.innerHTML = page.html; if (page.mount) await page.mount(); }
   catch (error) { app.innerHTML = `<div class="notice danger"><strong>صفحه بارگذاری نشد</strong><br>${escapeHtml(errorText(error))}</div><div class="form-actions"><button class="btn ghost" id="page-retry">تلاش دوباره</button></div>`; $('#page-retry')?.addEventListener('click', renderRoute); console.error(error); }
   finally { state.pageLoading = false; }
 }

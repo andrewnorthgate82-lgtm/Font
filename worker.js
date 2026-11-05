@@ -345,9 +345,10 @@ async function sessionFromRequest(request, env, db) {
   if (!env.SESSION_SECRET) return null;
   const authorization = request.headers.get('Authorization') || '';
   const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1].trim().slice(0, 500) || '';
-  // Embedded previews can block or strip cookies. An explicitly issued Bearer
-  // session uses the same signed token and server-side session row, not a bypass.
-  const token = bearer || cookieValue(request, 'nasra_session');
+  const dedicated = (request.headers.get('X-Nasra-Session') || '').trim().slice(0, 500);
+  // Some preview proxies replace Authorization and strip cookies. The dedicated
+  // header carries the same signed session, still checked against D1 and HMAC.
+  const token = dedicated || bearer || cookieValue(request, 'nasra_session');
   const parts = token.split('.');
   if (parts.length !== 3) return null;
   const [id, exp, signature] = parts;
@@ -2109,7 +2110,7 @@ async function handleApi(request, env, db, ctx, url) {
   const parts = routeParts(url);
   const method = request.method.toUpperCase();
   const path = url.pathname;
-  if (method === 'OPTIONS') return new Response(null, { status: 204, headers: securityHeaders({ ...corsHeaders(request, env), 'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-CSRF-Token,X-Telegram-Bot-Api-Secret-Token', 'Access-Control-Max-Age': '86400' }) });
+  if (method === 'OPTIONS') return new Response(null, { status: 204, headers: securityHeaders({ ...corsHeaders(request, env), 'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Nasra-Session,X-CSRF-Token,X-Telegram-Bot-Api-Secret-Token', 'Access-Control-Max-Age': '86400' }) });
   if (path === '/api/health' && method === 'GET') return jsonResponse({ ok: true, app: 'Nasra Esfahan Media Studio', version: APP_VERSION, db: Boolean(db), time: isoNow(), jalali: utcToJalali(), secrets: await integrationStatus(request, env, db).then(s => s.configured) });
   if (path === '/api/auth/login' && method === 'POST') return await login(request, env, db);
   if (path === '/api/auth/session' && method === 'GET') {
