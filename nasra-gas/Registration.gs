@@ -145,10 +145,13 @@ function menuMyReports_(msg) {
   if (!u) return;
   var rows = myReports_(msg.from.id, u.city_id, 10);
   if (!rows.length) { tgSend_(msg.chat.id, 'هنوز گزارشی ثبت نکرده‌اید.'); return; }
+  var t = currentPeriod_(), sc = scoreOf_(monthScores_(readTable_('Reports'), t.jy, t.jm), u.city_id);
   var lines = ['📋 آخرین گزارش‌های شما:'];
   rows.forEach(function (r) {
-    lines.push((STATUS_EMOJI[r.status] || '') + ' ' + r.subject + ' — ' + String(cellToStr_(r.event_jalali)) + ' — ' + (STATUS_FA[r.status] || r.status));
+    lines.push((STATUS_EMOJI[r.status] || '') + ' ' + r.subject + ' — ' + String(cellToStr_(r.event_jalali)) + ' — ' + (STATUS_FA[r.status] || r.status) +
+      (num_(r.score) ? ' — ⭐️ ' + num_(r.score) + ' از 5' : ''));
   });
+  lines.push('\n⭐️ نمره شهرستان شما در گزارش ' + periodName_(t.jy, t.jm) + ' تا این لحظه: ' + sc.score + ' از 5 (' + sc.cover + ' بخش از 5 کار شده)');
   lines.push('\n(گزارش ردشده را از پیام رد، با دکمه «✏️ اصلاح و ارسال مجدد» اصلاح کنید.)');
   tgSend_(msg.chat.id, lines.join('\n'));
 }

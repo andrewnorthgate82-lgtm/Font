@@ -293,7 +293,7 @@ function routeCallback_(cb) {
   if (data.indexOf('ga:') === 0 || data.indexOf('gd:') === 0) return handleRegDecisionCb_(cb, data);
   if (data.indexOf('re:') === 0) return handleResubmitCb_(cb, session, data);
   if (data.indexOf('sm:') === 0) return handleSampleCb_(cb, data); // نمونه گزارش‌ها
-  if (/^(ok|rj|mn|rs|rd|rb|rm):/.test(data)) return handleReviewCb_(cb, session, data);
+  if (/^(ok|rj|mn|rs|rd|rb|rm|sc):/.test(data)) return handleReviewCb_(cb, session, data);
   return handleFormCb_(cb, session, data); // بقیه کال‌بک‌ها مال فرم گزارش‌اند
 }
 

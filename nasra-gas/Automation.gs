@@ -397,6 +397,7 @@ function installPhase4() {
   Logger.log('دوره فعلی: گزارش ' + periodName_(cur.jy, cur.jm) + ' — برنامه‌های ' + periodRangeText_(cur.jy, cur.jm));
   Logger.log('ستون‌های class_sub ، link و form_v (کپشن جداگانه هر نوع) به برگه Reports اضافه شد.');
   Logger.log('ستون kind (نوع پیوست: عکس، ویدیو، فایل، صوت) به برگه ReportPhotos اضافه شد.');
+  Logger.log('ستون‌های score ، score_by و notice_msg_id (امتیاز ۱ تا ۵ هر گزارش) به برگه Reports اضافه شد.');
   Logger.log('برگه Samples (نمونه گزارش‌ها) آماده است؛ نمونه‌ها را از پنل /admin ← 📚 نمونه گزارش‌ها ثبت کنید.');
   Logger.log('همکاران فعال: ' + active.length + ' — بدون نقش: ' + noPos + ' (نقش را در برگه Users، ستون position از فهرست کشویی بگذارید، یا در پنل /admin ← کاربران؛ وگرنه بات موقع اولین گزارش از خودشان می‌پرسد)');
   Logger.log('حالا runTests را Run کنید و بعد Deploy ← Manage deployments ← Edit ← New version ← Deploy.');

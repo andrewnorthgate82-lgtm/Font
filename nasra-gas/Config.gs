@@ -43,7 +43,7 @@ var SHEETS = {
     'event_month', 'event_day', 'event_time', 'duration_min', 'participants', 'audience', 'place',
     'publish_jalali', 'published_caption', 'channel_message_ids', 'review_chat_id', 'review_album_ids',
     'review_info_id', 'decided_by', 'decided_at', 'resubmit_count', 'created_at', 'updated_at', 'submitter_position', 'extra_channel_msgs',
-    'class_sub', 'link', 'form_v'], // class_sub: زیرشاخه (حضوری/مجازی توانمندسازی، بخش خلاقانه، نوع محتوای تولیدات) — form_v=2: کپشن جداگانه هر نوع
+    'class_sub', 'link', 'form_v', 'score', 'score_by', 'notice_msg_id'], // score: امتیاز ۱ تا ۵ گروه ادمین‌ها — class_sub: زیرشاخه (حضوری/مجازی توانمندسازی، بخش خلاقانه، نوع محتوای تولیدات) — form_v=2: کپشن جداگانه هر نوع
   ReportPhotos: ['report_id', 'sort', 'file_id', 'file_unique_id', 'kind'],
   RejectHistory: ['report_id', 'admin_telegram_id', 'reasons_json', 'manual_text', 'created_at'],
   Sessions: ['key', 'chat_id', 'user_id', 'state', 'data_json', 'updated_at'],

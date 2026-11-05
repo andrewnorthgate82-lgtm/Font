@@ -74,12 +74,36 @@ function monthStats_(reports, cities, jy, jm) {
     if (isV2_(r) && r.class_type === 'خلاقانه') { views += num_(r.participants); return; } // «تعداد بازدید» شرکت‌کننده حساب نمی‌شود
     b.people += num_(r.participants); people += num_(r.participants);
   });
-  var rows = Object.keys(by).map(function (k) { return by[k]; });
-  var active = rows.filter(function (r) { return r.count > 0; })
-    .sort(function (a, b) { return b.count - a.count || b.people - a.people; });
+  var sc = monthScores_(reports, jy, jm);
+  var rows = Object.keys(by).map(function (k) { var o = by[k], x = scoreOf_(sc, k); o.score = x.score; o.avg = x.avg; o.cover = x.cover; o.scored = x.scored; return o; });
+  var active = rows.filter(function (r) { return r.count > 0; }) // رتبه: نمره ماهانه، بعد تعداد گزارش
+    .sort(function (a, b) { return b.score - a.score || b.count - a.count || b.people - a.people; });
   var zero = rows.filter(function (r) { return r.count === 0; }).map(function (r) { return r.name; });
   return { rows: active, zero: zero, total: total, people: people, views: views };
 }
+// ⭐️ نمره ماهانه هر شهرستان (۰ تا ۵) = میانگین امتیاز گزارش‌های دوره × (تعداد بخش‌های کارشده ÷ ۵)
+// • میانگین: همه گزارش‌های امتیازدار همان دوره (تاییدشده یا ردشده؛ حذف‌شده و در انتظار حساب نمی‌شوند)
+// • بخش کارشده: از هر کدام از ۵ نوع (حضوری، مجازی، توانمندسازی، خلاقانه، تولیدات) دست‌کم یک گزارش تاییدشده
+// نمره ۵ یعنی: در هر ۵ بخش کار شده و همه گزارش‌ها امتیاز ۵ گرفته‌اند.
+function monthScores_(reports, jy, jm) {
+  var by = {};
+  function b(cid) { return by[cid] || (by[cid] = { sum: 0, n: 0, types: {} }); }
+  reports.forEach(function (r) {
+    if ((r.status !== 'approved' && r.status !== 'rejected') || !inPeriod_(r, jy, jm)) return;
+    var x = b(num_(r.city_id)), s = num_(r.score);
+    if (s >= 1 && s <= 5) { x.sum += s; x.n++; }
+    var t = String(r.class_type || '').replace(/^#/, '');
+    if (r.status === 'approved' && CFG.CLASS_TYPES.indexOf(t) !== -1) x.types[t] = 1;
+  });
+  var out = {};
+  Object.keys(by).forEach(function (cid) {
+    var x = by[cid], cover = Object.keys(x.types).length, avg = x.n ? x.sum / x.n : 0;
+    out[cid] = { avg: Math.round(avg * 10) / 10, scored: x.n, cover: cover, score: Math.round(avg * cover / CFG.CLASS_TYPES.length * 10) / 10 };
+  });
+  return out;
+}
+function scoreOf_(scores, cityId) { return scores[num_(cityId)] || { avg: 0, scored: 0, cover: 0, score: 0 }; }
+
 function prevJalaliMonth_(jy, jm) { return jm === 1 ? { jy: jy - 1, jm: 12 } : { jy: jy, jm: jm - 1 }; }
 function nextJalaliMonth_(jy, jm) { return jm === 12 ? { jy: jy + 1, jm: 1 } : { jy: jy, jm: jm + 1 }; }
 function cut_(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
@@ -436,6 +460,7 @@ function reportCardText_(rep) {
     'شهرستان: ' + (cty ? cty.name : '—'),
   ].concat(reportSummaryLines_(rep), ['دفعات ارسال مجدد: ' + num_(rep.resubmit_count)]);
   if (rep.status === 'approved') lines.push('تاریخ درج در کانال: ' + String(cellToStr_(rep.publish_jalali)));
+  if (rep.status === 'approved' || rep.status === 'rejected') lines.push('⭐️ امتیاز: ' + (num_(rep.score) ? num_(rep.score) + ' از 5' : 'هنوز ثبت نشده (از پیام همین گزارش در گروه بررسی)'));
   if (rep.status === 'pending') lines.push('\nتصمیم درباره این گزارش در گروه بررسی گرفته می‌شود.');
   return lines.join('\n');
 }
@@ -617,8 +642,12 @@ function monthStatsText_(reports, jy, jm) {
     'جمع: ' + st.total + ' گزارش — ' + st.people + ' نفر شرکت‌کننده' + (st.views ? ' — ' + st.views + ' بازدید (خلاقانه)' : ''),
     'خواهران: ' + sides.s + ' — برادران: ' + sides.b + ' — فضای مجازی: ' + sides.v + (sides.none ? ' — بدون نقش: ' + sides.none : ''), ''];
   st.rows.forEach(function (r, i) {
-    lines.push((i === 0 ? '🏆 ' : (i + 1) + ') ') + r.name + ': ' + r.count + ' گزارش (' + r.people + ' نفر)');
+    lines.push((i === 0 ? '🏆 ' : (i + 1) + ') ') + r.name + ': ⭐️ ' + r.score + ' از 5 — ' + r.count + ' گزارش (' + r.people + ' نفر)' +
+      ' — ' + r.cover + ' بخش از 5' + (r.scored ? '، میانگین امتیاز ' + r.avg : '، بدون امتیاز'));
   });
+  if (st.rows.length) lines.push('', '⭐️ نمره ماه = میانگین امتیاز گزارش‌ها × (بخش‌های کارشده ÷ 5)');
+  var noScore = reports.filter(function (r) { return (r.status === 'approved' || r.status === 'rejected') && inPeriod_(r, jy, jm) && !num_(r.score); }).length;
+  if (noScore) lines.push('⚠️ گزارش‌های این دوره که هنوز امتیاز نگرفته‌اند: ' + noScore + ' (در نمره حساب نمی‌شوند؛ از دکمه‌های ۱ تا ۵ زیر همان گزارش در گروه بررسی)');
   if (st.zero.length) lines.push('', '⚪️ بدون گزارش (' + st.zero.length + ' شهرستان): ' + st.zero.join('، '));
   lines.push('', '⏳ در انتظار بررسی (همه ماه‌ها): ' + pending);
   return lines.join('\n');

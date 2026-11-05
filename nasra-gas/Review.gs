@@ -68,11 +68,52 @@ function publishReport_(rep) {
   return album;
 }
 
-function editReviewInfoFinal_(rep, suffix) {
+function reviewHeader_(rep) {
   var city = getCityById_(rep.city_id);
-  var header = '🆕 گزارش جدید برای بررسی\nکارمند: ' + rep.employee_name +
+  return '🆕 گزارش جدید برای بررسی\nکارمند: ' + rep.employee_name +
     '\nشهرستان: ' + (city ? city.name : '') + '\nشماره گزارش: ' + rep.report_id;
-  if (rep.review_chat_id && rep.review_info_id) tgEdit_(num_(rep.review_chat_id), num_(rep.review_info_id), header + suffix, { inline_keyboard: [] });
+}
+// بعد از تایید/رد: همان پیام بررسی ← نتیجه + سطر امتیاز + دکمه‌های ۱ تا ۵ (پیام تازه‌ای فرستاده نمی‌شود)
+function editReviewInfoFinal_(rep, suffix) {
+  if (rep.review_chat_id && rep.review_info_id) {
+    tgEdit_(num_(rep.review_chat_id), num_(rep.review_info_id), reviewHeader_(rep) + suffix + '\n\n' + SCORE_ASK, scoreKb_(rep.report_id, 0));
+  }
+}
+
+// ---------- امتیاز گزارش (۱ تا ۵) ----------
+// امتیاز در همان پیام بررسی گروه و همان پیام «تایید/رد» همکار نوشته می‌شود؛ تا وقتی گزارش دوباره فرستاده نشده، قابل اصلاح است.
+var SCORE_ASK = '⭐️ امتیاز گزارش (۱ ضعیف تا ۵ عالی): هنوز ثبت نشده';
+function scoreKb_(rid, cur) {
+  return ikb_([[1, 2, 3, 4, 5].map(function (n) { return btn_((n === num_(cur) ? '✅ ' : '') + n, 'sc:' + rid + ':' + n); })]);
+}
+function scoreLine_(rep) { var s = num_(rep && rep.score); return s ? '\n⭐️ امتیاز گزارش: ' + s + ' از 5' : ''; }
+function approvedNoticeText_(rep) {
+  return '✅ گزارش شما تایید و در کانال منتشر شد 🎉\nموضوع: ' + rep.subject + scoreLine_(rep);
+}
+function rejectedNoticeText_(rep, why) {
+  return '❌ گزارش شما رد شد.\nموضوع: ' + rep.subject + scoreLine_(rep) + '\n\nدلیل‌ها:\n' + why +
+    '\n\nمی‌توانید اصلاح کنید و دوباره بفرستید؛ اطلاعات قبلی حفظ می‌شود.';
+}
+function resubmitKb_(rid) { return ikb_([[btn_('✏️ اصلاح و ارسال مجدد', 're:' + rid)]]); }
+function lastRejectWhy_(rid) {
+  var h = readTable_('RejectHistory').filter(function (r) { return num_(r.report_id) === num_(rid); }).pop();
+  if (!h) return reasonsText_([], '');
+  var reasons = [];
+  try { reasons = JSON.parse(String(h.reasons_json || '[]')); } catch (e) { }
+  return reasonsText_(reasons, String(h.manual_text || ''));
+}
+// ثبت/اصلاح امتیاز ← سطر امتیاز در پیام همکار (ویرایش همان پیام). خروجی: '' یا متن خطا
+function setReportScore_(rid, n, adminTg) {
+  var rep = getReport_(rid);
+  if (!rep || (rep.status !== 'approved' && rep.status !== 'rejected')) return 'این گزارش دیگر قابل امتیازدهی نیست.';
+  if (!(n >= 1 && n <= 5)) return 'امتیاز باید بین 1 تا 5 باشد.';
+  updateReport_(rid, { score: n, score_by: adminTg });
+  rep = getReport_(rid);
+  if (num_(rep.notice_msg_id)) {
+    if (rep.status === 'approved') tgEdit_(num_(rep.submitter_telegram_id), num_(rep.notice_msg_id), approvedNoticeText_(rep));
+    else tgEdit_(num_(rep.submitter_telegram_id), num_(rep.notice_msg_id), rejectedNoticeText_(rep, lastRejectWhy_(rid)), resubmitKb_(rid));
+  }
+  return '';
 }
 function reasonsText_(reasons, manual) {
   var parts = reasons.map(function (r) { return '• ' + r; });
@@ -87,10 +128,8 @@ function finalizeReject_(rid, adminTg, adminName, reasons, manual) {
   });
   var rep = getReport_(rid), why = reasonsText_(reasons, manual);
   editReviewInfoFinal_(rep, '\n\n❌ رد شد — توسط ' + adminName + '\nدلیل‌ها: ' + why.replace(/\n/g, '؛ '));
-  tgSend_(rep.submitter_telegram_id,
-    '❌ گزارش شما رد شد.\nموضوع: ' + rep.subject + '\n\nدلیل‌ها:\n' + why +
-    '\n\nمی‌توانید اصلاح کنید و دوباره بفرستید؛ اطلاعات قبلی حفظ می‌شود.',
-    ikb_([[btn_('✏️ اصلاح و ارسال مجدد', 're:' + rid)]]));
+  var notice = tgSend_(rep.submitter_telegram_id, rejectedNoticeText_(rep, why), resubmitKb_(rid));
+  if (notice) updateReport_(rid, { notice_msg_id: notice.message_id });
   return true;
 }
 
@@ -113,7 +152,23 @@ function handleReviewCb_(cb, s, data) {
     }
     editReviewInfoFinal_(getReport_(rid), '\n\n✅ تایید و منتشر شد — توسط ' + fullNameOf_(cb.from));
     var rep = getReport_(rid);
-    tgSend_(rep.submitter_telegram_id, '✅ گزارش شما تایید و در کانال منتشر شد 🎉\nموضوع: ' + rep.subject);
+    var notice = tgSend_(rep.submitter_telegram_id, approvedNoticeText_(rep));
+    if (notice) updateReport_(rid, { notice_msg_id: notice.message_id });
+    return;
+  }
+  if (p === 'sc') { // ⭐️ امتیاز ۱ تا ۵ — هر ادمین گروه؛ با زدن عدد دیگر اصلاح می‌شود
+    var n = num_(parts[2]), rp = getReport_(rid);
+    if (!rp || num_(rp.review_info_id) !== num_(mid) || (rp.status !== 'approved' && rp.status !== 'rejected')) {
+      tgAnswerCb_(cb.id, 'این گزارش دیگر قابل امتیازدهی نیست (دوباره فرستاده یا حذف شده است).', true);
+      tgEditMarkup_(chatId, mid, { inline_keyboard: [] });
+      return;
+    }
+    if (num_(rp.score) === n) { tgAnswerCb_(cb.id, 'امتیاز ' + n + ' از قبل ثبت است.'); return; }
+    var err = setReportScore_(rid, n, tg);
+    if (err) { tgAnswerCb_(cb.id, err, true); return; }
+    tgAnswerCb_(cb.id, '⭐️ امتیاز ' + n + ' از 5 ثبت شد');
+    var base = String(cb.message.text || reviewHeader_(rp)).replace(/\n\n⭐️ امتیاز گزارش[^\n]*$/, '');
+    tgEdit_(chatId, mid, base + '\n\n⭐️ امتیاز گزارش: ' + n + ' از 5 — توسط ' + fullNameOf_(cb.from), scoreKb_(rid, n));
     return;
   }
   if (p === 'rj') { // منوی دلایل رد

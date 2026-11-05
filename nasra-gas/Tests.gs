@@ -618,6 +618,24 @@ function runTests() {
     ok(unescape(encodeURIComponent('pz')).length <= 64, 'طول pz');
   });
 
+  check('۲۹) امتیاز گزارش ۱ تا ۵ و نمره ماهانه شهرستان', function () {
+    function R(id, type, status, score, day) {
+      return { report_id: id, city_id: 1, class_type: type, status: status, score: score, event_year: 1405, event_month: 8, event_day: day || 5, event_jalali: '1405/08/' + pad2_(day || 5) };
+    }
+    var all5 = ['حضوری', 'مجازی', 'توانمندسازی', 'خلاقانه', 'تولیدات'].map(function (t, i) { return R(i + 1, t, 'approved', 5); });
+    eq(monthScores_(all5, 1405, 8)['1'].score, 5, 'هر ۵ بخش با امتیاز ۵ ← نمره ۵');
+    var three = [R(1, 'حضوری', 'approved', 4), R(2, 'مجازی', 'approved', 3), R(3, 'خلاقانه', 'approved', 5), R(4, 'حضوری', 'rejected', 2), R(5, 'تولیدات', 'pending', 5), R(6, 'توانمندسازی', 'deleted', 5)];
+    var x = monthScores_(three, 1405, 8)['1'];
+    eq(x.avg + '|' + x.cover + '|' + x.score, '3.5|3|2.1', 'میانگین ۳٫۵ (ردشده هم) × ۳ بخش ÷ ۵ = ۲٫۱ ؛ در انتظار و حذف‌شده حساب نمی‌شوند');
+    eq(monthScores_([R(1, 'حضوری', 'approved', '')], 1405, 8)['1'].score, 0, 'بدون امتیاز ← ۰');
+    eq(monthScores_([R(1, 'حضوری', 'approved', 5, 25)], 1405, 8)['1'], undefined, 'روز ۲۵ آبان جزو دوره آذر است');
+    eq(scoreLine_({ score: 2 }), '\n⭐️ امتیاز گزارش: 2 از 5', 'سطر امتیاز در پیام همکار');
+    eq(scoreLine_({ score: '' }), '', 'بدون امتیاز ← بدون سطر');
+    ok(unescape(encodeURIComponent('sc:99999:5')).length <= 64, 'طول sc');
+    eq(scoreKb_(7, 3).inline_keyboard[0].map(function (b) { return b.text; }).join(','), '1,2,✅ 3,4,5', 'دکمه‌های ۱ تا ۵ با علامت انتخاب');
+    ok(SHEETS.Reports.indexOf('score') !== -1 && SHEETS.Reports.indexOf('notice_msg_id') !== -1, 'ستون‌های امتیاز');
+  });
+
   if (failed.length) {
     Logger.log('نتیجه: ' + passed + '/' + total + ' passed — شکست‌ها:\n' + failed.join('\n'));
   } else Logger.log(passed + ' passed');

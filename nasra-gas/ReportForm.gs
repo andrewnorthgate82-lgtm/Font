@@ -468,7 +468,7 @@ function submitReport_(cb, s, u) {
     link: has('link') ? d.link || '' : '', form_v: FORM_VERSION,
     publish_jalali: '', published_caption: '', channel_message_ids: '[]',
     review_chat_id: '', review_album_ids: '[]', review_info_id: '',
-    decided_by: '', decided_at: '', resubmit_count: 0,
+    decided_by: '', decided_at: '', resubmit_count: 0, score: '', score_by: '', notice_msg_id: '', // ارسال مجدد ← امتیاز قبلی پاک می‌شود
     submitter_position: positionOf_(u.position) // نقش فرستنده در همین لحظه (برای خواهر/برادر فایل اکسل)
   };
   var rid;
