@@ -170,7 +170,7 @@ https://<pages-project>.pages.dev
 
 ### مسیر جایگزین Same-origin
 
-اگر دامنه سفارشی دارید، Pages و Worker را زیر یک Origin/Route قرار دهید و `API_BASE=''` بگذارید. در این حالت Cookie با `SameSite=Lax` ساده‌تر است. در حالت دو Origin، Worker خودش `SameSite=None; Secure` و CORS Credential را اعمال می‌کند.
+اگر دامنه سفارشی دارید، Pages و Worker را زیر یک Origin/Route قرار دهید و `API_BASE=''` بگذارید. در این حالت Cookie با `SameSite=Lax` ساده‌تر است. در حالت دو Origin، Worker خودش `SameSite=None; Secure` و CORS Credential را اعمال می‌کند. در Preview تعبیه‌شده نیز رابط به‌صورت خودکار حالت embedded را اعلام می‌کند تا کوکی امن `SameSite=None; Secure; Partitioned` صادر شود و Session بلافاصله پس از Login از دست نرود؛ ورود مستقیم Top-level همچنان `SameSite=Lax` باقی می‌ماند.
 
 **✅ نتیجه مورد انتظار:** Refresh صفحه Session را نگه می‌دارد و Logout کوکی را ابطال می‌کند.
 

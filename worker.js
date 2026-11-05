@@ -374,6 +374,16 @@ async function recordLogin(db, hash, success) {
   if (success) await dbRun(db, 'DELETE FROM login_attempts WHERE ip_hash=? AND success=0', [hash]);
   await dbRun(db, 'DELETE FROM login_attempts WHERE attempted_at<?', [Math.floor(Date.now() / 1000) - 86400]);
 }
+function authCookie(request, value, maxAge, embedded = false) {
+  const crossSite = Boolean(request.headers.get('Origin') && new URL(request.url).origin !== request.headers.get('Origin'));
+  const secure = new URL(request.url).protocol === 'https:' || crossSite;
+  // Origin is still same-origin for fetch calls inside a cross-site iframe.
+  // The client therefore marks that context explicitly. CHIPS partitions the
+  // preview cookie by Arena's top-level site; normal top-level login stays Lax.
+  const embeddedSecure = embedded && secure;
+  const sameSite = crossSite || embeddedSecure ? 'None' : 'Lax';
+  return `nasra_session=${value}; Path=/; HttpOnly; SameSite=${sameSite}; Max-Age=${maxAge}${secure ? '; Secure' : ''}${embeddedSecure ? '; Partitioned' : ''}`;
+}
 async function login(request, env, db) {
   if (!env.OWNER_PASSWORD || !env.SESSION_SECRET) throw new HttpError(503, 'NOT_CONFIGURED', 'OWNER_PASSWORD و SESSION_SECRET در Cloudflare Secrets تنظیم نشده‌اند');
   const body = await requestJson(request, 10000);
@@ -388,10 +398,7 @@ async function login(request, env, db) {
   await dbRun(db, 'INSERT INTO sessions (id,csrf_token,created_at,expires_at,user_agent,ip_hash,revoked) VALUES (?,?,?,?,?,?,0)', [id, csrf, Date.now(), expires * 1000, str(request.headers.get('User-Agent'), 300), hash]);
   await dbRun(db, 'DELETE FROM sessions WHERE expires_at<?', [Date.now()]);
   await audit(db, 'owner', 'login', 'session', id, null, hash);
-  const crossSite = Boolean(request.headers.get('Origin') && new URL(request.url).origin !== request.headers.get('Origin'));
-  const secure = new URL(request.url).protocol === 'https:' || crossSite;
-  const sameSite = crossSite ? 'None' : 'Lax';
-  const cookie = `nasra_session=${encodeURIComponent(`${id}.${expires}.${signature}`)}; Path=/; HttpOnly; SameSite=${sameSite}; Max-Age=${SESSION_SECONDS}${secure ? '; Secure' : ''}`;
+  const cookie = authCookie(request, encodeURIComponent(`${id}.${expires}.${signature}`), SESSION_SECONDS, body.embedded === true);
   return jsonResponse({ ok: true, csrf_token: csrf, expires_at: new Date(expires * 1000).toISOString() }, 200, { 'Set-Cookie': cookie });
 }
 
@@ -2106,9 +2113,10 @@ async function handleApi(request, env, db, ctx, url) {
   }
   if (path === '/api/auth/logout' && method === 'POST') {
     const session = await requireAuth(request, env, db, true);
+    const body = await requestJson(request, 10000);
     await dbRun(db, 'UPDATE sessions SET revoked=1 WHERE id=?', [session.id]);
     await audit(db, 'owner', 'logout', 'session', session.id);
-    return jsonResponse({ ok: true }, 200, { 'Set-Cookie': 'nasra_session=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax' });
+    return jsonResponse({ ok: true }, 200, { 'Set-Cookie': authCookie(request, '', 0, body.embedded === true) });
   }
   if (parts[0] === 'api' && parts[1] === 'media' && parts.length > 2 && method === 'GET') {
     return await r2MediaResponse(env, db, parts.slice(2).join('/'));
