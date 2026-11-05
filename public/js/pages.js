@@ -1,4 +1,4 @@
-import { api, state, navigate, renderRoute, toast, showError, errorText, openModal, closeModal, copy, downloadBlob, apiBlob, parse, pretty, escapeHtml, faDigits, formatJalali, utcToJalali, relativeTime, badge, stateBadge, statusBadge, stateName, jobStatusName, platformName, notice, empty, formData, checked, confirmExternal, countdownText, refreshApprovalCount } from './app.js';
+import { api, state, navigate, renderRoute, toast, showError, errorText, openModal, closeModal, copy, downloadBlob, apiBlob, parse, pretty, escapeHtml, faDigits, formatJalali, utcToJalali, relativeTime, badge, stateBadge, statusBadge, stateName, jobStatusName, platformName, notice, empty, formData, checked, confirmExternal, countdownText, refreshApprovalCount } from './app.js?v=20261105-auth';
 import { monthNames, monthGrid, shiftMonth, jalaliString, todayJalali, gregorianToJalali } from './jalali.js';
 import { captionCheck, carouselCheck, imageCheck, reelCheck, storyCheck, mediaKind, mediaUrl, extensionOf, validHttps } from './validators.js';
 import { sanitizeSvg, svgToJpeg, downloadText } from './svg-export.js';
