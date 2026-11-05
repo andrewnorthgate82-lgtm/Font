@@ -63,22 +63,54 @@ function tgDelete_(chatId, messageId) {
 function tgAnswerCb_(cbId, text, alert) {
   return tgCall_('answerCallbackQuery', { callback_query_id: cbId, text: text || '', show_alert: !!alert });
 }
-// sendMediaGroup تلگرام فقط ۲ تا ۱۰ مورد می‌پذیرد؛ برای ۱ عکس باید sendPhoto زد.
-function albumMethodFor_(count) { return count === 1 ? 'sendPhoto' : 'sendMediaGroup'; }
-function tgSendAlbum_(chatId, photos, caption) {
-  if (!photos || !photos.length) return null;
-  if (albumMethodFor_(photos.length) === 'sendPhoto') {
-    var p = { chat_id: chatId, photo: photos[0].file_id };
-    if (caption) p.caption = caption;
-    var one = tgCall_('sendPhoto', p);
-    return one ? [one] : null; // در آرایه بپیچ تا فراخواننده‌ها بدون تغییر مثل آلبوم با آن کار کنند
-  }
-  var media = photos.map(function (p2, i) {
-    var m = { type: 'photo', media: p2.file_id };
-    if (i === 0 && caption) m.caption = caption; // کپشن روی عکس اول
-    return m;
+// ---------- ارسال پیوست‌های گزارش (عکس، ویدیو، فایل، صوت…) ----------
+// قانون تلگرام: در یک آلبوم عکس و ویدیو با هم می‌آیند؛ فایل‌ها فقط با فایل؛ صوت‌ها فقط با صوت؛ گیف و پیام صوتی آلبوم نمی‌شوند.
+// sendMediaGroup فقط ۲ تا ۱۰ مورد می‌پذیرد؛ گروه تک‌موردی با sendPhoto/sendVideo/… فرستاده می‌شود.
+var MEDIA_SEND = { photo: 'sendPhoto', video: 'sendVideo', animation: 'sendAnimation', document: 'sendDocument', audio: 'sendAudio', voice: 'sendVoice' };
+function mediaKind_(item) { var k = String((item && item.kind) || ''); return MEDIA_SEND[k] ? k : 'photo'; } // ردیف قدیمی بدون نوع = عکس
+// ترتیب پیام‌ها: آلبوم عکس/ویدیو ← آلبوم فایل‌ها ← آلبوم صوت‌ها ← گیف/پیام صوتی تکی. کپشن روی اولین مورد اولین پیام.
+function mediaSendPlan_(items) {
+  var visual = [], docs = [], audios = [], singles = [], plan = [];
+  (items || []).forEach(function (it) {
+    var k = mediaKind_(it);
+    if (k === 'photo' || k === 'video') visual.push(it);
+    else if (k === 'document') docs.push(it);
+    else if (k === 'audio') audios.push(it);
+    else singles.push(it);
   });
-  return tgCall_('sendMediaGroup', { chat_id: chatId, media: media });
+  [visual, docs, audios].forEach(function (g) {
+    for (var i = 0; i < g.length; i += 10) {
+      var part = g.slice(i, i + 10);
+      plan.push(part.length === 1 ? { method: MEDIA_SEND[mediaKind_(part[0])], items: part } : { method: 'sendMediaGroup', items: part });
+    }
+  });
+  singles.forEach(function (it) { plan.push({ method: MEDIA_SEND[mediaKind_(it)], items: [it] }); });
+  return plan;
+}
+// خروجی: آرایه پیام‌های فرستاده‌شده (اولی همان پیام کپشن‌دار است) یا null. اگر وسط کار یکی ناموفق شود،
+// پیام‌های فرستاده‌شده پاک می‌شوند تا پست نصفه در کانال/گروه نماند.
+function tgSendAlbum_(chatId, items, caption) {
+  var plan = mediaSendPlan_(items), out = [];
+  if (!plan.length) return null;
+  for (var s = 0; s < plan.length; s++) {
+    var x = plan[s], cap = s === 0 ? caption : '', res;
+    if (x.method === 'sendMediaGroup') {
+      res = tgCall_('sendMediaGroup', { chat_id: chatId, media: x.items.map(function (it, i) {
+        var m = { type: mediaKind_(it), media: String(it.file_id) };
+        if (i === 0 && cap) m.caption = cap;
+        return m;
+      }) });
+    } else {
+      var k = mediaKind_(x.items[0]), p = { chat_id: chatId };
+      p[k] = String(x.items[0].file_id);
+      if (cap) p.caption = cap;
+      var one = tgCall_(x.method, p);
+      res = one ? [one] : null;
+    }
+    if (!res) { out.forEach(function (m) { tgDelete_(chatId, m.message_id); }); return null; }
+    out = out.concat(res);
+  }
+  return out;
 }
 function tgGetChat_(chatId) { return tgCall_('getChat', { chat_id: chatId }); }
 
@@ -190,12 +222,14 @@ function routePrivateMessage_(msg) {
     handleContact_(msg); return;
   }
 
-  if (msg.photo) {
-    if (session.state === 'form:photos') { handleFormPhoto_(msg, session); return; }
-    tgSend_(chatId, 'برای ارسال گزارش، از دکمه «' + MENU.NEW_REPORT + '» شروع کنید.', mainMenuKb_());
+  // پیوست گزارش: عکس، ویدیو، فایل، صوت، پیام صوتی یا گیف (استیکر و ویدیوی دایره‌ای فقط در قدم ۱ پیام راهنما می‌گیرند)
+  if (formMediaOf_(msg) || msg.video_note || msg.sticker) {
+    if (session.state === 'form:photos') { handleFormMedia_(msg, session); return; }
+    if (msg.sticker) return;
+    if (String(session.state || '').indexOf('form:') === 0) { if (!msg.media_group_id || !mediaGroupSeen_(msg.media_group_id)) tgSend_(chatId, TXT.MEDIA_WRONG_STEP); return; }
+    if (!msg.media_group_id || !mediaGroupSeen_(msg.media_group_id)) tgSend_(chatId, 'برای ارسال گزارش، از دکمه «' + MENU.NEW_REPORT + '» شروع کنید.', mainMenuKb_());
     return;
   }
-  if (msg.document && session.state === 'form:photos') { tgSend_(chatId, TXT.SEND_AS_PHOTO); return; }
   if (!msg.text) return;
 
   var text = cleanText_(msg.text);
@@ -261,6 +295,13 @@ function routeCallback_(cb) {
   if (data.indexOf('sm:') === 0) return handleSampleCb_(cb, data); // نمونه گزارش‌ها
   if (/^(ok|rj|mn|rs|rd|rb|rm):/.test(data)) return handleReviewCb_(cb, session, data);
   return handleFormCb_(cb, session, data); // بقیه کال‌بک‌ها مال فرم گزارش‌اند
+}
+
+// برای هر آلبوم فقط یک پیام راهنما (هر عکسِ آلبوم جدا می‌رسد)
+function mediaGroupSeen_(g) {
+  var key = 'mg_' + g;
+  try { if (cache_().get(key)) return true; cache_().put(key, '1', 300); } catch (e) { }
+  return false;
 }
 
 function isChannelForward_(msg, session, tg) {

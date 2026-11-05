@@ -23,7 +23,34 @@ function askPosition_(chatId, tg) {
   tgSend_(chatId, '🎖 پیش از ثبت گزارش، نقش خودتان را در شهرستان انتخاب کنید:\n(فقط همین یک بار پرسیده می‌شود؛ برای تغییرِ بعدی به ادمین بگویید.)', ikb_(rows));
 }
 function photosKb_(n) {
-  return ikb_([[btn_('✅ پایان ارسال عکس (' + n + ')', 'pd')], [btn_('❌ انصراف', 'cx')]]);
+  var rows = [[btn_('✅ پایان ارسال (' + n + ')', 'pd')]];
+  if (n > 0) rows.push([btn_('🗑 پاک کردن همه و ارسال دوباره', 'pz')]);
+  rows.push([btn_('❌ انصراف', 'cx')]);
+  return ikb_(rows);
+}
+// ---------- پیوست‌های قدم ۱ (عکس، ویدیو، فایل، صوت…) ----------
+var MEDIA_NAMES = { photo: 'عکس', video: 'ویدیو', document: 'فایل', audio: 'صوت', voice: 'پیام صوتی', animation: 'گیف' };
+var MEDIA_ORDER = ['photo', 'video', 'document', 'audio', 'voice', 'animation'];
+// یک پیام تلگرام ← یک پیوست یا null (گیف قبل از document چون پیام گیف هر دو را دارد)
+function formMediaOf_(msg) {
+  function m(k, o) { return o && o.file_id ? { kind: k, file_id: String(o.file_id), file_unique_id: String(o.file_unique_id || '') } : null; }
+  if (msg.photo && msg.photo.length) return m('photo', msg.photo[msg.photo.length - 1]);
+  if (msg.video) return m('video', msg.video);
+  if (msg.animation) return m('animation', msg.animation);
+  if (msg.document) return m('document', msg.document);
+  if (msg.audio) return m('audio', msg.audio);
+  if (msg.voice) return m('voice', msg.voice);
+  return null;
+}
+// «۳ عکس، ۱ ویدیو، ۲ فایل»
+function mediaSummary_(items) {
+  var c = {};
+  (items || []).forEach(function (it) { var k = mediaKind_(it); c[k] = (c[k] || 0) + 1; });
+  return MEDIA_ORDER.filter(function (k) { return c[k]; }).map(function (k) { return faNum_(c[k]) + ' ' + MEDIA_NAMES[k]; }).join('، ');
+}
+function mediaStatusText_(items) {
+  return '📎 تا حالا دریافت شد: ' + mediaSummary_(items) + '\n(حداکثر ' + faNum_(CFG.MAX_MEDIA) + ' مورد، از جمله حداکثر ' + faNum_(CFG.MAX_PHOTOS) +
+    ' عکس)\nمورد بعدی را بفرستید یا «✅ پایان ارسال» را بزنید.';
 }
 function stepOf_(session) { return String(session.state || '').replace('form:', ''); }
 
@@ -62,7 +89,7 @@ function showStep_(chatId, tg, s, step, editId) {
   s.state = 'form:' + step;
   if (step === 'photos') {
     var n = (d.photos || []).length;
-    text = n === 0 ? TXT.FORM_START : '📷 تا حالا ' + n + ' عکس دریافت شد (حداکثر ' + CFG.MAX_PHOTOS + '). عکس بعدی را بفرستید یا «پایان ارسال عکس» را بزنید.';
+    text = n === 0 ? TXT.FORM_START : mediaStatusText_(d.photos);
     var sent = tgSend_(chatId, text, photosKb_(n));
     if (sent) d.photosMsg = sent.message_id;
     saveSession_(chatId, tg, s);
@@ -189,25 +216,44 @@ function editFieldsKb_(d) {
   return ikb_(rows);
 }
 
-// ---------- عکس‌ها (تکی یا آلبوم؛ شمارنده با ویرایش همان پیام بالا می‌رود) ----------
-function handleFormPhoto_(msg, s) {
-  var chatId = msg.chat.id, tg = msg.from.id;
-  s.data.photos = s.data.photos || [];
-  if (s.data.replacePhotos) { // در ویرایش عکس‌ها: قبلی‌ها فقط با رسیدن اولین عکس جدید کنار می‌روند
-    s.data.photos = [];
-    s.data.replacePhotos = false;
+// ---------- پیوست‌ها (تکی یا آلبوم؛ شمارنده با ویرایش همان پیام بالا می‌رود) ----------
+// d.photos نام قدیمی را نگه داشته ولی هر نوع پیوست را دارد: {kind, file_id, file_unique_id}
+function handleFormMedia_(msg, s) {
+  var chatId = msg.chat.id, tg = msg.from.id, d = s.data, g = msg.media_group_id ? String(msg.media_group_id) : '';
+  function once(flag) { // برای هر آلبوم یک هشدار، نه برای تک‌تک موردهایش
+    if (!g) return true;
+    if (d[flag] === g) return false;
+    d[flag] = g; return true;
   }
-  if (s.data.photos.length >= CFG.MAX_PHOTOS) {
-    if (!msg.media_group_id) tgSend_(chatId, '⚠️ حداکثر ' + CFG.MAX_PHOTOS + ' عکس مجاز است؛ عکس‌های اضافه پذیرفته نشدند.', photosKb_(s.data.photos.length));
+  var it = formMediaOf_(msg);
+  if (!it) {
+    if (once('warnG')) { tgSend_(chatId, TXT.MEDIA_UNSUPPORTED, photosKb_((d.photos || []).length)); saveSession_(chatId, tg, s); }
     return;
   }
-  var best = msg.photo[msg.photo.length - 1];
-  s.data.photos.push({ file_id: best.file_id, file_unique_id: best.file_unique_id || '' });
-  var n = s.data.photos.length;
-  var text = '📷 تا حالا ' + n + ' عکس دریافت شد (حداکثر ' + CFG.MAX_PHOTOS + '). عکس بعدی را بفرستید یا «پایان ارسال عکس» را بزنید.';
-  var done = false;
-  if (s.data.photosMsg) done = !!tgEdit_(chatId, s.data.photosMsg, text, photosKb_(n));
-  if (!done) { var sent = tgSend_(chatId, text, photosKb_(n)); if (sent) s.data.photosMsg = sent.message_id; }
+  d.photos = d.photos || [];
+  if (d.replacePhotos) { // در ویرایش: قبلی‌ها فقط با رسیدن اولین پیوست جدید کنار می‌روند
+    d.photos = [];
+    d.replacePhotos = false;
+  }
+  if (d.photos.some(function (x) { return it.file_unique_id && x.file_unique_id === it.file_unique_id; })) {
+    if (once('dupG')) tgSend_(chatId, 'ℹ️ این مورد قبلاً دریافت شده بود و دوباره اضافه نشد.');
+    saveSession_(chatId, tg, s);
+    return;
+  }
+  var nPhotos = d.photos.filter(function (x) { return mediaKind_(x) === 'photo'; }).length;
+  if (d.photos.length >= CFG.MAX_MEDIA || (it.kind === 'photo' && nPhotos >= CFG.MAX_PHOTOS)) {
+    if (once('limitG')) {
+      tgSend_(chatId, d.photos.length >= CFG.MAX_MEDIA ? '⚠️ حداکثر ' + faNum_(CFG.MAX_MEDIA) + ' مورد مجاز است؛ موارد اضافه پذیرفته نشدند.'
+        : '⚠️ حداکثر ' + faNum_(CFG.MAX_PHOTOS) + ' عکس مجاز است؛ عکس‌های اضافه پذیرفته نشدند.', photosKb_(d.photos.length));
+    }
+    saveSession_(chatId, tg, s);
+    return;
+  }
+  d.photos.push(it);
+  if (it.kind === 'document' && /^image\//i.test(String(msg.document.mime_type || '')) && once('imgG')) tgSend_(chatId, TXT.IMAGE_AS_FILE);
+  var n = d.photos.length, text = mediaStatusText_(d.photos), done = false;
+  if (d.photosMsg) done = !!tgEdit_(chatId, d.photosMsg, text, photosKb_(n));
+  if (!done) { var sent = tgSend_(chatId, text, photosKb_(n)); if (sent) d.photosMsg = sent.message_id; }
   saveSession_(chatId, tg, s);
 }
 
@@ -250,7 +296,7 @@ function handleFormText_(msg, s) {
     d.link = lk.link; saveSession_(chatId, tg, s);
     goNext_(chatId, tg, s, 'link', 0);
   } else if (step === 'photos') {
-    tgSend_(chatId, 'عکس‌ها را بفرستید یا روی «✅ پایان ارسال عکس» بزنید.');
+    tgSend_(chatId, 'عکس، ویدیو یا فایل را بفرستید یا روی «✅ پایان ارسال» بزنید.');
   } else { // قدم‌های دکمه‌ای: نوع، زیرشاخه، مدرس، تاریخ، ساعت، مدت، مخاطب، پیش‌نمایش
     tgSend_(chatId, 'لطفاً در این قدم از دکمه‌ها استفاده کنید 🙏');
   }
@@ -294,7 +340,17 @@ function handleFormCb_(cb, s, data) {
   if (data === 'pd') {
     if (step !== 'photos') { stale(); return; }
     if (!(d.photos || []).length) { tgAnswerCb_(cb.id, TXT.PHOTO_NEED_ONE, true); return; }
+    d.replacePhotos = false; // در ویرایش، اگر چیز تازه‌ای نفرستاد قبلی‌ها می‌مانند
     tgAnswerCb_(cb.id); goNext_(chatId, tg, s, 'photos', 0); return;
+  }
+  if (data === 'pz') { // پاک کردن همه پیوست‌های قدم ۱ و ارسال دوباره
+    if (step !== 'photos') { stale(); return; }
+    d.photos = []; d.replacePhotos = false;
+    tgAnswerCb_(cb.id, 'پاک شد؛ دوباره بفرستید.');
+    if (tgEdit_(chatId, mid, TXT.FORM_START, photosKb_(0))) d.photosMsg = mid;
+    else { var zs = tgSend_(chatId, TXT.FORM_START, photosKb_(0)); if (zs) d.photosMsg = zs.message_id; }
+    saveSession_(chatId, tg, s);
+    return;
   }
   if (p === 'ct') {
     var nt = /^\d+$/.test(String(v)) ? CFG.CLASS_TYPES[num_(v)] : null;
@@ -373,7 +429,7 @@ function handleFormCb_(cb, s, data) {
   if (p === 'ef') {
     if (formFlow_(d).indexOf(v) === -1) { stale(); return; } // بخشی که در این نوع نیست
     d.editing = true;
-    if (v === 'photos') { d.replacePhotos = true; tgAnswerCb_(cb.id, 'عکس‌های جدید را بفرستید؛ با اولین عکس جدید جایگزین قبلی‌ها می‌شوند. اگر پشیمان شدید «بازگشت» بزنید تا قبلی‌ها بمانند.'); }
+    if (v === 'photos') { d.replacePhotos = true; tgAnswerCb_(cb.id, 'عکس/فایل‌های جدید را بفرستید؛ با رسیدن اولین مورد جدید، همه قبلی‌ها کنار می‌روند. اگر پشیمان شدید «✅ پایان ارسال» را بزنید تا قبلی‌ها بمانند.'); }
     else tgAnswerCb_(cb.id);
     saveSession_(chatId, tg, s);
     showStep_(chatId, tg, s, v, 0);
@@ -451,7 +507,7 @@ function handleResubmitCb_(cb, session, data) {
   if (r.status !== 'rejected') { tgAnswerCb_(cb.id, 'این گزارش در وضعیت ردشده نیست و قابل اصلاح نمی‌باشد.', true); return; }
   var s = getSession_(chatId, tg), v2 = isV2_(r);
   s.data = {
-    photos: getReportPhotos_(rid).map(function (p) { return { file_id: String(p.file_id), file_unique_id: String(p.file_unique_id || '') }; }),
+    photos: getReportMedia_(rid),
     editing: false, rid: rid, tp: 0,
     class_type: String(r.class_type || '').replace(/^#/, ''), operation_name: String(r.operation_name || ''), subject: String(r.subject || ''),
     instructor_id: r.instructor_id, instructor_name: String(r.instructor_name || ''),

@@ -16,7 +16,7 @@ function kbData(calls) { return calls.filter(c => c.p.reply_markup && c.p.reply_
 const st = () => C.getSession_(700, 700);
 
 let n = env.tgCalls.length; msg(700, { text: '📝 ارسال گزارش' });
-ok(texts(since(n)).includes('۱ تا ۵ عکس از برنامه را بفرستید (تکی یا آلبوم). حتماً بنر نماد نسرا به همراه موضوع و تاریخ در تصاویر باشد.\n\nوقتی تمام شد'), 'متن قدم ۱: ' + texts(since(n)));
+ok(texts(since(n)).includes('۱ تا ۵ عکس از برنامه را بفرستید (تکی یا آلبوم). حتماً بنر نماد نسرا به همراه موضوع و تاریخ در تصاویر باشد.\n🎞 برای «تولیدات»') && texts(since(n)).includes('\n\nوقتی تمام شد دکمه «✅ پایان ارسال» را بزنید.'), 'متن قدم ۱: ' + texts(since(n)));
 msg(700, { photo: [{ file_id: 'a', file_unique_id: 'ua' }] });
 cb(700, 'pd'); cb(700, 'ct:0'); n = env.tgCalls.length; cb(700, 'op0');
 let k = kbData(since(n));

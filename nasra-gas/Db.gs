@@ -215,11 +215,17 @@ function getReportPhotos_(rid) {
   return readTable_('ReportPhotos').filter(function (r) { return num_(r.report_id) === num_(rid); })
     .sort(function (a, b) { return num_(a.sort) - num_(b.sort); });
 }
+// پیوست‌های گزارش برای ارسال: {file_id, file_unique_id, kind} — ردیف‌های قدیمی (ستون kind خالی) عکس‌اند
+function getReportMedia_(rid) {
+  return getReportPhotos_(rid).map(function (p) {
+    return { file_id: String(p.file_id), file_unique_id: String(p.file_unique_id || ''), kind: mediaKind_(p) };
+  });
+}
 function setReportPhotos_(rid, photos) {
   var sh = sheet_('ReportPhotos'), rows = readTable_('ReportPhotos');
   for (var i = rows.length - 1; i >= 0; i--) if (num_(rows[i].report_id) === num_(rid)) sh.deleteRow(rows[i]._row);
   photos.forEach(function (p, idx) {
-    appendRow_('ReportPhotos', { report_id: rid, sort: idx, file_id: p.file_id, file_unique_id: p.file_unique_id || '' });
+    appendRow_('ReportPhotos', { report_id: rid, sort: idx, file_id: p.file_id, file_unique_id: p.file_unique_id || '', kind: mediaKind_(p) });
   });
 }
 function createReport_(rep, photos) {
@@ -264,7 +270,7 @@ function subjectsSimilar_(a, b) {
   ga.forEach(function (g) { if (gb[g]) hit++; });
   return (2 * hit) / (ga.length + Object.keys(gb).length || 1) >= 0.8;
 }
-// فقط هشدار تکراری: همان شهرستان+تاریخ+ساعت+موضوع مشابه، یا عکس با file_unique_id تکراری
+// فقط هشدار تکراری: همان شهرستان+تاریخ+ساعت+موضوع مشابه، یا عکس/فایل با file_unique_id تکراری
 function duplicateHints_(cityId, eventJalali, eventTime, subject, photoUniques, excludeRid) {
   var hints = [], reports = readTable_('Reports');
   for (var i = 0; i < reports.length; i++) {
@@ -283,7 +289,7 @@ function duplicateHints_(cityId, eventJalali, eventTime, subject, photoUniques, 
     for (var j = 0; j < ph.length; j++) {
       if (excludeRid && num_(ph[j].report_id) === num_(excludeRid)) continue;
       if (clean.indexOf(String(ph[j].file_unique_id)) !== -1) {
-        hints.push('یکی از عکس‌ها قبلاً در گزارش ' + ph[j].report_id + ' استفاده شده است');
+        hints.push('یکی از عکس‌ها/فایل‌ها قبلاً در گزارش ' + ph[j].report_id + ' استفاده شده است');
         break;
       }
     }

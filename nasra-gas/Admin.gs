@@ -154,7 +154,7 @@ function handleAdminCb_(cb, s, data) {
     var rep = getReport_(num_(a));
     if (!rep || rep.status !== 'approved') { tgAnswerCb_(cb.id, 'فقط گزارش «تایید‌شده» را می‌توان ویرایش کرد.', true); return; }
     tgAnswerCb_(cb.id);
-    panelOut_(chatId, mid, '✏️ ویرایش کپشن گزارش ' + a + ' در کانال\nکدام بخش عوض شود؟\n(عکس‌ها قابل تغییر نیستند؛ برای عوض‌کردن عکس، گزارش را حذف کنید تا کارمند دوباره ثبت کند)', reportEditKb_(num_(a)));
+    panelOut_(chatId, mid, '✏️ ویرایش کپشن گزارش ' + a + ' در کانال\nکدام بخش عوض شود؟\n(عکس‌ها و فایل‌ها قابل تغییر نیستند؛ برای عوض‌کردن آن‌ها، گزارش را حذف کنید تا کارمند دوباره ثبت کند)', reportEditKb_(num_(a)));
     return;
   }
   if (p === 'rx') { tgAnswerCb_(cb.id); startReportFieldEdit_(chatId, tg, s, num_(a), b, mid); return; }
@@ -190,7 +190,7 @@ function handleAdminCb_(cb, s, data) {
   }
   if (p === 'rd') {
     tgAnswerCb_(cb.id);
-    panelOut_(chatId, mid, '🗑 حذف گزارش ' + a + ' از کانال؟\nپست (همه عکس‌ها) از کانال پاک می‌شود، وضعیت گزارش «حذف‌شده» می‌شود و به کارمند اطلاع داده می‌شود.\nاین کار برگشت ندارد.',
+    panelOut_(chatId, mid, '🗑 حذف گزارش ' + a + ' از کانال؟\nپست (همه عکس‌ها و فایل‌ها) از کانال پاک می‌شود، وضعیت گزارش «حذف‌شده» می‌شود و به کارمند اطلاع داده می‌شود.\nاین کار برگشت ندارد.',
       ikb_([[btn_('✅ بله، حذف کن', 'A:rD:' + a)], [btn_('↩️ نه، برگرد', 'A:r:' + a)]]));
     return;
   }

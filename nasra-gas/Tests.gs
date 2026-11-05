@@ -135,9 +135,10 @@ function runTests() {
   });
 
   check('۸) یک عکس با sendPhoto و ۲+ عکس با sendMediaGroup', function () {
-    eq(albumMethodFor_(1), 'sendPhoto', 'تک‌عکس');
-    eq(albumMethodFor_(2), 'sendMediaGroup', 'دو عکس');
-    eq(albumMethodFor_(5), 'sendMediaGroup', 'پنج عکس');
+    function methods(items) { return mediaSendPlan_(items).map(function (x) { return x.method; }).join(','); }
+    eq(methods([{ file_id: 'a' }]), 'sendPhoto', 'تک‌عکس (ردیف قدیمی بدون نوع)');
+    eq(methods([{ file_id: 'a' }, { file_id: 'b' }]), 'sendMediaGroup', 'دو عکس');
+    eq(methods([1, 2, 3, 4, 5].map(function (i) { return { file_id: 'p' + i, kind: 'photo' }; })), 'sendMediaGroup', 'پنج عکس');
   });
 
   check('۹) ساعت، تاریخ شمسی، کلید نشست و شماره در Sheet «رشته» می‌مانند', function () {
@@ -595,6 +596,26 @@ function runTests() {
     eq(sh[4].rows[0][5], 'کلیپ', 'تولیدات ← «نوع تولید محتوا»');
     var ms = monthStats_(reps.map(function (r) { r.event_year = 1405; r.event_month = 8; r.event_day = 1; return r; }), [{ city_id: 1, name: 'هرند' }], 1405, 8);
     eq(ms.people + '|' + ms.views + '|' + ms.total, '9|900|3', 'بازدید خلاقانه جدا از شرکت‌کننده');
+  });
+
+  check('۲۸) پیوست گزارش: عکس، ویدیو، فایل، صوت و گیف', function () {
+    function methods(items) { return mediaSendPlan_(items).map(function (x) { return x.method + ':' + x.items.length; }).join(','); }
+    eq(formMediaOf_({ video: { file_id: 'v', file_unique_id: 'uv' } }).kind, 'video', 'ویدیو');
+    eq(formMediaOf_({ animation: { file_id: 'g' }, document: { file_id: 'g' } }).kind, 'animation', 'گیف (نه فایل)');
+    eq(formMediaOf_({ document: { file_id: 'd', mime_type: 'application/pdf' } }).kind, 'document', 'فایل');
+    eq(formMediaOf_({ audio: { file_id: 'a' } }).kind, 'audio', 'صوت');
+    eq(formMediaOf_({ voice: { file_id: 'o' } }).kind, 'voice', 'پیام صوتی');
+    eq(formMediaOf_({ sticker: { file_id: 's' } }), null, 'استیکر پذیرفته نمی‌شود');
+    eq(methods([{ kind: 'video', file_id: 'v' }]), 'sendVideo:1', 'تک‌ویدیو');
+    eq(methods([{ kind: 'document', file_id: 'd' }]), 'sendDocument:1', 'تک‌فایل');
+    eq(methods([{ kind: 'photo', file_id: 'p' }, { kind: 'video', file_id: 'v' }]), 'sendMediaGroup:2', 'عکس و ویدیو یک آلبوم');
+    eq(methods([{ kind: 'document', file_id: 'd1' }, { kind: 'photo', file_id: 'p' }, { kind: 'document', file_id: 'd2' }, { kind: 'audio', file_id: 'a' }, { kind: 'voice', file_id: 'o' }]),
+      'sendPhoto:1,sendMediaGroup:2,sendAudio:1,sendVoice:1', 'ترکیب: اول عکس/ویدیو، بعد فایل‌ها، بعد صوت');
+    eq(mediaSummary_([{ kind: 'photo' }, { kind: 'photo' }, { kind: 'document' }, { kind: 'video' }]), '۲ عکس، ۱ ویدیو، ۱ فایل', 'شمارنده');
+    eq(SHEETS.ReportPhotos.join(','), 'report_id,sort,file_id,file_unique_id,kind', 'ستون kind');
+    ok(CFG.MAX_MEDIA <= 10 && CFG.MAX_PHOTOS <= CFG.MAX_MEDIA, 'سقف‌ها با آلبوم تلگرام جورند');
+    eq(stepLabel_('تولیدات', 'photos'), '📎 عکس و فایل‌ها', 'برچسب بخش');
+    ok(unescape(encodeURIComponent('pz')).length <= 64, 'طول pz');
   });
 
   if (failed.length) {

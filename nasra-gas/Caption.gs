@@ -83,7 +83,7 @@ function faNum_(n) { return String(n).replace(/\d/g, function (c) { return '۰۱
 // برچسب هر بخش (دکمه‌های ویرایش همکار و پنل ادمین)
 function stepLabel_(type, step) {
   var L = {
-    photos: '📷 عکس‌ها', class: '⭕️ نوع کلاس/برنامه',
+    photos: '📎 عکس و فایل‌ها', class: '⭕️ نوع کلاس/برنامه',
     sub: type === 'توانمندسازی' ? '🔀 حضوری یا مجازی' : type === 'تولیدات' ? '🎞 نوع محتوا' : '🎨 بخش خلاقانه',
     operation: '💢 نام عملیات', subject: type === 'تولیدات' ? '📄 موضوع محتوا' : '📄 موضوع',
     teacher: type === 'تولیدات' ? '👨‍🏫 تولید کننده' : '👨‍🏫 مدرس/سخنران',

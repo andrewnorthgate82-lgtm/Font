@@ -5,3 +5,4 @@
     node tools/sim/scenario_samples.js
     node tools/sim/scenario_form.js
     node tools/sim/scenario_types.js
+    node tools/sim/scenario_media.js

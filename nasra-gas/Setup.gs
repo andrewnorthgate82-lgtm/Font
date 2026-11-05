@@ -8,6 +8,7 @@ var HEADER_NOTES = {
   Admins: { telegram_id: 'آیدی عددی ادمین', role: 'superadmin یا admin', is_active: '۱ یعنی فعال' },
   Instructors: { city_id: 'شماره شهرستان', name: 'نام مدرس/سخنران', name_norm: 'فرم نرمال نام برای جلوگیری از تکراری — دست نزنید' },
   Reports: { status: 'pending/approved/rejected/deleted', event_jalali: 'تاریخ برگزاری شمسی', publish_jalali: 'تاریخ درج در کانال (لحظه تایید)', resubmit_count: 'تعداد ارسال مجدد بعد از رد', submitter_position: 'نقش فرستنده در لحظه ارسال گزارش', class_sub: 'زیرشاخه: حضوری/مجازیِ توانمندسازی، بخش خلاقانه، نوع محتوای تولیدات', link: 'لینک برگزاری (مجازی) یا لینک پست (خلاقانه)؛ خالی = ندارد', form_v: '2 = کپشن جداگانه هر نوع؛ خالی = گزارش قدیمی با قالب قبلی — دست نزنید', participants: 'تعداد شرکت‌کننده؛ در خلاقانه = تعداد بازدید', place: 'مکان برگزاری؛ در مجازی = بستر برگزاری؛ در خلاقانه = بستر انتشار' },
+  ReportPhotos: { file_id: 'شناسه فایل در تلگرام — دست نزنید', kind: 'نوع پیوست: photo عکس، video ویدیو، document فایل، audio صوت، voice پیام صوتی، animation گیف؛ خالی = عکس (گزارش‌های قدیمی) — دست نزنید' },
   Sessions: { state: 'قدم فعلی فرم کاربر — دست نزنید', data_json: 'داده‌های فرم نیمه‌کاره — دست نزنید' },
   Samples: { class_type: 'نوع برنامه — دست نزنید', items_json: 'محتوای نمونه (از پنل /admin ← 📚 نمونه گزارش‌ها ثبت می‌شود) — دست نزنید' },
   Logs: { event: 'فقط هشدار و خطا این‌جا ثبت می‌شود؛ آمار آپدیت‌ها در کش و در ‪/status‬ است' }
@@ -241,11 +242,11 @@ function handleStatus_(msg) {
 var INSTALL_MARKERS = [
   ['Config', ['getProp_', 'normalizeName_', 'instructorNameIssue_', 'SUBJECT_SUGGESTIONS', 'TXT', 'CFG', 'SHEETS', 'MENU']],
   ['Caption', ['buildCaption_', 'buildCaptionV1_', 'typeFlow_', 'CLASS_SUBS']],
-  ['Db', ['ss_', 'readTable_', 'appendRow_', 'getSession_']],
+  ['Db', ['ss_', 'readTable_', 'appendRow_', 'getSession_', 'getReportMedia_']],
   ['Jalali', ['monthTag_', 'todayJalali_']],
-  ['Telegram', ['doPost', 'tgCall_', 'mainMenuKb_', 'routeCallback_']],
+  ['Telegram', ['doPost', 'tgCall_', 'mainMenuKb_', 'routeCallback_', 'mediaSendPlan_']],
   ['Registration', ['menuMyReports_', 'menuMyTeachers_']],
-  ['ReportForm', ['startReport_', 'showStep_', 'platformOptions_', 'resetTypeFields_']],
+  ['ReportForm', ['startReport_', 'showStep_', 'platformOptions_', 'resetTypeFields_', 'handleFormMedia_']],
   ['Review', ['publishReport_', 'sendReportToReview_']],
   ['Admin', ['handleAdminCb_', 'reportEditFields_', 'handleSampleCb_', 'extraChannels_']],
   ['Automation', ['installPhase4', 'excelSheets_', 'dailyJobs', 'nightlyBackup']],

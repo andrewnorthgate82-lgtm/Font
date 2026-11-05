@@ -18,7 +18,7 @@ function rejectReasonsKb_(rid, selected, hasManual) {
 function sendReportToReview_(rep) {
   var groupId = getSettingNum_('review_group_id');
   if (!groupId) { log_('warn', 'review-group-missing', 'گزارش ' + rep.report_id, ''); return false; }
-  var photos = getReportPhotos_(rep.report_id).map(function (p) { return { file_id: String(p.file_id), file_unique_id: String(p.file_unique_id || '') }; });
+  var photos = getReportMedia_(rep.report_id); // عکس، ویدیو، فایل، صوت…
   // در گروه بررسی «تاریخ درج» امروز فرض می‌شود؛ هنگام تایید دوباره محاسبه می‌شود.
   var caption = captionFromReport_(rep, todayJalaliStr_());
   var album = tgSendAlbum_(groupId, photos, caption);
@@ -43,11 +43,11 @@ function sendReportToReview_(rep) {
 function publishReport_(rep) {
   var channelId = getSettingNum_('channel_id');
   if (!channelId) throw new Error('کانال در Settings تنظیم نشده است');
-  var photos = getReportPhotos_(rep.report_id).map(function (p) { return { file_id: String(p.file_id) }; });
+  var photos = getReportMedia_(rep.report_id);
   var publishDate = todayJalaliStr_(); // «تاریخ درج» در لحظه تایید
   var caption = captionFromReport_(rep, publishDate);
   var album = tgSendAlbum_(channelId, photos, caption);
-  if (!album) throw new Error('ارسال آلبوم به کانال ناموفق بود');
+  if (!album) throw new Error('ارسال عکس/فایل‌ها به کانال ناموفق بود');
   // انتشار همزمان در کانال‌های اضافه (📡 کانال‌ها در پنل) — شکست آن‌ها جلوی تایید را نمی‌گیرد، فقط هشدار می‌دهد
   var extra = {}, failed = [];
   extraChannels_().forEach(function (c) {
