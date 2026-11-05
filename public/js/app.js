@@ -58,7 +58,28 @@ export function showError(error) { console.error(error); toast(errorText(error),
 export function openModal(title, html, wide = false) { $('#modal-title').textContent = title; $('#modal-body').innerHTML = html; $('#modal-root').classList.remove('hidden'); $('#modal-root').classList.toggle('modal-wide', wide); }
 export function closeModal() { $('#modal-root').classList.add('hidden'); $('#modal-body').innerHTML = ''; }
 export function downloadBlob(blob, filename) { const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1500); }
-export async function copy(text) { try { await navigator.clipboard.writeText(String(text)); toast('کپی شد', 'success'); } catch { toast('کپی خودکار ممکن نبود؛ متن را دستی انتخاب کنید', 'error'); } }
+export async function copy(text) {
+  const value = String(text);
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable');
+    await navigator.clipboard.writeText(value);
+    toast('کپی شد', 'success');
+    return;
+  } catch { /* Embedded previews may deny clipboard permission; try the local selection fallback. */ }
+  try {
+    const area = document.createElement('textarea');
+    area.value = value; area.readOnly = true; area.setAttribute('aria-label', 'متن برای کپی');
+    area.style.cssText = 'position:fixed;inset:0 auto auto 0;width:1px;height:1px;opacity:0;pointer-events:none';
+    document.body.appendChild(area); area.focus(); area.select(); area.setSelectionRange(0, area.value.length);
+    const copied = document.execCommand('copy'); area.remove();
+    if (!copied) throw new Error('Browser copy rejected');
+    toast('کپی شد', 'success');
+  } catch {
+    openModal('کپی دستی', `<div class="stack"><p class="small muted">مرورگر اجازهٔ کپی خودکار نداد. متن زیر انتخاب شده است؛ با Ctrl/Cmd+C کپی کنید.</p><textarea id="manual-copy" rows="9" readonly>${escapeHtml(value)}</textarea></div>`);
+    const area = $('#manual-copy'); area?.focus(); area?.select();
+    toast('متن برای کپی دستی باز شد', 'info');
+  }
+}
 export function formData(form) { return Object.fromEntries(new FormData(form).entries()); }
 export function checked(form, name) { return Boolean(form.querySelector(`[name="${name}"]`)?.checked); }
 export function confirmExternal(message = 'این اقدام خارجی پس از تأیید شما انجام می‌شود. ادامه می‌دهید؟') { return window.confirm(message); }
@@ -76,7 +97,7 @@ export async function renderRoute() {
   $('#page-kicker').textContent = route.name === 'content' ? 'NASRA / CONTENT DETAIL' : `NASRA / ${route.name.toUpperCase()}`;
   $('#sidebar').classList.remove('open'); $('#sidebar-backdrop').classList.add('hidden');
   const app = $('#app'); app.innerHTML = loading(); state.pageLoading = true;
-  try { const module = await import('./pages.js?v=20261105-readable-script'); const page = await module.renderPageRoute(route); app.innerHTML = page.html; if (page.mount) await page.mount(); }
+  try { const module = await import('./pages.js?v=20261105-copy-fallback'); const page = await module.renderPageRoute(route); app.innerHTML = page.html; if (page.mount) await page.mount(); }
   catch (error) { app.innerHTML = `<div class="notice danger"><strong>صفحه بارگذاری نشد</strong><br>${escapeHtml(errorText(error))}</div><div class="form-actions"><button class="btn ghost" id="page-retry">تلاش دوباره</button></div>`; $('#page-retry')?.addEventListener('click', renderRoute); console.error(error); }
   finally { state.pageLoading = false; }
 }
