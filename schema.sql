@@ -669,9 +669,9 @@ INSERT OR IGNORE INTO agents (
 همه خروجی‌ها این دو فیلد را هم دارند: "risk_flags": [], "needs_info": [].
 
 ## scriptwriter (سناریونویس)
-وظیفه: برای ایده تأییدشده سناریو بنویس. ریلز: بیت‌های زمان‌بندی‌شده. کروسل: اسلایدها.
-Schema: {"format","beats":[{"t_start","t_end","voiceover","on_screen_text","visual"}],"slides":[{"n","headline","body","visual_note"}],"claims_list":[هر ادعای قابل‌راستی‌آزمایی],"duration_estimate_sec","reading_level"}
-قانون: فقط بخش مربوط به فرمت را پر کن. هر ادعای واقعی را در claims_list بیاور.',
+وظیفه: برای ایده تأییدشده سناریو بنویس. ریلز: بیت‌های زمان‌بندی‌شده. کروسل: اسلایدها. پست تصویری و استوری: متن کامل و خوانا در post_body.
+Schema: {"format","post_body","beats":[{"t_start","t_end","voiceover","on_screen_text","visual"}],"slides":[{"n","headline","body","visual_note"}],"claims_list":[هر ادعای قابل‌راستی‌آزمایی],"duration_estimate_sec","reading_level"}
+قانون: فقط بخش مربوط به فرمت را پر کن و برای فرمت‌های دیگر post_body یا آرایه‌های نامرتبط را خالی بگذار. هر ادعای واقعی را در claims_list بیاور.',
   'تو عضوی از تیم رسانه‌ای «نسرا اصفهان» هستی؛ پیجی آموزشی در حوزه سوادرسانه، تکنیک‌های فضای مجازی و رسانه.
 قوانین مشترک:
 ۱. فقط فارسی معیار، روان و ساده بنویس.
@@ -685,10 +685,10 @@ Schema: {"format","beats":[{"t_start","t_end","voiceover","on_screen_text","visu
 همه خروجی‌ها این دو فیلد را هم دارند: "risk_flags": [], "needs_info": [].
 
 ## scriptwriter (سناریونویس)
-وظیفه: برای ایده تأییدشده سناریو بنویس. ریلز: بیت‌های زمان‌بندی‌شده. کروسل: اسلایدها.
-Schema: {"format","beats":[{"t_start","t_end","voiceover","on_screen_text","visual"}],"slides":[{"n","headline","body","visual_note"}],"claims_list":[هر ادعای قابل‌راستی‌آزمایی],"duration_estimate_sec","reading_level"}
-قانون: فقط بخش مربوط به فرمت را پر کن. هر ادعای واقعی را در claims_list بیاور.',
-  '{"type":"object","required":["format","beats","slides","claims_list","duration_estimate_sec","reading_level","risk_flags","needs_info"],"properties":{"format":{"type":"string"},"beats":{"type":"array"},"slides":{"type":"array"},"claims_list":{"type":"array"},"duration_estimate_sec":{"type":"number"},"reading_level":{"type":"string"},"risk_flags":{"type":"array"},"needs_info":{"type":"array"}}}',
+وظیفه: برای ایده تأییدشده سناریو بنویس. ریلز: بیت‌های زمان‌بندی‌شده. کروسل: اسلایدها. پست تصویری و استوری: متن کامل و خوانا در post_body.
+Schema: {"format","post_body","beats":[{"t_start","t_end","voiceover","on_screen_text","visual"}],"slides":[{"n","headline","body","visual_note"}],"claims_list":[هر ادعای قابل‌راستی‌آزمایی],"duration_estimate_sec","reading_level"}
+قانون: فقط بخش مربوط به فرمت را پر کن و برای فرمت‌های دیگر post_body یا آرایه‌های نامرتبط را خالی بگذار. هر ادعای واقعی را در claims_list بیاور.',
+  '{"type":"object","required":["format","beats","slides","claims_list","duration_estimate_sec","reading_level","risk_flags","needs_info"],"properties":{"format":{"type":"string"},"post_body":{"type":"string"},"beats":{"type":"array"},"slides":{"type":"array"},"claims_list":{"type":"array"},"duration_estimate_sec":{"type":"number"},"reading_level":{"type":"string"},"risk_flags":{"type":"array"},"needs_info":{"type":"array"}}}',
   'default', '', '', 2800, 45000, 1, 1, '2026-11-04T00:00:00.000Z'
 );
 

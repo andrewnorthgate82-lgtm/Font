@@ -46,7 +46,13 @@ function mockAgentOutput(systemPrompt, userText) {
     { format: 'carousel', hook: 'سه سؤال پیش از باور کردن یک خبر', angle: 'اسلایدهای گام‌به‌گام', key_message: 'منبع، تاریخ و تصویر را جدا بررسی کن.', cta: 'ذخیره کن و مرور کن', effort: 'متوسط', why_it_may_work: { hypothesis: 'فرضیه برای آزمایش: ساختار مرحله‌ای خوانایی را بیشتر می‌کند.', confidence: 'کم' } },
     { format: 'reel', hook: 'یک ثانیه مکث کن؛ لینک را دقیق بخوان', angle: 'بازنمایی کوتاه بدون ترساندن', key_message: 'عجله، نشانه رایج فیشینگ است.', cta: 'برای خانواده بفرست', effort: 'زیاد', why_it_may_work: { hypothesis: 'فرضیه برای آزمایش: مثال ملموس یادآوری را بیشتر می‌کند.', confidence: 'کم' } }
   ], ...common };
-  if (id === 'scriptwriter') return { format, beats: format === 'reel' ? [{ t_start: 0, t_end: 3, voiceover: 'قبل از بازنشر یک ثانیه مکث کن.', on_screen_text: 'یک ثانیه مکث کن', visual: 'نمای نزدیک از صفحه پیام' }, { t_start: 3, t_end: 12, voiceover: 'منبع و تاریخ را بررسی کن.', on_screen_text: 'منبع و تاریخ', visual: 'نمایش چک‌لیست' }] : [], slides: format === 'carousel' ? [{ n: 1, headline: 'سه سؤال مهم', body: 'چه کسی منتشر کرده؟ چه زمانی؟ مدرک کجاست؟', visual_note: 'سه کارت با حاشیه امن' }] : [], claims_list: [], duration_estimate_sec: format === 'reel' ? 12 : 30, reading_level: 'ساده و عمومی', ...common };
+  if (id === 'scriptwriter') return {
+    format,
+    post_body: ['post', 'story'].includes(format) ? 'قبل از بازنشر یک پیام مشکوک، این سه نشانه را بررسی کن:\n۱. منبع مشخص و قابل اعتماد نیست.\n۲. تاریخ یا زمینه پیام روشن نیست.\n۳. از شما می‌خواهد عجله کنید یا رمز و اطلاعات شخصی بدهید.\n\nاگر یکی از این نشانه‌ها را دیدید، مکث کنید و پیام را از مسیر رسمی بررسی کنید.' : '',
+    beats: format === 'reel' ? [{ t_start: 0, t_end: 3, voiceover: 'قبل از بازنشر یک ثانیه مکث کن.', on_screen_text: 'یک ثانیه مکث کن', visual: 'نمای نزدیک از صفحه پیام' }, { t_start: 3, t_end: 12, voiceover: 'منبع و تاریخ را بررسی کن.', on_screen_text: 'منبع و تاریخ', visual: 'نمایش چک‌لیست' }] : [],
+    slides: format === 'carousel' ? [{ n: 1, headline: 'سه سؤال مهم', body: 'چه کسی منتشر کرده؟ چه زمانی؟ مدرک کجاست؟', visual_note: 'سه کارت با حاشیه امن' }] : [],
+    claims_list: [], duration_estimate_sec: format === 'reel' ? 12 : 30, reading_level: 'ساده و عمومی', ...common
+  };
   if (id === 'fact_checker') return { claims: [], overall: 'pass', notes: 'در ورودی آزمایشی ادعای قابل راستی‌آزمایی ثبت نشده است.', ...common };
   if (id === 'video_editor') return { shot_list: [{ n: 1, duration_sec: 3, visual: 'نمای صفحه پیام', on_screen_text: 'مکث کن', transition: 'cut' }], cut_plan: { pace: 'آرام و خوانا', beat_points: [0, 3] }, subtitle_srt: '1\n00:00:00,000 --> 00:00:03,000\nمکث کن', cover_frame_idea: 'قاب چک‌لیست با کنتراست بالا', export_spec: { ratio: '9:16', resolution: '1080x1920', fps: 30 }, tool_notes: 'مشخصات را با فایل نهایی تطبیق دهید.', ...common };
   if (id === 'poster_designer' || id === 'infographic_designer') {
