@@ -1,0 +1,31 @@
+# Optional Wrangler deployment manifest. The owner can instead paste worker.js
+# into the Cloudflare dashboard; no build step is required.
+name = "nasra-esfahan-media-studio"
+main = "worker.js"
+compatibility_date = "2026-11-04"
+workers_dev = true
+
+# Create a D1 database named nasra_esfahan and replace this public database ID.
+[[d1_databases]]
+binding = "DB"
+database_name = "nasra_esfahan"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+[triggers]
+# One trigger only; all Tehran-hour jobs are gated idempotently in D1.
+crons = ["*/5 * * * *"]
+
+# Workers AI is available on the free plan and needs no API key in the frontend.
+[ai]
+binding = "AI"
+
+# Public, non-secret deployment settings. Secrets are added separately by the
+# manual deployment workflow or Cloudflare dashboard.
+[vars]
+ALLOWED_ORIGINS = "https://nasra-esfahan-media-studio.pages.dev"
+AI_PROVIDER = "workers_ai"
+
+# Optional R2 (only if r2_enabled=true in Settings and a binding is configured):
+# [[r2_buckets]]
+# binding = "R2"
+# bucket_name = "nasra-media"

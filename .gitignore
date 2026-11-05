@@ -1,0 +1,10 @@
+.preview/
+.DS_Store
+*.log
+nasra-backup-*.json
+node_modules/
+wrangler.generated.toml
+.deploy-public/
+.env
+.env.*
+.dev.vars

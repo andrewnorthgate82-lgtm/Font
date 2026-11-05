@@ -1,0 +1,33 @@
+name: Deploy Nasra to Cloudflare
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nasra-cloudflare-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out the reviewed branch
+        uses: actions/checkout@v4
+      - name: Use the supported Node runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Deploy D1, Worker, Pages and optional Telegram setup
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          OWNER_PASSWORD: ${{ secrets.OWNER_PASSWORD }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_OWNER_CHAT_ID: ${{ secrets.TG_OWNER_CHAT_ID }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          WRANGLER_VERSION: 4.157.0
+        run: bash scripts/deploy-cloudflare.sh
