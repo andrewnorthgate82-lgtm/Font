@@ -343,7 +343,11 @@ async function ipHash(request, env) {
 }
 async function sessionFromRequest(request, env, db) {
   if (!env.SESSION_SECRET) return null;
-  const token = cookieValue(request, 'nasra_session');
+  const authorization = request.headers.get('Authorization') || '';
+  const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1].trim().slice(0, 500) || '';
+  // Embedded previews can block or strip cookies. An explicitly issued Bearer
+  // session uses the same signed token and server-side session row, not a bypass.
+  const token = bearer || cookieValue(request, 'nasra_session');
   const parts = token.split('.');
   if (parts.length !== 3) return null;
   const [id, exp, signature] = parts;
@@ -398,8 +402,10 @@ async function login(request, env, db) {
   await dbRun(db, 'INSERT INTO sessions (id,csrf_token,created_at,expires_at,user_agent,ip_hash,revoked) VALUES (?,?,?,?,?,?,0)', [id, csrf, Date.now(), expires * 1000, str(request.headers.get('User-Agent'), 300), hash]);
   await dbRun(db, 'DELETE FROM sessions WHERE expires_at<?', [Date.now()]);
   await audit(db, 'owner', 'login', 'session', id, null, hash);
-  const cookie = authCookie(request, encodeURIComponent(`${id}.${expires}.${signature}`), SESSION_SECONDS, body.embedded === true);
-  return jsonResponse({ ok: true, csrf_token: csrf, expires_at: new Date(expires * 1000).toISOString() }, 200, { 'Set-Cookie': cookie });
+  const sessionToken = `${id}.${expires}.${signature}`;
+  const cookie = authCookie(request, encodeURIComponent(sessionToken), SESSION_SECONDS, body.embedded === true);
+  const allowBearer = body.embedded === true || env.PREVIEW_MODE === '1';
+  return jsonResponse({ ok: true, csrf_token: csrf, expires_at: new Date(expires * 1000).toISOString(), ...(allowBearer ? { session_token: sessionToken } : {}) }, 200, { 'Set-Cookie': cookie });
 }
 
 // Prompt-injection boundary. External content is data, never an instruction.
@@ -2103,7 +2109,7 @@ async function handleApi(request, env, db, ctx, url) {
   const parts = routeParts(url);
   const method = request.method.toUpperCase();
   const path = url.pathname;
-  if (method === 'OPTIONS') return new Response(null, { status: 204, headers: securityHeaders({ ...corsHeaders(request, env), 'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type,X-CSRF-Token,X-Telegram-Bot-Api-Secret-Token', 'Access-Control-Max-Age': '86400' }) });
+  if (method === 'OPTIONS') return new Response(null, { status: 204, headers: securityHeaders({ ...corsHeaders(request, env), 'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-CSRF-Token,X-Telegram-Bot-Api-Secret-Token', 'Access-Control-Max-Age': '86400' }) });
   if (path === '/api/health' && method === 'GET') return jsonResponse({ ok: true, app: 'Nasra Esfahan Media Studio', version: APP_VERSION, db: Boolean(db), time: isoNow(), jalali: utcToJalali(), secrets: await integrationStatus(request, env, db).then(s => s.configured) });
   if (path === '/api/auth/login' && method === 'POST') return await login(request, env, db);
   if (path === '/api/auth/session' && method === 'GET') {

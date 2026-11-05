@@ -69,6 +69,9 @@ const env = {
   DB: db,
   OWNER_PASSWORD: process.env.OWNER_PASSWORD || 'nasra-preview',
   SESSION_SECRET: process.env.SESSION_SECRET || 'preview-session-secret-change-me',
+  // Preview also issues the same signed session as a Bearer token because an
+  // embedding proxy or browser may block cookies. Production does not set this.
+  PREVIEW_MODE: '1',
   ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS || '',
   TG_BOT_TOKEN: process.env.TG_BOT_TOKEN || '', TG_OWNER_CHAT_ID: process.env.TG_OWNER_CHAT_ID || '', TG_SECRET: process.env.TG_SECRET || '',
   AI_PROVIDER: process.env.AI_PROVIDER || 'workers_ai', AI_API_KEY: process.env.AI_API_KEY || '',

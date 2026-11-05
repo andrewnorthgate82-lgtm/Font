@@ -2,7 +2,13 @@ import { API_BASE } from './config.js';
 import { faDigits, formatJalali, utcToJalali, relativeTime } from './jalali.js';
 import { escapeHtml } from './validators.js';
 
-export const state = { session: null, csrf: '', route: 'dashboard', integrations: null, pageLoading: false, timer: null };
+export const state = { session: null, csrf: '', sessionToken: '', route: 'dashboard', integrations: null, pageLoading: false, timer: null };
+const PREVIEW_SESSION_KEY = 'nasra_preview_session';
+function setSessionToken(token = '') {
+  state.sessionToken = token;
+  try { if (token) sessionStorage.setItem(PREVIEW_SESSION_KEY, token); else sessionStorage.removeItem(PREVIEW_SESSION_KEY); } catch {}
+}
+try { state.sessionToken = sessionStorage.getItem(PREVIEW_SESSION_KEY) || ''; } catch {}
 export { faDigits, formatJalali, utcToJalali, relativeTime, escapeHtml };
 export const $ = (selector, root = document) => root.querySelector(selector);
 export const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -24,6 +30,7 @@ export async function api(path, options = {}) {
   const headers = new Headers(options.headers || {});
   if (options.body && typeof options.body !== 'string' && !(options.body instanceof FormData)) { headers.set('Content-Type', 'application/json'); options = { ...options, body: JSON.stringify(options.body) }; }
   if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && state.csrf && !path.includes('/auth/login')) headers.set('X-CSRF-Token', state.csrf);
+  if (state.sessionToken && !path.includes('/auth/login')) headers.set('Authorization', `Bearer ${state.sessionToken}`);
   const response = await fetch(`${API_BASE}${path}`, { ...options, method, headers, credentials: 'include' });
   const text = await response.text(); let payload;
   try { payload = text ? JSON.parse(text) : {}; } catch { payload = { ok: false, error: { message: text.slice(0, 300) } }; }
@@ -32,7 +39,9 @@ export async function api(path, options = {}) {
   return payload;
 }
 export async function apiBlob(path) {
-  const response = await fetch(`${API_BASE}${path}`, { credentials: 'include' });
+  const headers = new Headers();
+  if (state.sessionToken) headers.set('Authorization', `Bearer ${state.sessionToken}`);
+  const response = await fetch(`${API_BASE}${path}`, { headers, credentials: 'include' });
   if (!response.ok) throw new Error('دانلود ناموفق بود');
   return await response.blob();
 }
@@ -63,11 +72,11 @@ export async function renderRoute() {
   catch (error) { app.innerHTML = `<div class="notice danger"><strong>صفحه بارگذاری نشد</strong><br>${escapeHtml(errorText(error))}</div><div class="form-actions"><button class="btn ghost" id="page-retry">تلاش دوباره</button></div>`; $('#page-retry')?.addEventListener('click', renderRoute); console.error(error); }
   finally { state.pageLoading = false; }
 }
-export function showLogin() { state.session = null; state.csrf = ''; $('#app-shell').classList.add('hidden'); $('#login-view').classList.remove('hidden'); }
+export function showLogin() { state.session = null; state.csrf = ''; setSessionToken(''); $('#app-shell').classList.add('hidden'); $('#login-view').classList.remove('hidden'); }
 async function showApp(session) { state.session = session; state.csrf = session.csrf_token || state.csrf; state.integrations = session.integrations || null; $('#login-view').classList.add('hidden'); $('#app-shell').classList.remove('hidden'); startLiveWidgets(); await renderRoute(); refreshApprovalCount(); }
 export async function refreshApprovalCount() { try { const r = await api('/api/dashboard'); const n = r.data?.pending_gates?.length || 0; const el = $('#approval-count'); if (el) { el.textContent = faDigits(n); el.classList.toggle('hidden', !n); } } catch {} }
 
-$('#login-form')?.addEventListener('submit', async event => { event.preventDefault(); const button = event.target.querySelector('button'); button.disabled = true; $('#login-error').textContent = ''; try { const r = await api('/api/auth/login', { method: 'POST', body: { password: $('#login-password').value, embedded: window.self !== window.top } }); state.csrf = r.csrf_token; await showApp({ authenticated: true, csrf_token: r.csrf_token }); $('#login-password').value = ''; } catch (error) { $('#login-error').textContent = errorText(error); } finally { button.disabled = false; } });
+$('#login-form')?.addEventListener('submit', async event => { event.preventDefault(); const button = event.target.querySelector('button'); button.disabled = true; $('#login-error').textContent = ''; try { const r = await api('/api/auth/login', { method: 'POST', body: { password: $('#login-password').value, embedded: window.self !== window.top } }); setSessionToken(r.session_token || ''); state.csrf = r.csrf_token; await showApp({ authenticated: true, csrf_token: r.csrf_token }); $('#login-password').value = ''; } catch (error) { $('#login-error').textContent = errorText(error); } finally { button.disabled = false; } });
 $('#logout-btn')?.addEventListener('click', async () => { try { await api('/api/auth/logout', { method: 'POST', body: { embedded: window.self !== window.top } }); } catch {} showLogin(); });
 $('#refresh-page')?.addEventListener('click', renderRoute);
 $('#open-sidebar')?.addEventListener('click', () => { $('#sidebar').classList.add('open'); $('#sidebar-backdrop').classList.remove('hidden'); });
