@@ -12,6 +12,7 @@
 - ساعت‌های پیش‌فرض `13:30` و `21:00` فقط fallback تقویم‌اند، نه ادعای الگوریتم. بدون داده Insights، پیشنهاد زمان‌بندی «داده کافی نیست» است. همه زمان‌های ذخیره‌شده UTC و همه نمایش‌ها Asia/Tehran و جلالی‌اند.
 - نبود هر Secret فقط همان سرویس را به «not configured» و Manual Package می‌برد؛ بقیه برنامه و Selftest کار می‌کند. هیچ Agent ابزار، دسترسی انتشار یا اجازه پاسخ مستقل ندارد.
 - `dev-preview.mjs` فقط برای پیش‌نمایش فنی محلی است و در راه‌اندازی production لازم نیست. Mock AI هم فقط در همان preview است؛ در Worker production خروجی مدل واقعی یا حالت not configured وجود دارد.
+- برای استقرار دستی و idempotent با GitHub Actions و آماده‌سازی یک کانال تلگرام آزمایشی، راهنمای کوتاه [TELEGRAM-TEST-SETUP.fa.md](TELEGRAM-TEST-SETUP.fa.md) را ببینید. این Workflow خودکار روی Push اجرا نمی‌شود و هیچ پست واقعی ارسال نمی‌کند.
 
 ---
 
