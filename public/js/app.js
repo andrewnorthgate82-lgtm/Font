@@ -2,7 +2,7 @@ import { API_BASE } from './config.js';
 import { faDigits, formatJalali, utcToJalali, relativeTime } from './jalali.js';
 import { escapeHtml } from './validators.js';
 
-export const state = { session: null, csrf: '', sessionToken: '', route: 'dashboard', integrations: null, pageLoading: false, timer: null };
+export const state = { session: null, csrf: '', sessionToken: '', authVersion: 0, route: 'dashboard', integrations: null, pageLoading: false, timer: null };
 const PREVIEW_SESSION_KEY = 'nasra_preview_session';
 function setSessionToken(token = '') {
   state.sessionToken = token;
@@ -27,6 +27,7 @@ export function empty(title, text = '') { return `<div class="empty"><strong>${e
 
 export async function api(path, options = {}) {
   const method = (options.method || 'GET').toUpperCase();
+  const authVersion = state.authVersion;
   const headers = new Headers(options.headers || {});
   if (options.body && typeof options.body !== 'string' && !(options.body instanceof FormData)) { headers.set('Content-Type', 'application/json'); options = { ...options, body: JSON.stringify(options.body) }; }
   if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && state.csrf && !path.includes('/auth/login')) headers.set('X-CSRF-Token', state.csrf);
@@ -34,7 +35,8 @@ export async function api(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, { ...options, method, headers, credentials: 'include' });
   const text = await response.text(); let payload;
   try { payload = text ? JSON.parse(text) : {}; } catch { payload = { ok: false, error: { message: text.slice(0, 300) } }; }
-  if (response.status === 401 && !path.includes('/auth/login')) showLogin();
+  // A slow response from before a newer login/logout must not change the UI.
+  if (response.status === 401 && !path.includes('/auth/login') && authVersion === state.authVersion) showLogin();
   if (!response.ok || (payload.ok === false && payload.error)) { const error = new Error(payload?.error?.message || `HTTP ${response.status}`); error.status = response.status; error.code = payload?.error?.code; error.details = payload?.error?.details; error.payload = payload; throw error; }
   return payload;
 }
@@ -72,11 +74,25 @@ export async function renderRoute() {
   catch (error) { app.innerHTML = `<div class="notice danger"><strong>صفحه بارگذاری نشد</strong><br>${escapeHtml(errorText(error))}</div><div class="form-actions"><button class="btn ghost" id="page-retry">تلاش دوباره</button></div>`; $('#page-retry')?.addEventListener('click', renderRoute); console.error(error); }
   finally { state.pageLoading = false; }
 }
-export function showLogin() { state.session = null; state.csrf = ''; setSessionToken(''); $('#app-shell').classList.add('hidden'); $('#login-view').classList.remove('hidden'); }
+export function showLogin() { state.authVersion += 1; state.session = null; state.csrf = ''; setSessionToken(''); $('#app-shell').classList.add('hidden'); $('#login-view').classList.remove('hidden'); }
 async function showApp(session) { state.session = session; state.csrf = session.csrf_token || state.csrf; state.integrations = session.integrations || null; $('#login-view').classList.add('hidden'); $('#app-shell').classList.remove('hidden'); startLiveWidgets(); await renderRoute(); refreshApprovalCount(); }
 export async function refreshApprovalCount() { try { const r = await api('/api/dashboard'); const n = r.data?.pending_gates?.length || 0; const el = $('#approval-count'); if (el) { el.textContent = faDigits(n); el.classList.toggle('hidden', !n); } } catch {} }
 
-$('#login-form')?.addEventListener('submit', async event => { event.preventDefault(); const button = event.target.querySelector('button'); button.disabled = true; $('#login-error').textContent = ''; try { const r = await api('/api/auth/login', { method: 'POST', body: { password: $('#login-password').value, embedded: window.self !== window.top } }); setSessionToken(r.session_token || ''); state.csrf = r.csrf_token; await showApp({ authenticated: true, csrf_token: r.csrf_token }); $('#login-password').value = ''; } catch (error) { $('#login-error').textContent = errorText(error); } finally { button.disabled = false; } });
+$('#login-form')?.addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = event.target.querySelector('button');
+  const loginVersion = ++state.authVersion;
+  button.disabled = true; $('#login-error').textContent = '';
+  try {
+    const r = await api('/api/auth/login', { method: 'POST', body: { password: $('#login-password').value, embedded: window.self !== window.top } });
+    if (loginVersion !== state.authVersion) return;
+    setSessionToken(r.session_token || ''); state.csrf = r.csrf_token;
+    await showApp({ authenticated: true, csrf_token: r.csrf_token });
+    $('#login-password').value = '';
+  } catch (error) {
+    if (loginVersion === state.authVersion) $('#login-error').textContent = errorText(error);
+  } finally { button.disabled = false; }
+});
 $('#logout-btn')?.addEventListener('click', async () => { try { await api('/api/auth/logout', { method: 'POST', body: { embedded: window.self !== window.top } }); } catch {} showLogin(); });
 $('#refresh-page')?.addEventListener('click', renderRoute);
 $('#open-sidebar')?.addEventListener('click', () => { $('#sidebar').classList.add('open'); $('#sidebar-backdrop').classList.remove('hidden'); });
@@ -87,5 +103,12 @@ document.addEventListener('click', event => { if (event.target.closest('[data-cl
 window.addEventListener('hashchange', renderRoute);
 document.addEventListener('keydown', event => { if (event.key === 'Escape') closeModal(); });
 
-async function boot() { try { const r = await api('/api/auth/session'); if (r.authenticated) await showApp(r); else showLogin(); } catch { showLogin(); } }
+async function boot() {
+  const version = state.authVersion;
+  try {
+    const r = await api('/api/auth/session');
+    if (version !== state.authVersion) return;
+    if (r.authenticated) await showApp(r); else showLogin();
+  } catch { if (version === state.authVersion) showLogin(); }
+}
 boot();
