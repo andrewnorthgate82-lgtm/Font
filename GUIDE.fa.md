@@ -1,6 +1,6 @@
 # راهنمای راه‌اندازی «استودیو رسانه‌ای نسرا اصفهان»
 
-**نسخه راهنما:** ۱٫۰٫۰ — **تاریخ بررسی مستندات:** ۲۰۲۶-۱۱-۰۴ (۱۴۰۵/۰۸/۱۳)  
+**نسخه راهنما:** ۱٫۱٫۰ — **تاریخ بررسی مستندات:** ۲۰۲۶-۱۱-۰۴ (۱۴۰۵/۰۸/۱۳)  
 **مخاطب راهنما:** مالک غیربرنامه‌نویس؛ همه مراحل production با مرورگر انجام می‌شود.
 
 ## فرض‌ها و تصمیم‌های امن پیش‌فرض
@@ -13,6 +13,7 @@
 - نبود هر Secret فقط همان سرویس را به «not configured» و Manual Package می‌برد؛ بقیه برنامه و Selftest کار می‌کند. هیچ Agent ابزار، دسترسی انتشار یا اجازه پاسخ مستقل ندارد.
 - `dev-preview.mjs` فقط برای پیش‌نمایش فنی محلی است و در راه‌اندازی production لازم نیست. Mock AI هم فقط در همان preview است؛ در Worker production خروجی مدل واقعی یا حالت not configured وجود دارد.
 - برای استقرار دستی و idempotent با GitHub Actions و آماده‌سازی یک کانال تلگرام آزمایشی، راهنمای کوتاه [TELEGRAM-TEST-SETUP.fa.md](TELEGRAM-TEST-SETUP.fa.md) را ببینید. این Workflow خودکار روی Push اجرا نمی‌شود و هیچ پست واقعی ارسال نمی‌کند.
+- **مسیر اجرای دوم (اختیاری):** همان برنامه با `node server/index.mjs` روی Node 22 و **SQLite محلی**، با Scheduler واقعی و Telegram Long Polling هم اجرا می‌شود. راهنمای کامل: [SILLYDEV-DEPLOY.fa.md](SILLYDEV-DEPLOY.fa.md). در این مسیر Publish Guard پیش‌فرض `dry_run` است و هیچ پستی بدون تأیید جداگانهٔ مالک ارسال نمی‌شود؛ `worker.js` و همهٔ فایل‌های Cloudflare دست‌نخورده‌اند.
 
 ---
 
@@ -24,6 +25,9 @@ Font/
 ├── worker.js                  # تنها Worker؛ API، cron، AI، webhook و adapterها
 ├── wrangler.toml              # مانیفست اختیاری؛ برای paste در Dashboard لازم نیست
 ├── dev-preview.mjs            # پیش‌نمایش صفر وابستگی با node:sqlite؛ فقط آزمون فنی
+├── server/                     # اجرای self-hosted (SillyDev): Entry point، SQLite، Scheduler، Polling، Guard
+├── tests/                      # آزمون محلی runtime + تلگرام تقلبی (بدون شبکه)
+├── .env.example               # الگوی متغیرهای محیطی اجرای self-hosted (بدون Secret واقعی)
 ├── GUIDE.fa.md                # همین راهنما
 ├── gas/
 │   ├── Code.gs                # Mirror و Snapshot در Google Sheets
