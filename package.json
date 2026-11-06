@@ -1,0 +1,20 @@
+{
+  "name": "nasra-esfahan-media-studio",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Nasra Esfahan Media Studio — Cloudflare Worker plus a self-hosted Node 22 / SQLite runtime for SillyDev",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "start": "node server/index.mjs",
+    "dev": "node server/index.mjs",
+    "test": "node --test tests/runtime.test.mjs",
+    "check": "node --check worker.js && node --check server/index.mjs && node --check server/http-server.mjs",
+    "preview": "node dev-preview.mjs",
+    "fake-telegram": "node tests/fake-telegram.mjs"
+  },
+  "keywords": ["nasra", "media-studio", "sqlite", "sillydev", "cloudflare-worker"],
+  "license": "UNLICENSED"
+}
