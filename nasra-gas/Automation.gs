@@ -30,7 +30,8 @@ function parseDaysList_(s) {
   });
   return out.sort(function (a, b) { return a - b; });
 }
-// شهرستان‌هایی که در دوره گزارش (۲۱ ماه قبل تا ۲۰ این ماه، بر اساس تاریخ برگزاری) هیچ گزارش «در انتظار» یا «تاییدشده» ندارند + کارمندان فعالشان
+// شهرستان‌هایی که در دوره گزارش (۲۱ ماه قبل تا ۲۰ این ماه، بر اساس تاریخ برگزاری) هیچ گزارش «در انتظار» یا «تاییدشده» ندارند
+// + کارمندان فعالشان (به‌جز «مسئول فضای مجازی» که گزارش نمی‌فرستد)
 function reminderTargets_(reports, users, cities, jy, jm) {
   var has = {};
   reports.forEach(function (r) {
@@ -40,7 +41,7 @@ function reminderTargets_(reports, users, cities, jy, jm) {
   cities.forEach(function (c) {
     var cid = num_(c.city_id);
     if (has[cid]) return;
-    var rec = users.filter(function (u) { return isActiveEmployee_(u) && num_(u.city_id) === cid; })
+    var rec = users.filter(function (u) { return isActiveEmployee_(u) && canSubmitReports_(u) && num_(u.city_id) === cid; })
       .map(function (u) { return num_(u.telegram_id); });
     total += rec.length;
     out.push({ city_id: cid, name: c.name, recipients: rec });
@@ -399,7 +400,7 @@ function installPhase4() {
   Logger.log('ستون kind (نوع پیوست: عکس، ویدیو، فایل، صوت) به برگه ReportPhotos اضافه شد.');
   Logger.log('ستون‌های score ، score_by و notice_msg_id (امتیاز ۱ تا ۵ هر گزارش) به برگه Reports اضافه شد.');
   Logger.log('برگه Samples (نمونه گزارش‌ها) آماده است؛ نمونه‌ها را از پنل /admin ← 📚 نمونه گزارش‌ها ثبت کنید.');
-  Logger.log('همکاران فعال: ' + active.length + ' — بدون نقش: ' + noPos + ' (نقش را در برگه Users، ستون position از فهرست کشویی بگذارید، یا در پنل /admin ← کاربران؛ وگرنه بات موقع اولین گزارش از خودشان می‌پرسد)');
+  Logger.log('همکاران فعال: ' + active.length + ' — بدون نقش: ' + noPos + ' (نقش را در برگه Users، ستون position از فهرست کشویی بگذارید، یا در پنل /admin ← کاربران؛ وگرنه بات دفعه بعد که از منو استفاده کنند، یک بار از خودشان می‌پرسد)');
   Logger.log('حالا runTests را Run کنید و بعد Deploy ← Manage deployments ← Edit ← New version ← Deploy.');
 }
 
@@ -468,7 +469,7 @@ function sendMonthlyReminder_(reports, t, previewOnlyTg) {
   var ok = 0, fail = 0;
   withStaff.forEach(function (c) {
     c.recipients.forEach(function (tg) {
-      if (tgSendQuiet_(tg, textFor(c.name), mainMenuKb_())) ok++; else fail++;
+      if (tgSendQuiet_(tg, textFor(c.name), mainMenuKb_(tg))) ok++; else fail++;
       Utilities.sleep(40);
     });
   });
@@ -503,7 +504,7 @@ function processBroadcastQueue() {
   var start = Date.now(), msg = '📣 پیام از معاونت نسرا:\n\n' + job.text, sentNow = 0;
   while (job.pos < job.ids.length && (Date.now() - start < AUTO.RUN_BUDGET_MS || sentNow === 0)) { // هر اجرا حداقل یک پیام جلو می‌رود
     sentNow++;
-    if (tgSendQuiet_(job.ids[job.pos], msg, mainMenuKb_())) job.ok++; else job.fail++; // منوی تازه هم همراه پیام می‌رسد
+    if (tgSendQuiet_(job.ids[job.pos], msg, mainMenuKb_(job.ids[job.pos]))) job.ok++; else job.fail++; // منوی تازه هم همراه پیام می‌رسد
     job.pos++;
     if (job.pos % 20 === 0) setProp_(AUTO.BC_PROP, JSON.stringify(job)); // ذخیره پیشرفت
     Utilities.sleep(40);

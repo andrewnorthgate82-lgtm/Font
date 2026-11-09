@@ -5,7 +5,8 @@
 var FORM_SUBSTEPS = { year: 1, month: 1, day: 1, minute: 1, teacherNew: 1 };
 
 function startReport_(chatId, tg, user) {
-  if (!positionOf_(user && user.position)) { askPosition_(chatId, tg); return; } // فاز ۴: نقش فقط یک بار پرسیده می‌شود
+  if (!positionOf_(user && user.position)) { askRole_(chatId, tg, 'report'); return; } // همکار قدیمیِ بدون نقش: یک بار
+  if (!canSubmitReports_(user)) { sendNoReportRole_(chatId, tg); return; } // مسئول فضای مجازی گزارش نمی‌فرستد
   var s = getSession_(chatId, tg);
   s.state = 'form:photos';
   s.data = { photos: [], replacePhotos: false, editing: false, rid: 0, tp: 0 };
@@ -13,15 +14,6 @@ function startReport_(chatId, tg, user) {
   showStep_(chatId, tg, s, 'photos', 0);
 }
 
-// فاز ۴: همکاری که هنوز نقش ندارد، قبل از اولین گزارش نقش خودش را انتخاب می‌کند (بعداً فقط ادمین عوضش می‌کند)
-function askPosition_(chatId, tg) {
-  var s = getSession_(chatId, tg);
-  s.state = 'form:position'; s.data = {};
-  saveSession_(chatId, tg, s);
-  var rows = POSITIONS.map(function (p, i) { return [btn_(p, 'po:' + i)]; });
-  rows.push([btn_('❌ انصراف', 'cx')]);
-  tgSend_(chatId, '🎖 پیش از ثبت گزارش، نقش خودتان را در شهرستان انتخاب کنید:\n(فقط همین یک بار پرسیده می‌شود؛ برای تغییرِ بعدی به ادمین بگویید.)', ikb_(rows));
-}
 function photosKb_(n) {
   var rows = [[btn_('✅ پایان ارسال (' + n + ')', 'pd')]];
   if (n > 0) rows.push([btn_('🗑 پاک کردن همه و ارسال دوباره', 'pz')]);
@@ -317,16 +309,6 @@ function handleFormCb_(cb, s, data) {
   var step = stepOf_(s), parts = data.split(':'), p = parts[0], v = parts[1], d = s.data || {};
   function stale() { tgAnswerCb_(cb.id, 'این دکمه دیگر فعال نیست.', true); }
 
-  if (p === 'po') { // انتخاب نقش (فاز ۴)
-    var pos = /^\d$/.test(String(v)) ? POSITIONS[num_(v)] : null;
-    if (step !== 'position' || !pos) { tgAnswerCb_(cb.id, 'این دکمه دیگر فعال نیست؛ دوباره «' + MENU.NEW_REPORT + '» را بزنید.', true); return; }
-    if (!positionOf_(u.position)) updateUser_(u.user_id, tg, { position: pos }); // اگر ادمین در این فاصله نقش گذاشته، همان می‌ماند
-    tgAnswerCb_(cb.id, 'ثبت شد');
-    var fresh = getUserByTg_(tg);
-    tgEdit_(chatId, mid, '🎖 نقش شما: ' + (positionOf_(fresh && fresh.position) || pos) + ' ✅', null);
-    startReport_(chatId, tg, fresh);
-    return;
-  }
   if (String(s.state || '').indexOf('form:') !== 0) { stale(); return; } // دکمه فرمِ تمام‌شده یا لغوشده
 
   if (data === 'bk') {
@@ -435,7 +417,11 @@ function handleFormCb_(cb, s, data) {
     showStep_(chatId, tg, s, v, 0);
     return;
   }
-  if (data === 'ps') { if (step !== 'preview') { stale(); return; } submitReport_(cb, s, u); return; }
+  if (data === 'ps') {
+    if (step !== 'preview') { stale(); return; }
+    if (!canSubmitReports_(u)) { clearSession_(chatId, tg); tgAnswerCb_(cb.id); sendNoReportRole_(chatId, tg); return; } // نقش در این فاصله عوض شده
+    submitReport_(cb, s, u); return;
+  }
   tgAnswerCb_(cb.id);
 }
 
@@ -487,7 +473,7 @@ function submitReport_(cb, s, u) {
 
   var sent = sendReportToReview_(getReport_(rid));
   clearSession_(chatId, tg);
-  tgSend_(chatId, TXT.REPORT_SENT, mainMenuKb_());
+  tgSend_(chatId, TXT.REPORT_SENT, mainMenuKb_(tg));
   if (!sent) superadminTgs_().forEach(function (a) {
     tgSend_(a, '⚠️ گروه بررسی هنوز تنظیم نشده و یک گزارش در انتظار مانده است. بات را به گروه بررسی اضافه کنید و در گروه /here بفرستید.');
   });
@@ -504,6 +490,7 @@ function handleResubmitCb_(cb, session, data) {
   if (!r || num_(r.submitter_telegram_id) !== num_(tg) || num_(r.city_id) !== num_(u.city_id)) {
     tgAnswerCb_(cb.id, TXT.NO_ACCESS, true); return;
   }
+  if (!canSubmitReports_(u)) { tgAnswerCb_(cb.id); sendNoReportRole_(chatId, tg); return; }
   if (r.status !== 'rejected') { tgAnswerCb_(cb.id, 'این گزارش در وضعیت ردشده نیست و قابل اصلاح نمی‌باشد.', true); return; }
   var s = getSession_(chatId, tg), v2 = isV2_(r);
   s.data = {

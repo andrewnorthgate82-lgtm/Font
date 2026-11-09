@@ -7,3 +7,4 @@
     node tools/sim/scenario_types.js
     node tools/sim/scenario_media.js
     node tools/sim/scenario_score.js
+    node tools/sim/scenario_roles.js   # نقش در ثبت‌نام، منوی فضای مجازی، گزارش‌های من

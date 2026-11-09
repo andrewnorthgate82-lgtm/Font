@@ -252,11 +252,6 @@ function tryLockDecision_(rid, adminTg, newStatus) {
 function unlockDecision_(rid) {
   updateReport_(rid, { status: 'pending', decided_by: '', decided_at: '' });
 }
-function myReports_(telegramId, cityId, limit) {
-  return readTable_('Reports').filter(function (r) {
-    return num_(r.submitter_telegram_id) === num_(telegramId) && num_(r.city_id) === num_(cityId);
-  }).sort(function (a, b) { return num_(b.report_id) - num_(a.report_id); }).slice(0, limit);
-}
 function countReports_(status) {
   return readTable_('Reports').filter(function (r) { return r.status === status; }).length;
 }

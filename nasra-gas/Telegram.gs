@@ -139,11 +139,13 @@ function citiesKb_(prefix, page) {
 function contactKb_() {
   return { keyboard: [[{ text: '📱 ارسال شماره من', request_contact: true }]], resize_keyboard: true, one_time_keyboard: true };
 }
-function mainMenuKb_() {
-  return {
-    keyboard: [[{ text: MENU.NEW_REPORT }, { text: MENU.SAMPLES }], [{ text: MENU.MY_REPORTS }, { text: MENU.MY_TEACHERS }]],
-    resize_keyboard: true
-  };
+// منوی پایین — برای «مسئول فضای مجازی» دکمه «ارسال گزارش» نیست (این نقش فقط عملکرد ناحیه را می‌بیند)
+function mainMenuKb_(tg) {
+  var u = tg ? getUserByTg_(tg) : null;
+  var rows = (u && !canSubmitReports_(u))
+    ? [[{ text: MENU.MY_REPORTS }], [{ text: MENU.MY_TEACHERS }, { text: MENU.SAMPLES }]]
+    : [[{ text: MENU.NEW_REPORT }, { text: MENU.SAMPLES }], [{ text: MENU.MY_REPORTS }, { text: MENU.MY_TEACHERS }]];
+  return { keyboard: rows, resize_keyboard: true };
 }
 function removeKb_() { return { remove_keyboard: true }; }
 function backCancelRows_() { return [[btn_('↩️ بازگشت', 'bk'), btn_('❌ انصراف', 'cx')]]; }
@@ -227,7 +229,7 @@ function routePrivateMessage_(msg) {
     if (session.state === 'form:photos') { handleFormMedia_(msg, session); return; }
     if (msg.sticker) return;
     if (String(session.state || '').indexOf('form:') === 0) { if (!msg.media_group_id || !mediaGroupSeen_(msg.media_group_id)) tgSend_(chatId, TXT.MEDIA_WRONG_STEP); return; }
-    if (!msg.media_group_id || !mediaGroupSeen_(msg.media_group_id)) tgSend_(chatId, 'برای ارسال گزارش، از دکمه «' + MENU.NEW_REPORT + '» شروع کنید.', mainMenuKb_());
+    if (!msg.media_group_id || !mediaGroupSeen_(msg.media_group_id)) tgSend_(chatId, 'برای ارسال گزارش، از دکمه «' + MENU.NEW_REPORT + '» شروع کنید.', mainMenuKb_(tg));
     return;
   }
   if (!msg.text) return;
@@ -257,7 +259,7 @@ function routePrivateMessage_(msg) {
   if (text === '/cancel') {
     clearSession_(chatId, tg);
     var u = getUserByTg_(tg);
-    tgSend_(chatId, TXT.CANCELLED, isActiveEmployee_(u) || isAdminTg_(tg) ? mainMenuKb_() : removeKb_());
+    tgSend_(chatId, TXT.CANCELLED, isActiveEmployee_(u) || isAdminTg_(tg) ? mainMenuKb_(tg) : removeKb_());
     return;
   }
   if (text === MENU.NEW_REPORT || text === MENU.NEW_REPORT_OLD) { menuNewReport_(msg); return; }
@@ -266,6 +268,7 @@ function routePrivateMessage_(msg) {
   if (text === MENU.MY_TEACHERS) { menuMyTeachers_(msg); return; }
 
   if (session.state === 'reg:name') { handleRegName_(msg, session); return; }
+  if (session.state === 'role:ask') { tgSend_(chatId, TXT.ROLE_USE_BUTTONS, rolesKb_()); return; }
   if (session.state.indexOf('adm:') === 0) { handleAdminText_(msg, session); return; } // فاز ۲: ورودی‌های پنل
   if (session.state.indexOf('form:') === 0) { handleFormText_(msg, session); return; }
   fallbackPrivate_(msg);
@@ -293,6 +296,8 @@ function routeCallback_(cb) {
   if (data.indexOf('ga:') === 0 || data.indexOf('gd:') === 0) return handleRegDecisionCb_(cb, data);
   if (data.indexOf('re:') === 0) return handleResubmitCb_(cb, session, data);
   if (data.indexOf('sm:') === 0) return handleSampleCb_(cb, data); // نمونه گزارش‌ها
+  if (data.indexOf('po:') === 0) return handleRoleCb_(cb, session, data); // نقش همکار (ثبت‌نام یا یک‌باره)
+  if (data.indexOf('mr:') === 0) return handleMyReportsCb_(cb, session, data); // 📋 گزارش‌های من
   if (/^(ok|rj|mn|rs|rd|rb|rm|sc):/.test(data)) return handleReviewCb_(cb, session, data);
   return handleFormCb_(cb, session, data); // بقیه کال‌بک‌ها مال فرم گزارش‌اند
 }
@@ -328,7 +333,7 @@ function denyEmployee_(chatId, tg) {
   var u = getUserByTg_(tg);
   if (isActiveEmployee_(u)) { u._city = getCityById_(u.city_id); return u; }
   if (u && u.status === 'disabled') tgSend_(chatId, TXT.USER_DISABLED);
-  else if (u && u.status === 'pending' && u.phone && !(num_(u.city_id) > 0)) resumeRegistration_(chatId, tg, u); // نیمه‌کاره: ادامه ثبت‌نام
+  else if (isHalfRegistered_(u)) resumeRegistration_(chatId, tg, u); // نیمه‌کاره: ادامه ثبت‌نام
   else if (u && u.status === 'pending' && u.phone) tgSend_(chatId, TXT.REG_WAIT);
   else if (u && u.status === 'rejected') tgSend_(chatId, TXT.REG_REJECTED);
   else if (isAdminTg_(tg)) tgSend_(chatId, 'شما ادمین هستید ولی شهرستانی برای حسابتان ثبت نشده است؛ برای تست ثبت گزارش، با یک حساب کارمند آزمایشی وارد شوید یا ثبت‌نام کارمندی را با دکمه «📱 ارسال شماره من» کامل کنید.');
@@ -340,9 +345,14 @@ function sendMainMenu_(chatId, tg) {
   var name = (u && u.full_name) || 'همکار گرامی';
   var city = u ? getCityById_(u.city_id) : null;
   if (isAdminTg_(tg) && !(u && num_(u.city_id) > 0)) {
-    tgSend_(chatId, 'سلام ' + name + ' 👋\nشما دسترسی ادمین دارید.\n• پنل مدیریت: /admin\n• وضعیت سیستم: /status\n• لیست مجاز شماره‌ها در گوگل‌شیت، برگه Whitelist است.', mainMenuKb_());
-  } else {
-    tgSend_(chatId, 'سلام ' + name + ' 👋\nشهرستان شما: ' + (city ? city.name : '—') +
-      (isAdminTg_(tg) ? '\n🛠 پنل مدیریت: /admin' : '') + '\nاز منوی زیر انتخاب کنید:', mainMenuKb_());
+    tgSend_(chatId, 'سلام ' + name + ' 👋\nشما دسترسی ادمین دارید.\n• پنل مدیریت: /admin\n• وضعیت سیستم: /status\n• لیست مجاز شماره‌ها در گوگل‌شیت، برگه Whitelist است.', mainMenuKb_(tg));
+    return;
   }
+  if (isActiveEmployee_(u) && !positionOf_(u.position)) { // همکار قدیمیِ بدون نقش: یک بار نقش را انتخاب کند
+    askRole_(chatId, tg, 'menu', 'سلام ' + name + ' 👋\n' + TXT.ASK_ROLE);
+    return;
+  }
+  var pos = u ? positionOf_(u.position) : '';
+  tgSend_(chatId, 'سلام ' + name + ' 👋\nشهرستان شما: ' + (city ? city.name : '—') + (pos ? '\nنقش: ' + pos : '') +
+    (isAdminTg_(tg) ? '\n🛠 پنل مدیریت: /admin' : '') + '\nاز منوی زیر انتخاب کنید:', mainMenuKb_(tg));
 }

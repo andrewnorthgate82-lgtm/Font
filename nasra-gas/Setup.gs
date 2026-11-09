@@ -3,7 +3,7 @@
 var HEADER_NOTES = {
   Settings: { key: 'نام تنظیم — دست نزنید', value: 'مقدار تنظیم (کد راه‌اندازی و آیدی گروه/کانال این‌جاست)', note: 'توضیح — اگر ردیف debug با مقدار 1 بسازید، لاگ‌های info هم در Logs نوشته می‌شوند' },
   Cities: { city_id: 'شماره شهرستان — دست نزنید', name: 'نام نمایشی شهرستان', hashtag: 'هشتگ کانال؛ با # شروع شود، بدون فاصله و پرانتز', is_active: '۱ یعنی فعال، ۰ یعنی غیرفعال' },
-  Users: { telegram_id: 'آیدی عددی تلگرام', phone: 'شماره موبایل تأییدشده', full_name: 'نام و نام‌خانوادگی', city_id: 'شماره شهرستان', status: 'pending یعنی در انتظار تایید، approved تاییدشده، rejected ردشده، disabled غیرفعال', position: 'نقش در شهرستان (از فهرست کشویی انتخاب کنید)؛ خواهر/برادر فایل اکسل از همین ستون است' },
+  Users: { telegram_id: 'آیدی عددی تلگرام', phone: 'شماره موبایل تأییدشده', full_name: 'نام و نام‌خانوادگی', city_id: 'شماره شهرستان', status: 'pending یعنی در انتظار تایید، approved تاییدشده، rejected ردشده، disabled غیرفعال', position: 'نقش در شهرستان — همکار هنگام ثبت‌نام انتخاب می‌کند (تغییر: فهرست کشویی یا پنل /admin)؛ خواهر/برادر اکسل و «گزارش‌های من» از همین ستون است؛ مسئول فضای مجازی دکمه ارسال گزارش ندارد' },
   Whitelist: { phone: 'شماره موبایل همکار (مثل 09123456789) — همین‌جا در شیت بچسبانید', full_name: 'نام و نام‌خانوادگی', city_name: 'نام شهرستان دقیقاً مثل برگه Cities', city_id: 'اختیاری: اگر خالی باشد بات با city_name پیدا می‌کند' },
   Admins: { telegram_id: 'آیدی عددی ادمین', role: 'superadmin یا admin', is_active: '۱ یعنی فعال' },
   Instructors: { city_id: 'شماره شهرستان', name: 'نام مدرس/سخنران', name_norm: 'فرم نرمال نام برای جلوگیری از تکراری — دست نزنید' },
@@ -165,7 +165,7 @@ function handleChannelForward_(msg) {
   tgSend_(chatId, '✅ کانال «' + (found.title || 'کانال') + '» ذخیره شد.');
   if (explicitChange) {
     clearSession_(chatId, tg);
-    tgSend_(chatId, 'از این به بعد گزارش‌های تاییدشده در همین کانال منتشر می‌شوند.', mainMenuKb_());
+    tgSend_(chatId, 'از این به بعد گزارش‌های تاییدشده در همین کانال منتشر می‌شوند.', mainMenuKb_(tg));
     return;
   }
   tgSend_(chatId, TXT.SETUP_STEP3, setupBtnKb_('st', '✅ تست کامل راه‌اندازی'));
@@ -204,7 +204,7 @@ function handleSetupCb_(cb, data) {
       lines.push(r); ok = ok && r.indexOf('✅') === 0;
     } else { lines.push('❌ کانال ثبت نشده است؛ بات را در کانال ادمین کنید و یک پست کانال را اینجا فوروارد کنید.'); ok = false; }
     tgSend_(chatId, lines.join('\n'));
-    if (ok) { setSetting_('setup_done', '1', 'راه‌اندازی کامل شده است'); tgSend_(chatId, TXT.SETUP_DONE, mainMenuKb_()); }
+    if (ok) { setSetting_('setup_done', '1', 'راه‌اندازی کامل شده است'); tgSend_(chatId, TXT.SETUP_DONE, mainMenuKb_(chatId)); }
   }
 }
 function handleStatus_(msg) {
@@ -240,12 +240,12 @@ function handleStatus_(msg) {
 // ---------- بررسی نصب: کدام فایل جا افتاده، ناقص چسبانده شده یا هنوز نسخه قدیمی است ----------
 // فقط از typeof استفاده می‌کند تا حتی وقتی فایلی کلاً نیست، خودش خطا ندهد. Run ← checkInstall
 var INSTALL_MARKERS = [
-  ['Config', ['getProp_', 'normalizeName_', 'instructorNameIssue_', 'SUBJECT_SUGGESTIONS', 'TXT', 'CFG', 'SHEETS', 'MENU']],
+  ['Config', ['getProp_', 'normalizeName_', 'instructorNameIssue_', 'SUBJECT_SUGGESTIONS', 'canSubmitReports_', 'TXT', 'CFG', 'SHEETS', 'MENU']],
   ['Caption', ['buildCaption_', 'buildCaptionV1_', 'typeFlow_', 'CLASS_SUBS']],
   ['Db', ['ss_', 'readTable_', 'appendRow_', 'getSession_', 'getReportMedia_']],
   ['Jalali', ['monthTag_', 'todayJalali_']],
   ['Telegram', ['doPost', 'tgCall_', 'mainMenuKb_', 'routeCallback_', 'mediaSendPlan_']],
-  ['Registration', ['menuMyReports_', 'menuMyTeachers_']],
+  ['Registration', ['menuMyReports_', 'menuMyTeachers_', 'handleRoleCb_', 'myReportText_']],
   ['ReportForm', ['startReport_', 'showStep_', 'platformOptions_', 'resetTypeFields_', 'handleFormMedia_']],
   ['Review', ['publishReport_', 'sendReportToReview_', 'scoreKb_']],
   ['Admin', ['handleAdminCb_', 'reportEditFields_', 'handleSampleCb_', 'extraChannels_', 'monthScores_']],

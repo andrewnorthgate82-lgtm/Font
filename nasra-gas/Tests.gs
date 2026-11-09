@@ -636,6 +636,37 @@ function runTests() {
     ok(SHEETS.Reports.indexOf('score') !== -1 && SHEETS.Reports.indexOf('notice_msg_id') !== -1, 'ستون‌های امتیاز');
   });
 
+  check('۳۰) نقش‌ها: منوی مسئول فضای مجازی، ثبت‌نام نیمه‌کاره، «گزارش‌های من» برادران/خواهران، یادآوری', function () {
+    ok(!canSubmitReports_({ position: 'مسئول فضای مجازی' }) && canSubmitReports_({ position: 'مسئول نسرا برادر' }) && canSubmitReports_({ position: '' }), 'فقط مسئول فضای مجازی گزارش نمی‌فرستد');
+    var full = [].concat.apply([], mainMenuKb_().keyboard).map(function (b) { return b.text; });
+    ok(full.indexOf(MENU.NEW_REPORT) !== -1 && full.indexOf(MENU.MY_REPORTS) !== -1, 'منوی کامل');
+    eq(rolesKb_().inline_keyboard.length, 5, 'پنج نقش');
+    ok(isHalfRegistered_({ status: 'pending', phone: '0913', city_id: '' }), 'بدون شهرستان ← نیمه‌کاره');
+    ok(isHalfRegistered_({ status: 'pending', phone: '0913', city_id: '29', position: '', reg_group_message_id: '' }), 'بدون نقش و درخواست‌نرفته ← نیمه‌کاره');
+    ok(!isHalfRegistered_({ status: 'pending', phone: '0913', city_id: '29', position: '', reg_group_message_id: '55' }), 'درخواست قدیمیِ رفته ← منتظر تایید');
+    ok(!isHalfRegistered_({ status: 'pending', phone: '0913', city_id: '29', position: 'مسئول نسرا خواهر', reg_group_message_id: '' }), 'با نقش ← نیمه‌کاره نیست');
+    var mk = myMonthsKb_().inline_keyboard, t = currentPeriod_();
+    ok(mk.length === 3 && mk[0].length === 2 && mk[0][0].callback_data === 'mr:' + t.jy + ':' + t.jm, 'شش ماه، دو تا در هر ردیف، از ماه جاری');
+    var datas = ['po:4', 'mr:m', 'mr:1405:12', 'mr:1405:12:b', 'mr:1405:12:s'];
+    mk.forEach(function (row) { row.forEach(function (b) { datas.push(b.callback_data); }); });
+    datas.forEach(function (d) { ok(unescape(encodeURIComponent(d)).length <= 64, 'طول ' + d); });
+    function R(o) { return Object.assign({ city_id: 7, status: 'approved', event_year: 1405, event_month: 8, event_day: 10, participants: 0, class_sub: '' }, o); }
+    var B = 'فرمانده گردان برادر', S = 'مسئول نسرا خواهر', reps = [
+      R({ class_type: '#حضوری', participants: 30, submitter_position: B }), R({ class_type: '#حضوری', participants: 20, submitter_position: 'مسئول نسرا برادر' }),
+      R({ class_type: '#مجازی', participants: 40, submitter_position: B }), R({ class_type: '#توانمندسازی', class_sub: '#مجازی', participants: 9, submitter_position: B }),
+      R({ class_type: '#خلاقانه', participants: 500, submitter_position: B }), R({ class_type: '#تولیدات', class_sub: '#پوستر', submitter_position: B }),
+      R({ class_type: '#تولیدات', class_sub: '', submitter_position: B }), R({ class_type: '#حضوری', participants: 99, submitter_position: B, status: 'pending' }),
+      R({ class_type: '#حضوری', participants: 99, submitter_position: B, status: 'rejected' }), R({ class_type: '#حضوری', participants: 99, submitter_position: B, city_id: 8 }),
+      R({ class_type: '#حضوری', participants: 15, submitter_position: S }), R({ class_type: '#حضوری', participants: 99, submitter_position: 'مسئول فضای مجازی' })];
+    var b = sideReportStats_(reps, {}, 7, 1405, 8, 'b'), s = sideReportStats_(reps, {}, 7, 1405, 8, 's');
+    eq([b['حضوری'].n, b['حضوری'].p, b['مجازی'].n, b['مجازی'].p, b['توانمندسازی'].n, b['خلاقانه'].p, b.products['#پوستر'], b.products.other, b.pending].join(','), '2,50,1,40,1,500,1,1,1', 'برادران: هر دو نقش برادر، فقط تاییدشده و همین ناحیه');
+    eq([s['حضوری'].n, s['حضوری'].p, s.pending].join(','), '1,15,0', 'خواهران جدا');
+    var txt = myReportText_(reps, {}, 7, 'نمونه', 1405, 8, 'b');
+    ok(txt.indexOf('🏫 سواد رسانه عمومی:\nتعداد کلاس برگزار شده: 2\nتعداد نفرات آموزش داده شده: 50') !== -1 && txt.indexOf('صفحه word: 0') !== -1 && txt.indexOf('سایر: 1') !== -1, 'متن گزارش:\n' + txt);
+    var users = [{ telegram_id: 1, city_id: 7, status: 'approved', position: B }, { telegram_id: 2, city_id: 7, status: 'approved', position: 'مسئول فضای مجازی' }];
+    eq(reminderTargets_([], users, [{ city_id: 7, name: 'نمونه' }], 1405, 8).cities[0].recipients.join(','), '1', 'یادآوری به مسئول فضای مجازی نمی‌رود');
+  });
+
   if (failed.length) {
     Logger.log('نتیجه: ' + passed + '/' + total + ' passed — شکست‌ها:\n' + failed.join('\n'));
   } else Logger.log(passed + ' passed');

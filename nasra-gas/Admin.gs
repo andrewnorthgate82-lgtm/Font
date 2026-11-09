@@ -703,7 +703,7 @@ function toggleUser_(cb, chatId, uid, mid) {
     if (!(num_(u.city_id) > 0)) { tgAnswerCb_(cb.id, 'اول با «🏙 تغییر شهرستان» شهرستان این کاربر را تعیین کنید.', true); return; }
     updateUser_(uid, u.telegram_id, { status: 'approved' });
     var cty = getCityById_(u.city_id);
-    tgSend_(u.telegram_id, '✅ حساب شما توسط ادمین فعال شد.\nنام: ' + u.full_name + '\nشهرستان: ' + (cty ? cty.name : '') + '\nاز منوی زیر انتخاب کنید:', mainMenuKb_());
+    tgSend_(u.telegram_id, '✅ حساب شما توسط ادمین فعال شد.\nنام: ' + u.full_name + '\nشهرستان: ' + (cty ? cty.name : '') + '\nاز منوی زیر انتخاب کنید:', mainMenuKb_(u.telegram_id));
     tgAnswerCb_(cb.id, 'کاربر فعال شد و به او اطلاع داده شد.', true);
   }
   showUserCard_(chatId, uid, mid);
@@ -714,14 +714,20 @@ function setUserCity_(cb, chatId, uid, cityId, mid) {
   updateUser_(uid, u.telegram_id, { city_id: cityId });
   var us = getSession_(num_(u.telegram_id), num_(u.telegram_id));
   if (us.state) clearSession_(num_(u.telegram_id), num_(u.telegram_id)); // فرم نیمه‌کاره با شهرستان قبلی ادامه پیدا نکند
-  if (u.status === 'approved') tgSend_(u.telegram_id, 'ℹ️ شهرستان حساب شما توسط ادمین به «' + cty.name + '» تغییر کرد.', mainMenuKb_());
+  if (u.status === 'approved') tgSend_(u.telegram_id, 'ℹ️ شهرستان حساب شما توسط ادمین به «' + cty.name + '» تغییر کرد.', mainMenuKb_(u.telegram_id));
   tgAnswerCb_(cb.id, 'شهرستان به ' + cty.name + ' تغییر کرد.');
   showUserCard_(chatId, uid, mid);
 }
 function setUserPosition_(cb, chatId, uid, code, mid) {
   var u = getUserById_(uid), pos = code === 'x' ? '' : (/^\d$/.test(String(code)) ? POSITIONS[num_(code)] : null);
   if (!u || pos === null || pos === undefined) { tgAnswerCb_(cb.id, 'کاربر یا نقش پیدا نشد.', true); return; }
+  var same = positionOf_(u.position) === pos;
   updateUser_(uid, u.telegram_id, { position: pos });
+  if (!same && u.status === 'approved') { // اطلاع به همکار + منوی تازه (مسئول فضای مجازی دکمه ارسال گزارش ندارد)
+    var ut = num_(u.telegram_id);
+    tgSend_(ut, pos ? 'ℹ️ نقش شما توسط ادمین به «' + pos + '» تغییر کرد.' + (positionSide_(pos) === 'v' ? '\n' + TXT.NO_REPORT_ROLE : '')
+      : 'ℹ️ نقش شما توسط ادمین برداشته شد؛ دفعه بعد که از منو استفاده کنید، دوباره پرسیده می‌شود.', mainMenuKb_(ut));
+  }
   tgAnswerCb_(cb.id, pos ? 'نقش: ' + pos : 'نقش برداشته شد');
   showUserCard_(chatId, uid, mid);
 }
@@ -845,7 +851,7 @@ function addAdmin_(newTg, nameHint, notify) {
   else appendRow_('Admins', { telegram_id: newTg, full_name: name, role: 'admin', is_active: '1', added_at: nowStr_() });
   bustCache_();
   var notified = false;
-  if (notify) notified = !!tgSend_(newTg, '🛡 شما به‌عنوان ادمین بات گزارش‌گیری نسرا اضافه شدید.\n• پنل مدیریت: /admin\n• برای تایید/رد گزارش‌ها باید عضو گروه بررسی ادمین‌ها هم باشید.', mainMenuKb_());
+  if (notify) notified = !!tgSend_(newTg, '🛡 شما به‌عنوان ادمین بات گزارش‌گیری نسرا اضافه شدید.\n• پنل مدیریت: /admin\n• برای تایید/رد گزارش‌ها باید عضو گروه بررسی ادمین‌ها هم باشید.', mainMenuKb_(newTg));
   return { ok: true, name: name, notified: notified };
 }
 function removeAdmin_(targetTg, byTg) {

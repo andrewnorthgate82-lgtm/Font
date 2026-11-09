@@ -84,10 +84,10 @@ ok(+C.getReport_(r2).score === 5, 'گزارش اصلاح‌شده امتیاز �
 
 // ---------- کارت پنل + گزارش‌های من + آمار ماهانه ----------
 ok(C.reportCardText_(C.getReport_(r1)).includes('⭐️ امتیاز: 4 از 5'), 'کارت پنل');
-n = env.tgCalls.length; msg('📋 گزارش‌های من');
-const my = since(n).filter(c => c.p.chat_id == 700 && c.p.text).pop().p.text;
-ok(my.includes('موضوع یک') && my.includes('⭐️ 4 از 5') && /⭐️ نمره شهرستان شما در گزارش .* تا این لحظه: 0.9 از 5 \(1 بخش از 5 کار شده\)/.test(my), 'گزارش‌های من:\n' + my);
 const t = C.currentPeriod_();
+n = env.tgCalls.length; msg('📋 گزارش‌های من'); cb('mr:' + t.jy + ':' + t.jm, 700, 0, 33);
+const my = since(n).filter(c => c.method === 'editMessageText' && c.p.chat_id == 700).pop().p.text;
+ok(my.includes('بخش تولیدات') && my.includes('⭐️ نمره ماه ناحیه (همه نقش‌ها): 0.9 از 5 (1 بخش از 5 کار شده)'), 'گزارش‌های من:\n' + my);
 const stt = C.monthStatsText_(C.readTable_('Reports'), t.jy, t.jm);
 ok(stt.includes('🏆 نجف آباد: ⭐️ 0.9 از 5 — 2 گزارش') && stt.includes('1 بخش از 5، میانگین امتیاز 4.5') && stt.includes('⭐️ نمره ماه = میانگین'), 'آمار ماهانه:\n' + stt);
 ok(errs().length === 0, 'بدون خطا: ' + errs().join(' ; '));
