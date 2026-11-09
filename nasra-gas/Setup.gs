@@ -244,12 +244,12 @@ var INSTALL_MARKERS = [
   ['Caption', ['buildCaption_', 'buildCaptionV1_', 'typeFlow_', 'CLASS_SUBS']],
   ['Db', ['ss_', 'readTable_', 'appendRow_', 'getSession_', 'getReportMedia_']],
   ['Jalali', ['monthTag_', 'todayJalali_']],
-  ['Telegram', ['doPost', 'tgCall_', 'mainMenuKb_', 'routeCallback_', 'mediaSendPlan_']],
+  ['Telegram', ['doPost', 'tgCall_', 'mainMenuKb_', 'routeCallback_', 'mediaSendPlan_']], // مسیر rq: (ارسال دوباره) را runTests نمی‌بیند؛ حتماً نسخه تازه بچسبانید
   ['Registration', ['menuMyReports_', 'menuMyTeachers_', 'handleRoleCb_', 'myReportText_', 'mySidesRow_']],
   ['ReportForm', ['startReport_', 'showStep_', 'platformOptions_', 'resetTypeFields_', 'handleFormMedia_']],
-  ['Review', ['publishReport_', 'sendReportToReview_', 'scoreKb_']],
+  ['Review', ['publishReport_', 'sendReportToReview_', 'scoreKb_', 'resendForReview_']],
   ['Admin', ['handleAdminCb_', 'reportEditFields_', 'handleSampleCb_', 'extraChannels_', 'monthScores_', 'showCityRoles_']],
-  ['Automation', ['installPhase4', 'excelSheets_', 'dailyJobs', 'nightlyBackup', 'sideQuality_']],
+  ['Automation', ['installPhase4', 'excelSheets_', 'dailyJobs', 'nightlyBackup', 'sideQuality_', 'sendStaffExcel_']],
   ['Setup', ['setup', 'ensureSheets_', 'setWebhook']],
   ['Tests', ['runTests']]
 ];

@@ -53,7 +53,7 @@ function makeEnv() {
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = String(v); }, deleteProperty: k => { delete props[k]; }, getProperties: () => Object.assign({}, props) }) },
     CacheService: { getScriptCache: () => ({ get: k => (k in cache ? cache[k] : null), put: (k, v) => { cache[k] = String(v); }, remove: k => { delete cache[k]; }, removeAll: ks => ks.forEach(k => delete cache[k]), getAll: ks => { const o = {}; ks.forEach(k => { if (k in cache) o[k] = cache[k]; }); return o; }, putAll: o => Object.assign(cache, o) }) },
     LockService: { getScriptLock: () => ({ tryLock: () => true, waitLock() { }, releaseLock() { }, hasLock: () => true }) },
-    Utilities: { formatDate: fmt, sleep() { }, getUuid: () => 'uuid-' + Math.random().toString(36).slice(2), newBlob: (c, t, n) => ({ c, t, n, getName: () => n, setName() { } }), zip: (b, n) => ({ parts: b, getName: () => n, setName() { } }), base64Encode: s => Buffer.from(String(s)).toString('base64') },
+    Utilities: { formatDate: fmt, sleep() { }, getUuid: () => 'uuid-' + Math.random().toString(36).slice(2), newBlob: (c, t, n) => ({ c, t, n, getName: () => n, setName() { } }), zip: (b, n) => ({ parts: b, getName: () => n, setName() { }, setContentType() { } }), base64Encode: s => Buffer.from(String(s)).toString('base64') },
     UrlFetchApp: {
       fetch(url, opt) {
         const m = url.match(/\/bot[^/]*\/(\w+)/); const method = m ? m[1] : '';

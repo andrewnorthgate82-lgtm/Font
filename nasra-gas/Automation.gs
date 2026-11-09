@@ -187,6 +187,7 @@ function excelSheets_(list, cities, channelId, username) {
   });
 }
 // همه فایل‌های داخل بسته xlsx: چند برگه راست‌به‌چپ، سطر عنوان ثابت، ظاهر مثل فایل نمونه (قلم B Titr، عنوان طلایی، کادر نازک)، لینک قابل کلیک
+// sh.title (اختیاری): تیتر بزرگ در سطر اول (ادغام روی همه ستون‌ها)؛ سطر عنوان ستون‌ها و داده‌ها یک سطر پایین‌تر می‌روند
 function xlsxBook_(sheets) {
   var NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
   var RNS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -198,10 +199,11 @@ function xlsxBook_(sheets) {
   }
   var parts = [], overrides = [], wbSheets = [], wbRels = [], used = {};
   sheets.forEach(function (sh, si) {
-    var n = si + 1, links = [], sd = [];
-    sd.push('<row r="1" ht="28.5" customHeight="1">' + sh.cols.map(function (c, i) { return strCell(colLetter_(i) + '1', c[0], 1); }).join('') + '</row>');
+    var n = si + 1, links = [], sd = [], top = sh.title ? 1 : 0, lastCol = colLetter_(sh.cols.length - 1);
+    if (top) sd.push('<row r="1" ht="36" customHeight="1">' + sh.cols.map(function (c, i) { return i ? '<c r="' + colLetter_(i) + '1" s="4"/>' : strCell('A1', sh.title, 4); }).join('') + '</row>');
+    sd.push('<row r="' + (top + 1) + '" ht="28.5" customHeight="1">' + sh.cols.map(function (c, i) { return strCell(colLetter_(i) + (top + 1), c[0], 1); }).join('') + '</row>');
     sh.rows.forEach(function (row, ri) {
-      var rn = ri + 2;
+      var rn = ri + 2 + top;
       sd.push('<row r="' + rn + '">' + row.map(function (v, ci) {
         var ref = colLetter_(ci) + rn;
         if (v === '' || v === null || v === undefined) return '<c r="' + ref + '" s="2"/>';
@@ -212,8 +214,9 @@ function xlsxBook_(sheets) {
     });
     var cols = '<cols>' + sh.cols.map(function (c, i) { return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + c[1] + '" customWidth="1"/>'; }).join('') + '</cols>';
     parts.push({ name: 'xl/worksheets/sheet' + n + '.xml', content: head + '<worksheet xmlns="' + NS + '" xmlns:r="' + RNS + '">' +
-      '<sheetViews><sheetView rightToLeft="1"' + (n === 1 ? ' tabSelected="1"' : '') + ' workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' +
+      '<sheetViews><sheetView rightToLeft="1"' + (n === 1 ? ' tabSelected="1"' : '') + ' workbookViewId="0"><pane ySplit="' + (top + 1) + '" topLeftCell="A' + (top + 2) + '" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' +
       '<sheetFormatPr defaultRowHeight="20.25"/>' + cols + '<sheetData>' + sd.join('') + '</sheetData>' +
+      (top && sh.cols.length > 1 ? '<mergeCells count="1"><mergeCell ref="A1:' + lastCol + '1"/></mergeCells>' : '') +
       (links.length ? '<hyperlinks>' + links.map(function (l, i) { return '<hyperlink ref="' + l.ref + '" r:id="rId' + (i + 1) + '"/>'; }).join('') + '</hyperlinks>' : '') +
       '</worksheet>' });
     parts.push({ name: 'xl/worksheets/_rels/sheet' + n + '.xml.rels', content: head + '<Relationships xmlns="' + PR + '">' + links.map(function (l, i) {
@@ -228,19 +231,21 @@ function xlsxBook_(sheets) {
   });
   var border = '<border><left style="thin"><color auto="1"/></left><right style="thin"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="thin"><color auto="1"/></bottom><diagonal/></border>';
   var styles = head + '<styleSheet xmlns="' + NS + '">' +
-    '<fonts count="4"><font><sz val="11"/><name val="Calibri"/><family val="2"/></font>' +
+    '<fonts count="5"><font><sz val="11"/><name val="Calibri"/><family val="2"/></font>' +
     '<font><sz val="14"/><name val="B Titr"/><charset val="178"/></font>' +
     '<font><sz val="10"/><name val="B Titr"/><charset val="178"/></font>' +
-    '<font><u/><sz val="11"/><color rgb="FF0563C1"/><name val="Calibri"/><family val="2"/></font></fonts>' +
+    '<font><u/><sz val="11"/><color rgb="FF0563C1"/><name val="Calibri"/><family val="2"/></font>' +
+    '<font><b/><sz val="16"/><name val="B Titr"/><charset val="178"/></font></fonts>' +
     '<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>' +
     '<fill><patternFill patternType="solid"><fgColor rgb="FFFFD966"/><bgColor indexed="64"/></patternFill></fill>' +
     '<fill><patternFill patternType="solid"><fgColor rgb="FFF2F2F2"/><bgColor indexed="64"/></patternFill></fill></fills>' +
     '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>' + border + '</borders>' +
     '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-    '<cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+    '<cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
     '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1" readingOrder="2"/></xf>' +
     '<xf numFmtId="0" fontId="2" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1" readingOrder="2"/></xf>' +
-    '<xf numFmtId="0" fontId="3" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf></cellXfs>' +
+    '<xf numFmtId="0" fontId="3" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>' +
+    '<xf numFmtId="0" fontId="4" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" readingOrder="2"/></xf></cellXfs>' +
     '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
   var stylesId = sheets.length + 1;
   return [
@@ -315,6 +320,40 @@ function sendExcel_(chatId, jy, jm, cityId, side) {
     '\n🗓 برنامه‌های ' + periodRangeText_(jy, jm) + ' (بر اساس تاریخ برگزاری)' +
     '\nجمع: ' + list.length + ' گزارش تاییدشده — ' + per.join('، ') + note +
     '\n(فایل Excel با ۵ برگه؛ روی لینک‌ها بزنید تا پست کانال باز شود)');
+}
+
+// ---------- خروجی اکسل کاربران هر نقش (پنل ← 👤 کاربران ← 📥 خروجی اکسل) ----------
+// تیتر بالای برگه + ردیف / نام ناحیه / نام و نام خانوادگی / شماره تماس — فقط کاربران فعال (approved)
+var STAFF_TITLES = ['مسئولین فضای مجازی', 'فرماندهان گردان خواهر', 'مسئولین نسرا خواهران', 'فرماندهان گردان برادر', 'مسئولین نسرا برادران']; // هم‌ترتیب POSITIONS
+var STAFF_COLS = [['ردیف', 7], ['نام ناحیه', 20], ['نام و نام خانوادگی', 28], ['شماره تماس', 16]];
+function staffSheet_(users, cities, i) {
+  var cname = {}, has = {};
+  cities.forEach(function (c) { cname[num_(c.city_id)] = c.name; });
+  var list = users.filter(function (u) { return u.status === 'approved' && positionOf_(u.position) === POSITIONS[i] && cname[num_(u.city_id)]; })
+    .sort(function (a, b) {
+      return String(cname[num_(a.city_id)]).localeCompare(String(cname[num_(b.city_id)]), 'fa') || String(a.full_name).localeCompare(String(b.full_name), 'fa');
+    });
+  var rows = list.map(function (u, k) {
+    has[num_(u.city_id)] = 1;
+    return [k + 1, cname[num_(u.city_id)], String(u.full_name || ''), normalizePhone_(u.phone) || String(cellToStr_(u.phone) || '')];
+  });
+  var missing = cities.filter(function (c) { return !has[num_(c.city_id)]; }).map(function (c) { return c.name; });
+  return { name: STAFF_TITLES[i], title: STAFF_TITLES[i], cols: STAFF_COLS, rows: rows, missing: missing };
+}
+// code: شماره نقش در POSITIONS یا 'a' = همه نقش‌ها (۵ برگه در یک فایل، به ترتیب نمایش)
+function sendStaffExcel_(chatId, code) {
+  var users = readTable_('Users'), cities = getCities_();
+  var idx = code === 'a' ? POSITION_ORDER : [num_(code)];
+  var sheets = idx.map(function (i) { return staffSheet_(users, cities, i); });
+  var title = code === 'a' ? 'مسئولین همه نقش‌ها' : sheets[0].title;
+  var fileName = safeFileName_(title + ' - ' + todayJalaliStr_().replace(/\//g, '-')) + '.xlsx';
+  var parts = xlsxBook_(sheets);
+  var blob = Utilities.zip(parts.map(function (p) { return Utilities.newBlob(p.content, 'application/xml', p.name); }), fileName);
+  blob.setContentType('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  var cap = code === 'a'
+    ? '📥 ' + title + ' (۵ برگه)\n' + sheets.map(function (s) { return '• ' + s.title + ': ' + s.rows.length + ' نفر' + (s.missing.length ? ' — ' + s.missing.length + ' ناحیه بدون مسئول' : ''); }).join('\n')
+    : '📥 ' + title + ': ' + sheets[0].rows.length + ' نفر' + (sheets[0].missing.length ? '\n⚠️ ناحیه‌های بدون ' + title + ' (' + sheets[0].missing.length + '): ' + sheets[0].missing.join('، ') : '\n✅ همه ناحیه‌ها پوشش دارند');
+  return tgSendDocument_(chatId, blob, cut_(cap + '\n(فقط کاربران فعال؛ نقش از برگه Users، ستون position)', 1000));
 }
 
 // ---------- بکاپ ----------
@@ -441,15 +480,21 @@ function pendingAlert_(reports) {
   var cutoff = Utilities.formatDate(new Date(Date.now() - hours * 3600000), 'Asia/Tehran', 'yyyy-MM-dd HH:mm:ss');
   var list = overduePending_(reports, cutoff);
   if (!list.length) return 0;
-  var lines = ['⏰ یادآوری بررسی: ' + list.length + ' گزارش بیش از ' + hours + ' ساعت در انتظار تایید/رد مانده است:'];
-  list.slice(0, 15).forEach(function (r) {
-    var c = getCityById_(r.city_id);
-    lines.push('• #' + r.report_id + ' — ' + (c ? c.name : '') + ' — ' + cut_(r.subject, 35));
-  });
-  if (list.length > 15) lines.push('… و ' + (list.length - 15) + ' مورد دیگر');
-  lines.push('\nدکمه‌های تایید/رد زیر پیام هر گزارش در همین گروه است؛ فهرست کامل: پنل /admin ← ⏳ در انتظار بررسی');
-  tgSend_(groupId, lines.join('\n'));
+  tgSend_(groupId, pendingAlertText_(list, hours), ikb_(list.slice(0, PENDING_ALERT_MAX).map(function (r) { return pendingRowBtns_(r, 'rq:' + r.report_id); })));
   return list.length;
+}
+var PENDING_ALERT_MAX = 15;
+function pendingTitle_(r, n) { return cut_(String(r.subject || '').trim() || String(r.class_type || '').replace(/^#/, '') || 'بدون موضوع', n || 35); } // موضوع؛ اگر خالی بود نوع برنامه
+function pendingAlertText_(list, hours) {
+  var lines = ['⏰ یادآوری بررسی: ' + list.length + ' گزارش بیش از ' + hours + ' ساعت در انتظار تایید/رد مانده است:'];
+  list.slice(0, PENDING_ALERT_MAX).forEach(function (r) {
+    var c = getCityById_(r.city_id);
+    lines.push('• #' + r.report_id + ' — ' + (c ? c.name : '') + ' — ' + pendingTitle_(r) + (reviewInGroup_(r) ? '' : ' ⚠️ پیامش در این گروه نیست'));
+  });
+  if (list.length > PENDING_ALERT_MAX) lines.push('… و ' + (list.length - PENDING_ALERT_MAX) + ' مورد دیگر (پنل /admin ← ⏳ در انتظار بررسی)');
+  lines.push('', '🔗 = رفتن به پیام همان گزارش در گروه (دکمه‌های تایید/رد زیر آن است)',
+    '📨 = اگر پیامش پیدا نمی‌شود: گزارش با دکمه‌های تایید/رد دوباره در پایین همین گروه فرستاده می‌شود');
+  return lines.join('\n');
 }
 // previewOnlyTg: اگر عدد باشد، فقط پیش‌نمایش برای همان ادمین فرستاده می‌شود (هیچ پیامی به کارمندان نمی‌رود)
 function sendMonthlyReminder_(reports, t, previewOnlyTg) {

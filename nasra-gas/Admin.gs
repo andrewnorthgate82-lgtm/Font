@@ -176,6 +176,12 @@ function handleAdminCb_(cb, s, data) {
     return;
   }
   if (p === 'r') { tgAnswerCb_(cb.id); showReportCard_(chatId, num_(a), mid); return; }
+  if (p === 'rq') { // 📨 ارسال دوباره گزارش در انتظار به پایین گروه بررسی
+    var rq = resendForReview_(num_(a));
+    tgAnswerCb_(cb.id, rq.ok ? '📨 گزارش #' + a + ' دوباره در گروه بررسی فرستاده شد.' : rq.msg, !rq.ok);
+    if (rq.ok) showReportCard_(chatId, num_(a), mid);
+    return;
+  }
   if (p === 're') {
     var rep = getReport_(num_(a));
     if (!rep || rep.status !== 'approved') { tgAnswerCb_(cb.id, 'فقط گزارش «تایید‌شده» را می‌توان ویرایش کرد.', true); return; }
@@ -253,7 +259,22 @@ function handleAdminCb_(cb, s, data) {
   // کاربران: ۱) جستجو با شماره ۲) ناحیه ← نقش ← فهرست کاربران
   if (p === 'u') {
     tgAnswerCb_(cb.id);
-    panelOut_(chatId, mid, '👤 کاربران — چطور پیدا کنیم؟', ikb_([[btn_('📱 جستجو با شماره', 'A:uf')], [btn_('🏙 انتخاب ناحیه', 'A:un')], homeRow_()]));
+    panelOut_(chatId, mid, '👤 کاربران — یکی را انتخاب کنید:', ikb_([[btn_('📱 جستجو با شماره', 'A:uf')], [btn_('🏙 انتخاب ناحیه', 'A:un')], [btn_('📥 خروجی اکسل', 'A:ux')], homeRow_()]));
+    return;
+  }
+  if (p === 'ux') {
+    tgAnswerCb_(cb.id);
+    var sc0 = {};
+    readTable_('Users').forEach(function (u) { var pi = POSITIONS.indexOf(positionOf_(u.position)); if (u.status === 'approved' && pi !== -1) sc0[pi] = (sc0[pi] || 0) + 1; });
+    var xrows = positionButtons_('A:uX:', function (i) { return STAFF_TITLES[i] + ' (' + (sc0[i] || 0) + ')'; });
+    xrows.push([btn_('📚 همه نقش‌ها (۵ برگه در یک فایل)', 'A:uX:a')], usersBackRow_());
+    panelOut_(chatId, mid, '📥 خروجی اکسل کاربران — کدام نقش؟\n(عدد داخل پرانتز = کاربران فعال)\nستون‌ها: ردیف / نام ناحیه / نام و نام خانوادگی / شماره تماس', ikb_(xrows));
+    return;
+  }
+  if (p === 'uX') {
+    if (a !== 'a' && !(/^\d$/.test(String(a)) && POSITIONS[num_(a)])) { tgAnswerCb_(cb.id, 'نقش پیدا نشد.', true); return; }
+    tgAnswerCb_(cb.id, 'در حال ساخت فایل…');
+    if (!sendStaffExcel_(chatId, a)) tgSend_(chatId, '⚠️ ارسال فایل ناموفق بود؛ چند دقیقه دیگر دوباره امتحان کنید.');
     return;
   }
   if (p === 'uf') {
@@ -444,11 +465,11 @@ function showPendingList_(chatId, mid) {
   var rows = [];
   list.slice(0, 15).forEach(function (r) {
     var cty = getCityById_(r.city_id);
-    lines.push('• #' + r.report_id + ' — ' + (cty ? cty.name : '') + ' — ' + cut_(r.subject, 30) + ' — آخرین ارسال: ' + String(cellToStr_(r.updated_at)).slice(0, 16));
-    rows.push([btn_('#' + r.report_id + ' · ' + (cty ? cty.name : '') + ' · ' + cut_(r.subject, 20), 'A:r:' + r.report_id)]);
+    lines.push('• #' + r.report_id + ' — ' + (cty ? cty.name : '') + ' — ' + pendingTitle_(r, 30) + ' — آخرین ارسال: ' + String(cellToStr_(r.updated_at)).slice(0, 16) + (reviewInGroup_(r) ? '' : ' ⚠️ پیامش در گروه نیست'));
+    rows.push([btn_('#' + r.report_id + ' · ' + (cty ? cty.name : '') + ' · ' + pendingTitle_(r, 20), 'A:r:' + r.report_id)]);
   });
   if (list.length > 15) lines.push('… و ' + (list.length - 15) + ' مورد دیگر');
-  if (list.length) lines.push('\nتایید/رد این گزارش‌ها با دکمه‌های همان پیام در گروه بررسی انجام می‌شود.');
+  if (list.length) lines.push('\nتایید/رد با دکمه‌های همان پیام در گروه بررسی انجام می‌شود. روی هر گزارش بزنید: «🔗 برو به پیام» یا اگر پیدا نمی‌شود «📨 ارسال دوباره» به پایین گروه.');
   else lines.push('\nهمه گزارش‌ها بررسی شده‌اند 👌');
   rows.push(homeRow_());
   panelOut_(chatId, mid, lines.join('\n'), ikb_(rows));
@@ -473,7 +494,8 @@ function reportCardText_(rep) {
   ].concat(reportSummaryLines_(rep), ['دفعات ارسال مجدد: ' + num_(rep.resubmit_count)]);
   if (rep.status === 'approved') lines.push('تاریخ درج در کانال: ' + String(cellToStr_(rep.publish_jalali)));
   if (rep.status === 'approved' || rep.status === 'rejected') lines.push('⭐️ امتیاز: ' + (num_(rep.score) ? num_(rep.score) + ' از 5' : 'هنوز ثبت نشده (از پیام همین گزارش در گروه بررسی)'));
-  if (rep.status === 'pending') lines.push('\nتصمیم درباره این گزارش در گروه بررسی گرفته می‌شود.');
+  if (rep.status === 'pending') lines.push('\nتصمیم درباره این گزارش در گروه بررسی گرفته می‌شود.' +
+    (reviewInGroup_(rep) ? '' : '\n⚠️ پیام بررسی این گزارش در گروه فعلی نیست؛ «📨 ارسال دوباره» را بزنید.'));
   return lines.join('\n');
 }
 // خلاصه گزارش برای کارت پنل — فقط بخش‌های همان نوع
@@ -499,6 +521,7 @@ function reportSummaryLines_(rep) {
 }
 function reportCardKb_(rep) {
   var rows = [];
+  if (rep.status === 'pending') rows.push(pendingRowBtns_(rep, 'A:rq:' + rep.report_id), [btn_('⏳ در انتظار بررسی', 'A:p')]);
   if (rep.status === 'approved') {
     rows.push([btn_('✏️ ویرایش کپشن در کانال', 'A:re:' + rep.report_id)]);
     rows.push([btn_('🗑 حذف از کانال', 'A:rd:' + rep.report_id)]);

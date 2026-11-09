@@ -299,6 +299,7 @@ function routeCallback_(cb) {
   if (data.indexOf('po:') === 0) return handleRoleCb_(cb, session, data); // نقش همکار (ثبت‌نام یا یک‌باره)
   if (data.indexOf('mr:') === 0) return handleMyReportsCb_(cb, session, data); // 📋 گزارش‌های من
   if (/^(ok|rj|mn|rs|rd|rb|rm|sc):/.test(data)) return handleReviewCb_(cb, session, data);
+  if (data.indexOf('rq:') === 0) return handleResendCb_(cb, data); // 📨 ارسال دوباره گزارش در انتظار (یادآوری گروه)
   return handleFormCb_(cb, session, data); // بقیه کال‌بک‌ها مال فرم گزارش‌اند
 }
 

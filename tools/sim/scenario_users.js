@@ -28,7 +28,7 @@ const errs = () => env.sheets.Logs.data.filter(r => r[1] === 'error').map(r => r
 // ۱) منوی کاربران: دو گزینه
 let n = env.tgCalls.length; cb('A:u');
 let q = last(since(n));
-ok(/چطور پیدا کنیم/.test(q.p.text) && kb(q)[0][0].callback_data === 'A:uf' && kb(q)[1][0].callback_data === 'A:un', 'دو گزینه: ' + btns(q));
+ok(/یکی را انتخاب کنید/.test(q.p.text) && kb(q)[0][0].callback_data === 'A:uf' && kb(q)[1][0].callback_data === 'A:un' && kb(q)[2][0].callback_data === 'A:ux', 'سه گزینه: ' + btns(q));
 ok(!C.getSession_(500, 500).state, 'منو هنوز منتظر متن نیست');
 
 // ۲) جستجو با شماره
@@ -75,6 +75,32 @@ ok(/علی برادری/.test(q.p.text) && btns(q).includes('A:uR:29=🏙 کار
 cb('A:uQ:1:4'); C.bustCache_();
 n = env.tgCalls.length; cb('A:uR:29');
 ok(btns(last(since(n))).includes('A:uP:29:3=فرمانده گردان برادر (1)') && btns(last(since(n))).includes('A:uP:29:4=مسئول نسرا برادر (2)'), 'تعدادها بعد از تغییر نقش به‌روز شد');
+
+// ۷) خروجی اکسل کاربران هر نقش
+n = env.tgCalls.length; cb('A:u');
+ok(btns(last(since(n))).slice(0, 3).join('|') === 'A:uf=📱 جستجو با شماره|A:un=🏙 انتخاب ناحیه|A:ux=📥 خروجی اکسل', 'سه گزینه کاربران');
+n = env.tgCalls.length; cb('A:ux');
+q = last(since(n));
+ok(btns(q).slice(0, 6).join('|') === 'A:uX:0=مسئولین فضای مجازی (1)|A:uX:3=فرماندهان گردان برادر (1)|A:uX:4=مسئولین نسرا برادران (2)|A:uX:1=فرماندهان گردان خواهر (1)|A:uX:2=مسئولین نسرا خواهران (0)|A:uX:a=📚 همه نقش‌ها (۵ برگه در یک فایل)', 'نقش‌ها با تعداد فعال: ' + btns(q).join(' | '));
+function lastDoc(from) { return since(from).filter(c => c.method === 'sendDocument').pop(); }
+function sheetXml(doc, k) { return doc.p.document.parts.find(p => p.n === 'xl/worksheets/sheet' + (k || 1) + '.xml').c; }
+n = env.tgCalls.length; cb('A:uX:4'); // بعد از قدم ۶: علی برادری و حسن نسرایی
+let doc = lastDoc(n), xml = sheetXml(doc);
+ok(doc && doc.p.chat_id == '500' && /^مسئولین نسرا برادران - \d{4}-\d{2}-\d{2}\.xlsx$/.test(doc.p.document.getName()), 'نام فایل: ' + (doc && doc.p.document.getName()));
+ok(/مسئولین نسرا برادران: 2 نفر/.test(doc.p.caption) && /ناحیه‌های بدون مسئولین نسرا برادران \(\d+\)/.test(doc.p.caption), 'کپشن: ' + doc.p.caption);
+const order = ['مسئولین نسرا برادران', 'ردیف', 'نام ناحیه', 'نام و نام خانوادگی', 'شماره تماس'].map(t => xml.indexOf(t));
+ok(order.every((v, i) => v > 0 && (i === 0 || v > order[i - 1])) && xml.includes('<mergeCell ref="A1:D1"/>'), 'تیتر بالا + ستون‌ها');
+ok(xml.includes('علی برادری') && xml.includes('09130000701') && xml.includes('حسن نسرایی') && !xml.includes('کاشانی'), 'فقط همین نقش، با شماره');
+n = env.tgCalls.length; cb('A:uX:3'); xml = sheetXml(lastDoc(n));
+ok(xml.includes('کاشانی') && !xml.includes('بهرام دوم') && !xml.includes('ردشده'), 'غیرفعال و ردشده در فایل نیستند');
+n = env.tgCalls.length; cb('A:uX:a');
+doc = lastDoc(n);
+const sheetsN = doc.p.document.parts.filter(p => /^xl\/worksheets\/sheet\d\.xml$/.test(p.n)).length;
+const wb = doc.p.document.parts.find(p => p.n === 'xl/workbook.xml').c;
+ok(sheetsN === 5 && wb.indexOf('مسئولین فضای مجازی') < wb.indexOf('فرماندهان گردان برادر') && wb.indexOf('فرماندهان گردان برادر') < wb.indexOf('مسئولین نسرا خواهران'), 'همه نقش‌ها: ۵ برگه به ترتیب');
+ok(/مسئولین نسرا خواهران: 0 نفر/.test(doc.p.caption), 'کپشن همه: ' + doc.p.caption);
+n = env.tgCalls.length; cb('A:uX:9');
+ok(!lastDoc(n), 'نقش نامعتبر ← فایلی نمی‌رود');
 
 const datas = env.tgCalls.flatMap(c => kb(c).flat().map(b => b.callback_data)).filter(Boolean);
 ok(datas.every(d => Buffer.byteLength(d) <= 64), 'همه دکمه‌ها ≤ ۶۴ بایت');

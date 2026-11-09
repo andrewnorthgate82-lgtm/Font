@@ -73,6 +73,51 @@ function reviewHeader_(rep) {
   return '🆕 گزارش جدید برای بررسی\nکارمند: ' + rep.employee_name +
     '\nشهرستان: ' + (city ? city.name : '') + '\nشماره گزارش: ' + rep.report_id;
 }
+// ---------- پیدا کردن پیام بررسی / ارسال دوباره (یادآوری گروه و پنل) ----------
+// پیام بررسی این گزارش در گروه فعلی هست؟ (اگر گروه عوض شده یا هیچ‌وقت فرستاده نشده، نه)
+function reviewInGroup_(rep) {
+  var g = getSettingNum_('review_group_id');
+  return !!(g && rep && num_(rep.review_info_id) && num_(rep.review_chat_id) === num_(g));
+}
+// لینک مستقیم پیام بررسی (فقط سوپرگروه‌ها لینک دارند: ‎-100…‎ ← t.me/c/…)
+function reviewMsgLink_(rep) {
+  if (!reviewInGroup_(rep)) return '';
+  var id = String(rep.review_chat_id);
+  return /^-100\d+$/.test(id) ? 'https://t.me/c/' + id.slice(4) + '/' + num_(rep.review_info_id) : '';
+}
+// دکمه‌های یک گزارش در انتظار: 🔗 رفتن به پیامش (اگر لینک دارد) + 📨 ارسال دوباره در پایین گروه
+function pendingRowBtns_(rep, resendData) {
+  var link = reviewMsgLink_(rep), row = [];
+  if (link) row.push({ text: '🔗 #' + rep.report_id + ' — برو به پیام', url: link });
+  row.push(btn_('📨 #' + rep.report_id + ' — ارسال دوباره', resendData));
+  return row;
+}
+// گزارش در انتظار را دوباره در گروه بررسی می‌فرستد (پیام قبلی دکمه‌هایش را از دست می‌دهد تا دو تصمیم گرفته نشود)
+function resendForReview_(rid) {
+  var rep = getReport_(rid);
+  if (!rep) return { ok: false, msg: 'گزارش ' + rid + ' پیدا نشد.' };
+  if (rep.status !== 'pending') return { ok: false, msg: 'گزارش #' + rid + ' دیگر در انتظار بررسی نیست (' + (STATUS_FA[rep.status] || rep.status) + ').' };
+  if (!getSettingNum_('review_group_id')) return { ok: false, msg: 'گروه بررسی تنظیم نشده است (در گروه /here بفرستید).' };
+  var key = 'rsnd_' + rid;
+  if (cache_().get(key)) return { ok: false, msg: 'گزارش #' + rid + ' همین الان دوباره فرستاده شد؛ پایین گروه را ببینید.' };
+  if (rep.review_chat_id && num_(rep.review_info_id)) {
+    tgEdit_(num_(rep.review_chat_id), num_(rep.review_info_id), reviewHeader_(rep) + '\n\n↪️ این گزارش دوباره در پایین گروه فرستاده شد؛ از پیام تازه استفاده کنید.', null);
+  }
+  if (!sendReportToReview_(rep)) return { ok: false, msg: 'ارسال دوباره گزارش #' + rid + ' ناموفق بود؛ چند دقیقه دیگر امتحان کنید.' };
+  cache_().put(key, '1', 120);
+  return { ok: true };
+}
+// دکمه 📨 زیر پیام «یادآوری بررسی» در گروه
+function handleResendCb_(cb, data) {
+  if (!isAdminTg_(cb.from.id)) { tgAnswerCb_(cb.id, TXT.NO_ACCESS, true); return; }
+  var rid = num_(data.split(':')[1]), res = resendForReview_(rid);
+  tgAnswerCb_(cb.id, res.ok ? '📨 گزارش #' + rid + ' دوباره فرستاده شد؛ پایین گروه را ببینید.' : res.msg, !res.ok);
+  var kb = cb.message.reply_markup && cb.message.reply_markup.inline_keyboard;
+  if (!kb) return;
+  var left = kb.filter(function (row) { return !row.some(function (b) { return b.callback_data === 'rq:' + rid; }); });
+  if (left.length !== kb.length) tgEditMarkup_(cb.message.chat.id, cb.message.message_id, { inline_keyboard: left }); // ردیف همین گزارش برداشته شود
+}
+
 // بعد از تایید/رد: همان پیام بررسی ← نتیجه + سطر امتیاز + دکمه‌های ۱ تا ۵ (پیام تازه‌ای فرستاده نمی‌شود)
 function editReviewInfoFinal_(rep, suffix) {
   if (rep.review_chat_id && rep.review_info_id) {

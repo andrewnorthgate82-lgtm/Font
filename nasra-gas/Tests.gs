@@ -470,7 +470,7 @@ function runTests() {
 
   check('۲۳) دکمه‌های فاز ۴ (ماه/شهرستان/خواهر-برادر/نقش) حداکثر ۶۴ بایت + هر نوع کلاس یک برگه', function () {
     var datas = ['A:xm:5', 'A:xs:1405:12', 'A:xa:1405:12', 'A:xc:1405:12:3', 'A:xg:1405:12:32', 'A:xf:1405:12:32:s', 'A:xf:1405:12:32:a',
-      'A:uq:99999', 'A:uQ:99999:4', 'A:uQ:99999:x', 'po:4', 'A:uf', 'A:un', 'A:uR:32', 'A:uP:32:4', 'A:uP:32:x'];
+      'A:uq:99999', 'A:uQ:99999:4', 'A:uQ:99999:x', 'po:4', 'A:uf', 'A:un', 'A:uR:32', 'A:uP:32:4', 'A:uP:32:x', 'A:ux', 'A:uX:4', 'A:uX:a', 'rq:999999', 'A:rq:999999'];
     function collect(kb) { kb.inline_keyboard.forEach(function (row) { row.forEach(function (b) { datas.push(b.callback_data); }); }); }
     collect(excelMonthPickerKb_(0)); collect(excelMonthPickerKb_(5));
     collect(adminCitiesKb_('A:xg:1405:12:', 'A:xc:1405:12:', 0, [], null, {}));
@@ -674,6 +674,30 @@ function runTests() {
     ok(txt.indexOf('🏫 سواد رسانه عمومی:\nتعداد کلاس برگزار شده: 2\nتعداد نفرات آموزش داده شده: 50') !== -1 && txt.indexOf('صفحه word: 0') !== -1 && txt.indexOf('سایر: 1') !== -1, 'متن گزارش:\n' + txt);
     var users = [{ telegram_id: 1, city_id: 7, status: 'approved', position: B }, { telegram_id: 2, city_id: 7, status: 'approved', position: 'مسئول فضای مجازی' }];
     eq(reminderTargets_([], users, [{ city_id: 7, name: 'نمونه' }], 1405, 8).cities[0].recipients.join(','), '1', 'یادآوری به مسئول فضای مجازی نمی‌رود');
+  });
+
+  check('۳۱) خروجی اکسل کاربران هر نقش + یادآوری گزارش‌های در انتظار (موضوع خالی، دکمه ارسال دوباره)', function () {
+    var cities = [{ city_id: 1, name: 'کاشان' }, { city_id: 2, name: 'اردستان' }, { city_id: 3, name: 'نایین' }];
+    var users = [
+      { full_name: 'علی', city_id: 1, status: 'approved', position: 'مسئول فضای مجازی', phone: '09131112233' },
+      { full_name: 'رضا', city_id: 2, status: 'approved', position: 'مسئول فضای مجازی', phone: '9132223344' },
+      { full_name: 'غیرفعال', city_id: 3, status: 'disabled', position: 'مسئول فضای مجازی', phone: '09130000000' },
+      { full_name: 'برادر', city_id: 3, status: 'approved', position: 'فرمانده گردان برادر', phone: '09134445566' }];
+    var sh = staffSheet_(users, cities, 0);
+    eq(sh.title, 'مسئولین فضای مجازی', 'تیتر برگه');
+    eq(sh.cols.map(function (c) { return c[0]; }).join('/'), 'ردیف/نام ناحیه/نام و نام خانوادگی/شماره تماس', 'ستون‌ها');
+    eq(JSON.stringify(sh.rows), JSON.stringify([[1, 'اردستان', 'رضا', '09132223344'], [2, 'کاشان', 'علی', '09131112233']]), 'فقط فعال‌ها، به ترتیب ناحیه، شماره با صفر');
+    eq(sh.missing.join(','), 'نایین', 'ناحیه بدون مسئول');
+    eq(STAFF_TITLES.length, POSITIONS.length, 'یک تیتر برای هر نقش');
+    var x = xlsxBook_([sh]).filter(function (p) { return p.name === 'xl/worksheets/sheet1.xml'; })[0].content;
+    ok(x.indexOf('<mergeCell ref="A1:D1"/>') !== -1 && x.indexOf('مسئولین فضای مجازی') < x.indexOf('ردیف') && x.indexOf('<c r="A2" s="1"') !== -1 && x.indexOf('ySplit="2"') !== -1, 'تیتر بالا (ادغام‌شده) + عنوان ستون‌ها در سطر ۲');
+    var x2 = xlsxBook_(excelSheets_([], cities, 0, '')).filter(function (p) { return p.name === 'xl/worksheets/sheet1.xml'; })[0].content;
+    ok(x2.indexOf('mergeCell') === -1 && x2.indexOf('<c r="A1" s="1"') !== -1, 'فایل اکسل گزارش‌ها مثل قبل (بدون تیتر)');
+    eq(pendingTitle_({ subject: '', class_type: '#تولیدات' }), 'تولیدات', 'موضوع خالی ← نوع برنامه');
+    var txt = pendingAlertText_([{ report_id: 7, city_id: 0, subject: '' }], 24);
+    ok(txt.indexOf('• #7') !== -1 && txt.indexOf('بدون موضوع') !== -1 && txt.indexOf('⚠️ پیامش در این گروه نیست') !== -1 && txt.indexOf('📨') !== -1, 'متن یادآوری:\n' + txt);
+    var row = pendingRowBtns_({ report_id: 7, review_chat_id: '', review_info_id: '' }, 'rq:7');
+    eq(row.length + '|' + row[0].callback_data, '1|rq:7', 'بدون پیام در گروه ← فقط ارسال دوباره');
   });
 
   if (failed.length) {
