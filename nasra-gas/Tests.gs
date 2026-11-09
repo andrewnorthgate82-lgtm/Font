@@ -636,7 +636,7 @@ function runTests() {
     ok(SHEETS.Reports.indexOf('score') !== -1 && SHEETS.Reports.indexOf('notice_msg_id') !== -1, 'ستون‌های امتیاز');
   });
 
-  check('۳۰) نقش‌ها: منوی مسئول فضای مجازی، ثبت‌نام نیمه‌کاره، «گزارش‌های من» برادران/خواهران، یادآوری', function () {
+  check('۳۰) نقش‌ها: منوی مسئول فضای مجازی، ثبت‌نام نیمه‌کاره، «گزارش‌های من» برادران/خواهران/تجمیعی + کیفیت گزارشات، یادآوری', function () {
     ok(!canSubmitReports_({ position: 'مسئول فضای مجازی' }) && canSubmitReports_({ position: 'مسئول نسرا برادر' }) && canSubmitReports_({ position: '' }), 'فقط مسئول فضای مجازی گزارش نمی‌فرستد');
     var full = [].concat.apply([], mainMenuKb_().keyboard).map(function (b) { return b.text; });
     ok(full.indexOf(MENU.NEW_REPORT) !== -1 && full.indexOf(MENU.MY_REPORTS) !== -1, 'منوی کامل');
@@ -647,7 +647,7 @@ function runTests() {
     ok(!isHalfRegistered_({ status: 'pending', phone: '0913', city_id: '29', position: 'مسئول نسرا خواهر', reg_group_message_id: '' }), 'با نقش ← نیمه‌کاره نیست');
     var mk = myMonthsKb_().inline_keyboard, t = currentPeriod_();
     ok(mk.length === 3 && mk[0].length === 2 && mk[0][0].callback_data === 'mr:' + t.jy + ':' + t.jm, 'شش ماه، دو تا در هر ردیف، از ماه جاری');
-    var datas = ['po:4', 'mr:m', 'mr:1405:12', 'mr:1405:12:b', 'mr:1405:12:s'];
+    var datas = ['po:4', 'mr:m', 'mr:1405:12', 'mr:1405:12:b', 'mr:1405:12:s', 'mr:1405:12:a'];
     mk.forEach(function (row) { row.forEach(function (b) { datas.push(b.callback_data); }); });
     datas.forEach(function (d) { ok(unescape(encodeURIComponent(d)).length <= 64, 'طول ' + d); });
     function R(o) { return Object.assign({ city_id: 7, status: 'approved', event_year: 1405, event_month: 8, event_day: 10, participants: 0, class_sub: '' }, o); }
@@ -661,6 +661,14 @@ function runTests() {
     var b = sideReportStats_(reps, {}, 7, 1405, 8, 'b'), s = sideReportStats_(reps, {}, 7, 1405, 8, 's');
     eq([b['حضوری'].n, b['حضوری'].p, b['مجازی'].n, b['مجازی'].p, b['توانمندسازی'].n, b['خلاقانه'].p, b.products['#پوستر'], b.products.other, b.pending].join(','), '2,50,1,40,1,500,1,1,1', 'برادران: هر دو نقش برادر، فقط تاییدشده و همین ناحیه');
     eq([s['حضوری'].n, s['حضوری'].p, s.pending].join(','), '1,15,0', 'خواهران جدا');
+    var a = sideReportStats_(reps, {}, 7, 1405, 8, 'a');
+    eq([a['حضوری'].n, a['حضوری'].p].join(','), '3,65', 'تجمیعی = برادران + خواهران (بدون فضای مجازی)');
+    reps[0].score = 4; reps[8].score = 1; reps[10].score = 3; reps[11].score = 1; reps[9].score = 1; // ردشده در میانگین؛ فضای مجازی و ناحیه دیگر نه
+    var qb = sideReportStats_(reps, {}, 7, 1405, 8, 'b').quality, qs = sideReportStats_(reps, {}, 7, 1405, 8, 's').quality, qa = sideReportStats_(reps, {}, 7, 1405, 8, 'a').quality;
+    eq([qb.avg, qb.cover, qb.score].join(','), '2.5,5,2.5', 'کیفیت برادران = میانگین (4 و ردشده 1) × 5 بخش ÷ 5');
+    eq([qs.avg, qs.cover, qs.score].join(','), '3,1,0.6', 'کیفیت خواهران = 3 × 1 بخش ÷ 5');
+    eq([qa.avg, qa.cover, qa.score].join(','), '2.7,5,2.7', 'کیفیت تجمیعی');
+    ok(myReportText_(reps, {}, 7, 'نمونه', 1405, 8, 'b').indexOf('⭐️ کیفیت گزارشات: 2.5 از 5') !== -1, 'سطر کیفیت گزارشات در متن');
     var txt = myReportText_(reps, {}, 7, 'نمونه', 1405, 8, 'b');
     ok(txt.indexOf('🏫 سواد رسانه عمومی:\nتعداد کلاس برگزار شده: 2\nتعداد نفرات آموزش داده شده: 50') !== -1 && txt.indexOf('صفحه word: 0') !== -1 && txt.indexOf('سایر: 1') !== -1, 'متن گزارش:\n' + txt);
     var users = [{ telegram_id: 1, city_id: 7, status: 'approved', position: B }, { telegram_id: 2, city_id: 7, status: 'approved', position: 'مسئول فضای مجازی' }];

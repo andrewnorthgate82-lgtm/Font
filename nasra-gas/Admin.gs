@@ -85,11 +85,13 @@ function monthStats_(reports, cities, jy, jm) {
 // • میانگین: همه گزارش‌های امتیازدار همان دوره (تاییدشده یا ردشده؛ حذف‌شده و در انتظار حساب نمی‌شوند)
 // • بخش کارشده: از هر کدام از ۵ نوع (حضوری، مجازی، توانمندسازی، خلاقانه، تولیدات) دست‌کم یک گزارش تاییدشده
 // نمره ۵ یعنی: در هر ۵ بخش کار شده و همه گزارش‌ها امتیاز ۵ گرفته‌اند.
-function monthScores_(reports, jy, jm) {
+// keep (اختیاری): فقط گزارش‌هایی که keep(r) برایشان درست است — مثلاً «کیفیت گزارشات» برادران/خواهران در «گزارش‌های من»
+function monthScores_(reports, jy, jm, keep) {
   var by = {};
   function b(cid) { return by[cid] || (by[cid] = { sum: 0, n: 0, types: {} }); }
   reports.forEach(function (r) {
     if ((r.status !== 'approved' && r.status !== 'rejected') || !inPeriod_(r, jy, jm)) return;
+    if (keep && !keep(r)) return;
     var x = b(num_(r.city_id)), s = num_(r.score);
     if (s >= 1 && s <= 5) { x.sum += s; x.n++; }
     var t = String(r.class_type || '').replace(/^#/, '');
@@ -998,9 +1000,12 @@ function handleExcelCb_(cb, parts, chatId, mid) {
     var cty = getCityById_(num_(parts[4]));
     if (!cty) { tgAnswerCb_(cb.id, 'شهرستان پیدا نشد.', true); return; }
     tgAnswerCb_(cb.id);
-    var sc = sideCounts_(readTable_('Reports'), positionsByTg_(readTable_('Users')), y, m, cty.city_id), cym = ym + ':' + cty.city_id;
+    var xr = readTable_('Reports'), xp = positionsByTg_(readTable_('Users')), cym = ym + ':' + cty.city_id;
+    var sc = sideCounts_(xr, xp, y, m, cty.city_id);
+    function q(sd) { return ' — ' + qualityShort_(sideQuality_(xr, xp, y, m, cty.city_id, sd)); } // کیفیت گزارشات هر بخش (همان فرمول نمره ماه)
     var other = sc.v || sc.none ? '\n   (شامل ' + (sc.v ? sc.v + ' گزارش مسئول فضای مجازی' : '') + (sc.v && sc.none ? ' و ' : '') + (sc.none ? sc.none + ' گزارش همکار بدون نقش' : '') + ')' : '';
-    panelOut_(chatId, mid, '🏙 ' + cty.name + ' — ' + title + '\n' + range + '\n\n• خواهران: ' + sc.s + ' گزارش\n• برادران: ' + sc.b + ' گزارش\n• تجمیعی (همه): ' + sc.all + ' گزارش' + other + '\n\nکدام فایل؟',
+    panelOut_(chatId, mid, '🏙 ' + cty.name + ' — ' + title + '\n' + range + '\n\n• خواهران: ' + sc.s + ' گزارش' + q('s') + '\n• برادران: ' + sc.b + ' گزارش' + q('b') +
+      '\n• تجمیعی (همه): ' + sc.all + ' گزارش' + q('a') + other + '\n\nکدام فایل؟',
       ikb_([[btn_('خواهر', 'A:xf:' + cym + ':s'), btn_('برادر', 'A:xf:' + cym + ':b'), btn_('تجمیعی', 'A:xf:' + cym + ':a')],
         [btn_('↩️ شهرستان دیگر', 'A:xc:' + ym + ':0'), btn_('🏠 پنل اصلی', 'A:m')]]));
     return;

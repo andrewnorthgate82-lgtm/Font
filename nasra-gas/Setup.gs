@@ -245,11 +245,11 @@ var INSTALL_MARKERS = [
   ['Db', ['ss_', 'readTable_', 'appendRow_', 'getSession_', 'getReportMedia_']],
   ['Jalali', ['monthTag_', 'todayJalali_']],
   ['Telegram', ['doPost', 'tgCall_', 'mainMenuKb_', 'routeCallback_', 'mediaSendPlan_']],
-  ['Registration', ['menuMyReports_', 'menuMyTeachers_', 'handleRoleCb_', 'myReportText_']],
+  ['Registration', ['menuMyReports_', 'menuMyTeachers_', 'handleRoleCb_', 'myReportText_', 'mySidesRow_']],
   ['ReportForm', ['startReport_', 'showStep_', 'platformOptions_', 'resetTypeFields_', 'handleFormMedia_']],
   ['Review', ['publishReport_', 'sendReportToReview_', 'scoreKb_']],
   ['Admin', ['handleAdminCb_', 'reportEditFields_', 'handleSampleCb_', 'extraChannels_', 'monthScores_']],
-  ['Automation', ['installPhase4', 'excelSheets_', 'dailyJobs', 'nightlyBackup']],
+  ['Automation', ['installPhase4', 'excelSheets_', 'dailyJobs', 'nightlyBackup', 'sideQuality_']],
   ['Setup', ['setup', 'ensureSheets_', 'setWebhook']],
   ['Tests', ['runTests']]
 ];

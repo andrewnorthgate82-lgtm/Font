@@ -87,7 +87,7 @@ ok(C.reportCardText_(C.getReport_(r1)).includes('⭐️ امتیاز: 4 از 5')
 const t = C.currentPeriod_();
 n = env.tgCalls.length; msg('📋 گزارش‌های من'); cb('mr:' + t.jy + ':' + t.jm, 700, 0, 33);
 const my = since(n).filter(c => c.method === 'editMessageText' && c.p.chat_id == 700).pop().p.text;
-ok(my.includes('بخش تولیدات') && my.includes('⭐️ نمره ماه ناحیه (همه نقش‌ها): 0.9 از 5 (1 بخش از 5 کار شده)'), 'گزارش‌های من:\n' + my);
+ok(my.includes('بخش تولیدات') && my.includes('⭐️ کیفیت گزارشات: 0.9 از 5\n(میانگین امتیاز 4.5 × 1 بخش کارشده از 5 ÷ 5 — ردشده‌ها هم در میانگین هستند)'), 'گزارش‌های من:\n' + my);
 const stt = C.monthStatsText_(C.readTable_('Reports'), t.jy, t.jm);
 ok(stt.includes('🏆 نجف آباد: ⭐️ 0.9 از 5 — 2 گزارش') && stt.includes('1 بخش از 5، میانگین امتیاز 4.5') && stt.includes('⭐️ نمره ماه = میانگین'), 'آمار ماهانه:\n' + stt);
 ok(errs().length === 0, 'بدون خطا: ' + errs().join(' ; '));

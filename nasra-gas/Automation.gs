@@ -107,6 +107,13 @@ function excelPick_(reports, posByTg, jy, jm, cityId, side) {
     return (side === 's' || side === 'b') ? reportSide_(r, posByTg) === side : true;
   });
 }
+// کیفیت گزارشات (فرمول نمره ماه) یک شهرستان فقط روی یک بخش — side: 's' خواهران، 'b' برادران، 'a' همه (= نمره ماه شهرستان)
+function sideQuality_(reports, posByTg, jy, jm, cityId, side) {
+  return scoreOf_(monthScores_(reports, jy, jm, function (r) {
+    return num_(r.city_id) === num_(cityId) && (side === 'a' || reportSide_(r, posByTg) === side);
+  }), cityId);
+}
+function qualityShort_(q) { return q.scored ? '⭐️ کیفیت ' + q.score + ' از 5' : '⭐️ بدون امتیاز'; }
 function sideCounts_(reports, posByTg, jy, jm, cityId) {
   var c = { s: 0, b: 0, v: 0, none: 0, all: 0 };
   excelPick_(reports, posByTg, jy, jm, cityId, 'a').forEach(function (r) {

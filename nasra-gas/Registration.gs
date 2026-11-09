@@ -192,12 +192,15 @@ function menuMyTeachers_(msg) {
     rows.map(function (t) { return '• ' + t.name; }).join('\n'));
 }
 
-// ---------- 📋 گزارش‌های من: ماه ← (مسئول فضای مجازی: برادران/خواهران) ← عملکرد ----------
-// برادران = گزارش‌های «فرمانده گردان برادر» و «مسئول نسرا برادر» همان ناحیه؛ خواهران همین‌طور.
-// نقشِ ثبت‌شده در خود گزارش (لحظه ارسال) ملاک است؛ مثل فایل اکسل خواهر/برادر. فقط گزارش‌های تاییدشده شمرده می‌شوند.
+// ---------- 📋 گزارش‌های من: ماه ← (مسئول فضای مجازی: برادران / خواهران / تجمیعی) ← عملکرد + کیفیت گزارشات ----------
+// برادران = گزارش‌های «فرمانده گردان برادر» و «مسئول نسرا برادر» همان ناحیه؛ خواهران همین‌طور؛ تجمیعی = هر چهار نقش.
+// نقشِ ثبت‌شده در خود گزارش (لحظه ارسال) ملاک است؛ مثل فایل اکسل خواهر/برادر. عددها فقط از گزارش‌های تاییدشده‌اند.
+// کیفیت گزارشات = همان فرمول نمره ماه (Admin.gs ← monthScores_) ولی فقط روی گزارش‌های همین بخش.
 var MY_MONTHS = 6;
-var SIDE_FA = { b: 'برادران', s: 'خواهران' };
-var SIDE_ROLES_FA = { b: 'فرمانده گردان برادر و مسئول نسرا برادر', s: 'فرمانده گردان خواهر و مسئول نسرا خواهر' };
+var MY_SIDES = ['b', 's', 'a'];
+var SIDE_FA = { b: 'برادران', s: 'خواهران', a: 'تجمیعی' };
+var SIDE_BTN = { b: '👨 برادران', s: '👩 خواهران', a: '👥 تجمیعی' };
+var SIDE_ROLES_FA = { b: 'فرمانده گردان برادر و مسئول نسرا برادر', s: 'فرمانده گردان خواهر و مسئول نسرا خواهر', a: 'فرمانده گردان و مسئول نسرا (برادر و خواهر)' };
 var PRODUCT_ROWS = [['#پوستر', 'پوستر'], ['#اینفوگرافیک', 'اینفوگرافیک'], ['#کلیپ', 'کلیپ'], ['#اسلاید', 'اسلاید'], ['#صفحه_word', 'صفحه word'], ['#موشن_گرافیک', 'موشن گرافیک']];
 
 function menuMyReports_(msg) {
@@ -218,6 +221,11 @@ function showMyMonths_(chatId, tg, mid) {
   if (mid && tgEdit_(chatId, mid, text, myMonthsKb_())) return;
   tgSend_(chatId, text, myMonthsKb_());
 }
+// دکمه‌های بخش‌ها برای مسئول فضای مجازی
+function sideBtn_(jy, jm, x) { return btn_(SIDE_BTN[x], 'mr:' + jy + ':' + jm + ':' + x); }
+function mySidesRow_(jy, jm, except) { // زیر گزارش: بخش‌های دیگر (بخشِ در حال نمایش حذف می‌شود)
+  return MY_SIDES.filter(function (x) { return x !== except; }).map(function (x) { return sideBtn_(jy, jm, x); });
+}
 function handleMyReportsCb_(cb, s, data) {
   var chatId = cb.message.chat.id, tg = cb.from.id, mid = cb.message.message_id;
   var u = getUserByTg_(tg);
@@ -228,28 +236,30 @@ function handleMyReportsCb_(cb, s, data) {
   if (parts[1] === 'm') { tgAnswerCb_(cb.id); showMyMonths_(chatId, tg, mid); return; }
   var jy = num_(parts[1]), jm = num_(parts[2]), t = currentPeriod_();
   if (!(jy >= 1400 && jm >= 1 && jm <= 12) || jy * 12 + jm > t.jy * 12 + t.jm) { tgAnswerCb_(cb.id, 'این دکمه دیگر فعال نیست.', true); return; }
-  var side = mySide === 'v' ? parts[3] : mySide; // فقط مسئول فضای مجازی بین برادران و خواهران انتخاب می‌کند
+  var side = mySide === 'v' ? parts[3] : mySide; // فقط مسئول فضای مجازی بخش را انتخاب می‌کند؛ بقیه فقط بخش خودشان
   var back = [btn_('↩️ ماه دیگر', 'mr:m')];
   tgAnswerCb_(cb.id);
-  if (side !== 'b' && side !== 's') {
-    tgEdit_(chatId, mid, '📋 گزارش ' + periodName_(jy, jm) + '\nعملکرد کدام بخش را می‌خواهید؟',
-      ikb_([[btn_('👨 برادران', 'mr:' + jy + ':' + jm + ':b'), btn_('👩 خواهران', 'mr:' + jy + ':' + jm + ':s')], back]));
+  if (MY_SIDES.indexOf(side) === -1) {
+    tgEdit_(chatId, mid, '📋 گزارش ' + periodName_(jy, jm) + '\nعملکرد کدام بخش را می‌خواهید؟\n(تجمیعی = برادران و خواهران با هم)',
+      ikb_([[sideBtn_(jy, jm, 'b'), sideBtn_(jy, jm, 's')], [sideBtn_(jy, jm, 'a')], back]));
     return;
   }
-  var city = getCityById_(u.city_id), reports = readTable_('Reports');
-  var text = myReportText_(reports, positionsByTg_(readTable_('Users')), u.city_id, city ? city.name : '', jy, jm, side);
-  var rows = [];
-  if (mySide === 'v') { var other = side === 'b' ? 's' : 'b'; rows.push([btn_('🔁 ' + SIDE_FA[other], 'mr:' + jy + ':' + jm + ':' + other)]); }
-  rows.push(back);
-  tgEdit_(chatId, mid, text, ikb_(rows));
+  var city = getCityById_(u.city_id);
+  var text = myReportText_(readTable_('Reports'), positionsByTg_(readTable_('Users')), u.city_id, city ? city.name : '', jy, jm, side);
+  tgEdit_(chatId, mid, text, ikb_(mySide === 'v' ? [mySidesRow_(jy, jm, side), back] : [back]));
 }
-// آمار یک ناحیه، یک دوره، یک بخش (برادران/خواهران)
+// آیا گزارشی با این بخش (b/s/v/'') در بخش انتخاب‌شده می‌آید؟ تجمیعی = برادران + خواهران
+function inMySide_(reportSide, side) { return side === 'a' ? (reportSide === 'b' || reportSide === 's') : reportSide === side; }
+// آمار یک ناحیه، یک دوره، یک بخش + کیفیت گزارشات همان بخش
 function sideReportStats_(reports, posByTg, cityId, jy, jm, side) {
-  var st = { 'حضوری': { n: 0, p: 0 }, 'مجازی': { n: 0, p: 0 }, 'توانمندسازی': { n: 0, p: 0 }, 'خلاقانه': { n: 0, p: 0 }, products: {}, pending: 0 };
+  var st = { 'حضوری': { n: 0, p: 0 }, 'مجازی': { n: 0, p: 0 }, 'توانمندسازی': { n: 0, p: 0 }, 'خلاقانه': { n: 0, p: 0 }, products: {}, pending: 0, unscored: 0 };
+  function mine(r) { return num_(r.city_id) === num_(cityId) && inMySide_(reportSide_(r, posByTg), side); }
   reports.forEach(function (r) {
-    if (num_(r.city_id) !== num_(cityId) || !inPeriod_(r, jy, jm) || reportSide_(r, posByTg) !== side) return;
+    if (!mine(r) || !inPeriod_(r, jy, jm)) return;
     if (r.status === 'pending') { st.pending++; return; }
-    if (r.status !== 'approved') return;
+    if (r.status !== 'approved' && r.status !== 'rejected') return;
+    if (!(num_(r.score) >= 1)) st.unscored++;
+    if (r.status !== 'approved') return; // ردشده فقط در میانگین کیفیت حساب می‌شود
     var type = String(r.class_type || '').replace(/^#/, '');
     if (type === 'تولیدات') {
       var known = PRODUCT_ROWS.some(function (x) { return x[0] === String(r.class_sub || ''); });
@@ -260,10 +270,11 @@ function sideReportStats_(reports, posByTg, cityId, jy, jm, side) {
     if (!st[type]) return;
     st[type].n++; st[type].p += num_(r.participants); // خلاقانه: تعداد بازدید/نفرات
   });
+  st.quality = scoreOf_(monthScores_(reports, jy, jm, mine), cityId);
   return st;
 }
 function myReportText_(reports, posByTg, cityId, cityName, jy, jm, side) {
-  var st = sideReportStats_(reports, posByTg, cityId, jy, jm, side);
+  var st = sideReportStats_(reports, posByTg, cityId, jy, jm, side), q = st.quality;
   function cls(title, x) { return [title, 'تعداد کلاس برگزار شده: ' + x.n, 'تعداد نفرات آموزش داده شده: ' + x.p, '']; }
   var L = [
     '📋 گزارش عملکرد ' + periodName_(jy, jm) + ' — ' + SIDE_FA[side],
@@ -280,10 +291,13 @@ function myReportText_(reports, posByTg, cityId, cityName, jy, jm, side) {
     PRODUCT_ROWS.map(function (x) { return x[1] + ': ' + (st.products[x[0]] || 0); })
   );
   if (st.products.other) L.push('سایر: ' + st.products.other);
-  if (st.pending) L.push('', '⏳ در انتظار بررسی (هنوز حساب نشده): ' + st.pending);
-  var sc = scoreOf_(monthScores_(reports, jy, jm), cityId);
-  L.push('', sc.scored ? '⭐️ نمره ماه ناحیه (همه نقش‌ها): ' + sc.score + ' از 5 (' + sc.cover + ' بخش از 5 کار شده)'
-    : '⭐️ نمره ماه ناحیه: هنوز هیچ گزارشی امتیاز نگرفته است');
+  L.push('');
+  if (q.scored) {
+    L.push('⭐️ کیفیت گزارشات: ' + q.score + ' از 5',
+      '(میانگین امتیاز ' + q.avg + ' × ' + q.cover + ' بخش کارشده از 5 ÷ 5 — ردشده‌ها هم در میانگین هستند)');
+  } else L.push('⭐️ کیفیت گزارشات: هنوز هیچ گزارشی امتیاز نگرفته است');
+  if (st.unscored && q.scored) L.push('⚠️ ' + st.unscored + ' گزارش هنوز امتیاز نگرفته (در کیفیت حساب نشده)');
+  if (st.pending) L.push('⏳ در انتظار بررسی (هنوز حساب نشده): ' + st.pending);
   return L.join('\n');
 }
 

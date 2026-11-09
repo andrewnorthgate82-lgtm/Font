@@ -1,5 +1,5 @@
 // سناریو: نقش در ثبت‌نام (دستی/لیست مجاز/نیمه‌کاره/همکار قدیمی) ← منوی نقش‌محور (مسئول فضای مجازی بدون «ارسال گزارش»)
-// ← «📋 گزارش‌های من»: ماه ← (فضای مجازی: برادران/خواهران) ← عملکرد ← یادآوری بدون فضای مجازی ← تغییر نقش توسط ادمین
+// ← «📋 گزارش‌های من»: ماه ← (فضای مجازی: برادران/خواهران/تجمیعی) ← عملکرد + کیفیت گزارشات ← یادآوری بدون فضای مجازی ← تغییر نقش توسط ادمین
 const { makeEnv } = require('./stubs');
 const env = makeEnv(), C = env.ctx;
 C.setup(); C.installPhase4(); env.props.GAS_KEY = 'K';
@@ -99,8 +99,8 @@ function rep(o) {
   C.appendRow_('Reports', Object.assign({ report_id: String(++rid), submitter_telegram_id: '999', city_id: '29', status: 'approved', event_year: per.jy, event_month: per.jm, event_day: 10, participants: '0', class_sub: '' }, o, { per: undefined }));
 }
 const B = 'فرمانده گردان برادر', B2 = 'مسئول نسرا برادر', S = 'مسئول نسرا خواهر', S2 = 'فرمانده گردان خواهر', V = 'مسئول فضای مجازی';
-rep({ class_type: '#حضوری', participants: '30', submitter_position: B });
-rep({ class_type: '#حضوری', participants: '25', submitter_position: B2 });
+rep({ class_type: '#حضوری', participants: '30', submitter_position: B, score: '4' });
+rep({ class_type: '#حضوری', participants: '25', submitter_position: B2, score: '5' });
 rep({ class_type: '#مجازی', participants: '40', submitter_position: B });
 rep({ class_type: '#توانمندسازی', class_sub: '#حضوری', participants: '12', submitter_position: B2 });
 rep({ class_type: '#توانمندسازی', class_sub: '#مجازی', participants: '8', submitter_position: B });
@@ -111,12 +111,12 @@ rep({ class_type: '#تولیدات', class_sub: '#صفحه_word', submitter_posi
 rep({ class_type: '#تولیدات', class_sub: '#سایر', submitter_position: B });
 rep({ class_type: '#تولیدات', class_sub: '', submitter_position: B });           // فرم قدیمی بدون نوع ← سایر
 rep({ class_type: '#حضوری', participants: '99', submitter_position: B, status: 'pending' });
-rep({ class_type: '#حضوری', participants: '99', submitter_position: B, status: 'rejected' });
-rep({ class_type: '#حضوری', participants: '99', submitter_position: B, city_id: '5' }); // ناحیه دیگر
-rep({ class_type: '#حضوری', participants: '99', submitter_position: V });                // فضای مجازی ← هیچ‌کدام
+rep({ class_type: '#حضوری', participants: '99', submitter_position: B, status: 'rejected', score: '1' }); // ردشده: فقط در میانگین کیفیت
+rep({ class_type: '#حضوری', participants: '99', submitter_position: B, city_id: '5', score: '1' }); // ناحیه دیگر
+rep({ class_type: '#حضوری', participants: '99', submitter_position: V, score: '1' });    // فضای مجازی ← هیچ‌کدام (حتی تجمیعی)
 rep({ class_type: '#حضوری', participants: '7', submitter_position: B, per: pv });        // ماه قبل
-rep({ class_type: '#حضوری', participants: '15', submitter_position: S });
-rep({ class_type: '#مجازی', participants: '22', submitter_position: S2 });
+rep({ class_type: '#حضوری', participants: '15', submitter_position: S, score: '3' });
+rep({ class_type: '#مجازی', participants: '22', submitter_position: S2, score: '5' });
 rep({ class_type: '#تولیدات', class_sub: '#کلیپ', submitter_position: S2 });
 rep({ class_type: '#تولیدات', class_sub: '#موشن_گرافیک', submitter_position: S });
 C.bustCache_();
@@ -134,6 +134,7 @@ const exp = ['🏫 سواد رسانه عمومی:\nتعداد کلاس برگز
   '💪 توانمندسازی گردان:\nتعداد کلاس برگزار شده: 2\nتعداد نفرات آموزش داده شده: 20',
   '🎨 سواد رسانه خلاقانه:\nتعداد نفرات آموزش داده شده: 900',
   '🎞 بخش تولیدات:\nپوستر: 2\nاینفوگرافیک: 0\nکلیپ: 0\nاسلاید: 0\nصفحه word: 1\nموشن گرافیک: 0\nسایر: 2',
+  '⭐️ کیفیت گزارشات: 3.3 از 5\n(میانگین امتیاز 3.3 × 5 بخش کارشده از 5 ÷ 5', '⚠️ 9 گزارش هنوز امتیاز نگرفته',
   '⏳ در انتظار بررسی (هنوز حساب نشده): 1', '— برادران', '📍 ناحیه: نجف آباد', 'فرمانده گردان برادر و مسئول نسرا برادر'];
 ok(q.method === 'editMessageText' && q.p.message_id === 40 && exp.every(x => q.p.text.includes(x)), 'عملکرد برادران:\n' + q.p.text);
 ok(btns(q).join(',') === 'mr:m', 'برادر فقط «ماه دیگر» دارد: ' + btns(q));
@@ -141,7 +142,7 @@ n = env.tgCalls.length; cb(805, 'mr:' + t.jy + ':' + t.jm + ':s', 0, 40);
 ok(/— برادران/.test(last(since(n), 805).p.text), 'برادر نمی‌تواند خواهران را ببیند');
 n = env.tgCalls.length; cb(805, 'mr:' + pv.jy + ':' + pv.jm, 0, 40);
 q = last(since(n), 805);
-ok(q.p.text.includes('تعداد کلاس برگزار شده: 1\nتعداد نفرات آموزش داده شده: 7') && !/در انتظار بررسی/.test(q.p.text) && !/سایر/.test(q.p.text), 'ماه قبل:\n' + q.p.text);
+ok(q.p.text.includes('تعداد کلاس برگزار شده: 1\nتعداد نفرات آموزش داده شده: 7') && !/در انتظار بررسی/.test(q.p.text) && !/سایر/.test(q.p.text) && q.p.text.includes('⭐️ کیفیت گزارشات: هنوز هیچ گزارشی امتیاز نگرفته است'), 'ماه قبل:\n' + q.p.text);
 n = env.tgCalls.length; cb(805, 'mr:m', 0, 40);
 ok(last(since(n), 805).p.message_id === 40 && /ماه گزارش را انتخاب کنید/.test(last(since(n), 805).p.text), '«ماه دیگر» همان پیام را ویرایش می‌کند');
 n = env.tgCalls.length; cb(805, 'mr:' + (t.jy + 1) + ':' + t.jm, 0, 40);
@@ -150,17 +151,29 @@ ok(/دیگر فعال نیست/.test(answer(since(n))), 'ماه آینده پذ�
 // ---------- ۸) خواهر: عملکرد هر دو نقش خواهر ----------
 n = env.tgCalls.length; cb(800, 'mr:' + t.jy + ':' + t.jm, 0, 41);
 q = last(since(n), 800);
-ok(q.p.text.includes('🏫 سواد رسانه عمومی:\nتعداد کلاس برگزار شده: 1\nتعداد نفرات آموزش داده شده: 15') && q.p.text.includes('کلیپ: 1') && q.p.text.includes('موشن گرافیک: 1') && q.p.text.includes('— خواهران'), 'عملکرد خواهران:\n' + q.p.text);
+ok(q.p.text.includes('🏫 سواد رسانه عمومی:\nتعداد کلاس برگزار شده: 1\nتعداد نفرات آموزش داده شده: 15') && q.p.text.includes('کلیپ: 1') && q.p.text.includes('موشن گرافیک: 1') && q.p.text.includes('— خواهران') && q.p.text.includes('⭐️ کیفیت گزارشات: 2.4 از 5\n(میانگین امتیاز 4 × 3 بخش'), 'عملکرد خواهران:\n' + q.p.text);
 
-// ---------- ۹) فضای مجازی: ماه ← برادران/خواهران ----------
+// ---------- ۹) فضای مجازی: ماه ← برادران/خواهران/تجمیعی ----------
 n = env.tgCalls.length; cb(801, 'mr:' + t.jy + ':' + t.jm, 0, 42);
 q = last(since(n), 801);
-ok(/کدام بخش/.test(q.p.text) && btns(q).join(',') === `mr:${t.jy}:${t.jm}:b,mr:${t.jy}:${t.jm}:s,mr:m`, 'انتخاب برادران/خواهران: ' + btns(q));
+ok(/کدام بخش/.test(q.p.text) && btns(q).join(',') === `mr:${t.jy}:${t.jm}:b,mr:${t.jy}:${t.jm}:s,mr:${t.jy}:${t.jm}:a,mr:m`, 'انتخاب برادران/خواهران/تجمیعی: ' + btns(q));
 n = env.tgCalls.length; cb(801, `mr:${t.jy}:${t.jm}:s`, 0, 42);
 q = last(since(n), 801);
-ok(/— خواهران/.test(q.p.text) && btns(q).join(',') === `mr:${t.jy}:${t.jm}:b,mr:m`, 'خواهران + دکمه «برادران»');
+ok(/— خواهران/.test(q.p.text) && btns(q).join(',') === `mr:${t.jy}:${t.jm}:b,mr:${t.jy}:${t.jm}:a,mr:m`, 'خواهران + دکمه‌های «برادران» و «تجمیعی»');
 n = env.tgCalls.length; cb(801, `mr:${t.jy}:${t.jm}:b`, 0, 42);
 ok(last(since(n), 801).p.text.includes('نفرات آموزش داده شده: 55'), 'تعویض به برادران');
+n = env.tgCalls.length; cb(801, `mr:${t.jy}:${t.jm}:a`, 0, 42);
+q = last(since(n), 801);
+const expA = ['— تجمیعی', 'فرمانده گردان و مسئول نسرا (برادر و خواهر)', '🏫 سواد رسانه عمومی:\nتعداد کلاس برگزار شده: 3\nتعداد نفرات آموزش داده شده: 70',
+  '💻 کلاس‌های مجازی:\nتعداد کلاس برگزار شده: 2\nتعداد نفرات آموزش داده شده: 62', 'پوستر: 2', 'کلیپ: 1', 'موشن گرافیک: 1', '⭐️ کیفیت گزارشات: 3.6 از 5'];
+ok(expA.every(x => q.p.text.includes(x)) && btns(q).join(',') === `mr:${t.jy}:${t.jm}:b,mr:${t.jy}:${t.jm}:s,mr:m`, 'تجمیعی (بدون گزارش فضای مجازی و ناحیه دیگر):\n' + q.p.text + '\n' + btns(q));
+n = env.tgCalls.length; cb(805, `mr:${t.jy}:${t.jm}:a`, 0, 40);
+ok(/— برادران/.test(last(since(n), 805).p.text), 'برادر به تجمیعی دسترسی ندارد');
+
+// ---------- ۹ب) پنل اکسل ← یک شهرستان: کیفیت گزارشات هر بخش ----------
+n = env.tgCalls.length; cb(500, `A:xg:${t.jy}:${t.jm}:29`, 0, 61);
+q = last(since(n), 500);
+ok(q.p.text.includes('• خواهران: 4 گزارش — ⭐️ کیفیت 2.4 از 5') && q.p.text.includes('• برادران: 11 گزارش — ⭐️ کیفیت 3.3 از 5') && q.p.text.includes('• تجمیعی (همه): 16 گزارش — ⭐️ کیفیت 3.2 از 5'), 'پنل: کیفیت هر بخش:\n' + q.p.text);
 
 // ---------- ۱۰) یادآوری: مسئول فضای مجازی گیرنده نیست ----------
 const tg = C.reminderTargets_([], C.readTable_('Users'), C.getCities_().filter(c => +c.city_id === 29), t.jy, t.jm);
