@@ -148,7 +148,7 @@ function handleRegDecisionCb_(cb, data) {
 
 // ---------- نقش همکار (فقط یک بار؛ تغییرِ بعدی فقط با ادمین) ----------
 // next: 'reg' ثبت‌نام ← ارسال درخواست به ادمین‌ها ، 'menu' منوی اصلی ، 'report' شروع فرم گزارش ، 'my' گزارش‌های من
-function rolesKb_() { return ikb_(POSITIONS.map(function (p, i) { return [btn_(p, 'po:' + i)]; })); }
+function rolesKb_() { return ikb_(positionButtons_('po:')); }
 function askRole_(chatId, tg, next, text) {
   var s = getSession_(chatId, tg);
   s.state = 'role:ask'; s.data = { next: next };

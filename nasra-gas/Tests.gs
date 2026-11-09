@@ -450,6 +450,7 @@ function runTests() {
     eq(positionOf_('مسئول‌فضاي مجازي'), 'مسئول فضای مجازی', 'تحمل نیم‌فاصله و ی عربی');
     eq(positionOf_('مدیر'), '', 'نقش ناشناخته');
     eq(POSITIONS.map(positionSide_).join(','), 'v,s,s,b,b', 'سمت هر نقش');
+    eq(positionButtons_('po:').map(function (r) { return r[0].text; }).join('،'), 'مسئول فضای مجازی،فرمانده گردان برادر،مسئول نسرا برادر،فرمانده گردان خواهر،مسئول نسرا خواهر', 'ترتیب نمایش نقش‌ها');
     var users = [
       { telegram_id: 1, position: 'فرمانده گردان خواهر' }, { telegram_id: 2, position: 'مسئول نسرا برادر' },
       { telegram_id: 3, position: 'مسئول فضای مجازی' }, { telegram_id: 4, position: '' }, { telegram_id: 5, position: 'مسئول نسرا خواهر' }
@@ -469,7 +470,7 @@ function runTests() {
 
   check('۲۳) دکمه‌های فاز ۴ (ماه/شهرستان/خواهر-برادر/نقش) حداکثر ۶۴ بایت + هر نوع کلاس یک برگه', function () {
     var datas = ['A:xm:5', 'A:xs:1405:12', 'A:xa:1405:12', 'A:xc:1405:12:3', 'A:xg:1405:12:32', 'A:xf:1405:12:32:s', 'A:xf:1405:12:32:a',
-      'A:uq:99999', 'A:uQ:99999:4', 'A:uQ:99999:x', 'po:4'];
+      'A:uq:99999', 'A:uQ:99999:4', 'A:uQ:99999:x', 'po:4', 'A:uf', 'A:un', 'A:uR:32', 'A:uP:32:4', 'A:uP:32:x'];
     function collect(kb) { kb.inline_keyboard.forEach(function (row) { row.forEach(function (b) { datas.push(b.callback_data); }); }); }
     collect(excelMonthPickerKb_(0)); collect(excelMonthPickerKb_(5));
     collect(adminCitiesKb_('A:xg:1405:12:', 'A:xc:1405:12:', 0, [], null, {}));

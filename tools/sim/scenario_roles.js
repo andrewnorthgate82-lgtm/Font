@@ -29,7 +29,7 @@ ok(state(800) === 'reg:city', 'بعد از شماره: انتخاب شهرستا
 cb(800, 'rc:29'); msg(800, 'زهرا کریمی');
 ok(state(800) === 'role:ask', 'بعد از نام: قدم نقش');
 let q = last(since(n), 800);
-ok(/آخرین قدم: نقش خود را/.test(q.p.text) && btns(q).join(',') === 'po:0,po:1,po:2,po:3,po:4', 'پنج دکمه نقش: ' + btns(q));
+ok(/آخرین قدم: نقش خود را/.test(q.p.text) && btns(q).join(',') === 'po:0,po:3,po:4,po:1,po:2', 'پنج دکمه نقش: ' + btns(q));
 ok(!since(n).some(c => c.p.chat_id == -100500), 'قبل از انتخاب نقش، درخواستی به گروه نرفته');
 n = env.tgCalls.length; msg(800, 'سلام');
 ok(/با یکی از دکمه‌های زیر/.test(last(since(n), 800).p.text) && btns(last(since(n), 800)).length === 5, 'متن به‌جای دکمه نقش ← راهنما + دکمه‌ها');

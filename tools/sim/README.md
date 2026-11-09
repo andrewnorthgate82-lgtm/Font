@@ -8,3 +8,5 @@
     node tools/sim/scenario_media.js
     node tools/sim/scenario_score.js
     node tools/sim/scenario_roles.js   # نقش در ثبت‌نام، منوی فضای مجازی، گزارش‌های من
+    node tools/sim/scenario_users.js   # پنل ← کاربران: جستجو با شماره / ناحیه ← نقش
+    node tools/sim/load_order.js       # ترتیب بارگذاری فایل‌ها (باید 0 باشد)

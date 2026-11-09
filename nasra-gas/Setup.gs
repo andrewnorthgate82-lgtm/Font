@@ -70,7 +70,7 @@ function applyValidations_() {
   listRule('Admins', 3, ['superadmin', 'admin']);                               // role
   listRule('Reports', 7, ['draft', 'pending', 'approved', 'rejected', 'deleted']); // status
   listRule('Cities', 4, ['1', '0']);                                            // is_active
-  listRule('Users', SHEETS.Users.indexOf('position') + 1, POSITIONS);            // نقش در شهرستان
+  listRule('Users', SHEETS.Users.indexOf('position') + 1, POSITION_ORDER.map(function (i) { return POSITIONS[i]; })); // نقش در شهرستان (به ترتیب نمایش)
 }
 function seedCitiesIfEmpty_() {
   if (readTable_('Cities').length) return;
@@ -240,7 +240,7 @@ function handleStatus_(msg) {
 // ---------- بررسی نصب: کدام فایل جا افتاده، ناقص چسبانده شده یا هنوز نسخه قدیمی است ----------
 // فقط از typeof استفاده می‌کند تا حتی وقتی فایلی کلاً نیست، خودش خطا ندهد. Run ← checkInstall
 var INSTALL_MARKERS = [
-  ['Config', ['getProp_', 'normalizeName_', 'instructorNameIssue_', 'SUBJECT_SUGGESTIONS', 'canSubmitReports_', 'TXT', 'CFG', 'SHEETS', 'MENU']],
+  ['Config', ['getProp_', 'normalizeName_', 'instructorNameIssue_', 'SUBJECT_SUGGESTIONS', 'canSubmitReports_', 'positionButtons_', 'TXT', 'CFG', 'SHEETS', 'MENU']],
   ['Caption', ['buildCaption_', 'buildCaptionV1_', 'typeFlow_', 'CLASS_SUBS']],
   ['Db', ['ss_', 'readTable_', 'appendRow_', 'getSession_', 'getReportMedia_']],
   ['Jalali', ['monthTag_', 'todayJalali_']],
@@ -248,7 +248,7 @@ var INSTALL_MARKERS = [
   ['Registration', ['menuMyReports_', 'menuMyTeachers_', 'handleRoleCb_', 'myReportText_', 'mySidesRow_']],
   ['ReportForm', ['startReport_', 'showStep_', 'platformOptions_', 'resetTypeFields_', 'handleFormMedia_']],
   ['Review', ['publishReport_', 'sendReportToReview_', 'scoreKb_']],
-  ['Admin', ['handleAdminCb_', 'reportEditFields_', 'handleSampleCb_', 'extraChannels_', 'monthScores_']],
+  ['Admin', ['handleAdminCb_', 'reportEditFields_', 'handleSampleCb_', 'extraChannels_', 'monthScores_', 'showCityRoles_']],
   ['Automation', ['installPhase4', 'excelSheets_', 'dailyJobs', 'nightlyBackup', 'sideQuality_']],
   ['Setup', ['setup', 'ensureSheets_', 'setWebhook']],
   ['Tests', ['runTests']]

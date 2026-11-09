@@ -250,13 +250,26 @@ function handleAdminCb_(cb, s, data) {
     return;
   }
 
-  // کاربران
+  // کاربران: ۱) جستجو با شماره ۲) ناحیه ← نقش ← فهرست کاربران
   if (p === 'u') {
-    s.state = 'adm:findUser'; s.data = {}; saveSession_(chatId, tg, s);
     tgAnswerCb_(cb.id);
-    panelOut_(chatId, mid, '👤 جستجوی کاربر\nشماره موبایل (مثل 09123456789)، بخشی از نام، یا آیدی عددی تلگرام را بفرستید:', ikb_([homeRow_()]));
+    panelOut_(chatId, mid, '👤 کاربران — چطور پیدا کنیم؟', ikb_([[btn_('📱 جستجو با شماره', 'A:uf')], [btn_('🏙 انتخاب ناحیه', 'A:un')], homeRow_()]));
     return;
   }
+  if (p === 'uf') {
+    s.state = 'adm:findUser'; s.data = {}; saveSession_(chatId, tg, s);
+    tgAnswerCb_(cb.id);
+    panelOut_(chatId, mid, '📱 جستجو با شماره\nشماره موبایل را بفرستید (مثل 09123456789).\n(بخشی از نام یا آیدی عددی تلگرام هم پذیرفته می‌شود.)', ikb_([usersBackRow_()]));
+    return;
+  }
+  if (p === 'un') {
+    tgAnswerCb_(cb.id);
+    panelOut_(chatId, mid, '🏙 ناحیه را انتخاب کنید:\n(عدد داخل پرانتز = کاربران فعال آن ناحیه)',
+      adminCitiesKb_('A:uR:', 'A:un:', 0, [usersBackRow_()], null, activeUsersByCity_(), 100));
+    return;
+  }
+  if (p === 'uR') { tgAnswerCb_(cb.id); showCityRoles_(chatId, num_(a), mid); return; }
+  if (p === 'uP') { tgAnswerCb_(cb.id); showCityRoleUsers_(chatId, num_(a), b, mid); return; }
   if (p === 'uc') { tgAnswerCb_(cb.id); showUserCard_(chatId, num_(a), mid); return; }
   if (p === 'ut') { toggleUser_(cb, chatId, num_(a), mid); return; }
   if (p === 'uy') {
@@ -267,7 +280,7 @@ function handleAdminCb_(cb, s, data) {
   if (p === 'us') { setUserCity_(cb, chatId, num_(a), num_(b), mid); return; }
   if (p === 'uq') {
     tgAnswerCb_(cb.id);
-    var prow = POSITIONS.map(function (x, i) { return [btn_(x, 'A:uQ:' + a + ':' + i)]; });
+    var prow = positionButtons_('A:uQ:' + a + ':');
     prow.push([btn_('🚫 بدون نقش', 'A:uQ:' + a + ':x')], [btn_('↩️ بازگشت', 'A:uc:' + a)]);
     panelOut_(chatId, mid, '🎖 نقش این همکار در شهرستان را انتخاب کنید:\n(خواهر/برادر بودن گزارش‌هایش در فایل اکسل از همین نقش تعیین می‌شود؛ گزارش‌های قبلی‌اش با همان نقشی که موقع ارسال داشت می‌مانند)', ikb_(prow));
     return;
@@ -353,12 +366,9 @@ function handleAdminText_(msg, s) {
   }
   if (st === 'adm:findUser') {
     var hits = findUsers_(text);
-    if (!hits.list.length) { tgSend_(chatId, 'کاربری پیدا نشد. دوباره جستجو کنید یا /admin بزنید.'); return; }
-    var rows = hits.list.map(function (u) {
-      var cty = getCityById_(u.city_id);
-      return [btn_(cut_(u.full_name || 'بدون نام', 22) + ' · ' + (cty ? cty.name : '—') + ' · ' + (USER_STATUS_FA[u.status] || u.status), 'A:uc:' + u.user_id)];
-    });
-    rows.push(homeRow_());
+    if (!hits.list.length) { tgSend_(chatId, 'کاربری پیدا نشد. شماره را دوباره بفرستید یا از «🏙 انتخاب ناحیه» پیدا کنید.', ikb_([usersBackRow_()])); return; }
+    var rows = hits.list.map(function (u) { return [userBtn_(u, true)]; });
+    rows.push(usersBackRow_());
     tgSend_(chatId, '👤 ' + hits.total + ' کاربر پیدا شد' + (hits.total > hits.list.length ? ' (' + hits.list.length + ' مورد اول نمایش داده شد؛ دقیق‌تر جستجو کنید)' : '') + ':', ikb_(rows));
     return; // حالت می‌ماند برای جستجوی بعدی
   }
@@ -674,6 +684,50 @@ function findUsers_(q) {
   });
   return { total: hits.length, list: hits.slice(0, ADM_PER_PAGE) };
 }
+// ---------- کاربران بر اساس ناحیه و نقش ----------
+function usersBackRow_() { return [btn_('↩️ کاربران', 'A:u'), btn_('🏠 پنل اصلی', 'A:m')]; }
+function userBtn_(u, withCity) {
+  var cty = withCity ? getCityById_(u.city_id) : null;
+  return btn_(cut_(u.full_name || 'بدون نام', 22) + (withCity ? ' · ' + (cty ? cty.name : '—') : '') + ' · ' + (USER_STATUS_FA[u.status] || u.status), 'A:uc:' + u.user_id);
+}
+function activeUsersByCity_() {
+  var m = {};
+  readTable_('Users').forEach(function (u) { if (u.status === 'approved') m[num_(u.city_id)] = (m[num_(u.city_id)] || 0) + 1; });
+  return m;
+}
+// کاربران یک ناحیه (به‌جز ردشده‌ها)؛ code: شماره نقش در POSITIONS یا 'x' = بدون نقش
+function cityUsers_(cityId, code) {
+  return readTable_('Users').filter(function (u) {
+    if (num_(u.city_id) !== num_(cityId) || u.status === 'rejected') return false;
+    if (code === undefined) return true;
+    var pos = positionOf_(u.position);
+    return code === 'x' ? !pos : pos === POSITIONS[num_(code)];
+  });
+}
+function showCityRoles_(chatId, cityId, mid) {
+  var cty = getCityById_(cityId);
+  if (!cty) { panelOut_(chatId, mid, 'ناحیه پیدا نشد.', ikb_([usersBackRow_()])); return; }
+  var all = cityUsers_(cityId), rows = [];
+  function n(code) { return all.filter(function (u) { var p = positionOf_(u.position); return code === 'x' ? !p : p === POSITIONS[code]; }).length; }
+  rows = positionButtons_('A:uP:' + cityId + ':', function (i) { return POSITIONS[i] + ' (' + n(i) + ')'; });
+  if (n('x')) rows.push([btn_('❔ بدون نقش (' + n('x') + ')', 'A:uP:' + cityId + ':x')]);
+  rows.push([btn_('↩️ ناحیه دیگر', 'A:un'), btn_('🏠 پنل اصلی', 'A:m')]);
+  panelOut_(chatId, mid, '🏙 ' + cty.name + ' — ' + all.length + ' کاربر\nنقش را انتخاب کنید:\n(عدد داخل پرانتز = تعداد کاربران آن نقش؛ ردشده‌ها شمرده نمی‌شوند)', ikb_(rows));
+}
+function showCityRoleUsers_(chatId, cityId, code, mid) {
+  var cty = getCityById_(cityId), ok = code === 'x' || /^\d$/.test(String(code)) && POSITIONS[num_(code)];
+  if (!cty || !ok) { panelOut_(chatId, mid, 'ناحیه یا نقش پیدا نشد.', ikb_([usersBackRow_()])); return; }
+  var title = code === 'x' ? 'بدون نقش' : POSITIONS[num_(code)];
+  var order = { approved: 0, pending: 1, disabled: 2 };
+  var list = cityUsers_(cityId, code).sort(function (a, b) {
+    return (order[a.status] || 0) - (order[b.status] || 0) || String(a.full_name).localeCompare(String(b.full_name), 'fa');
+  });
+  var rows = list.slice(0, 40).map(function (u) { return [userBtn_(u, false)]; });
+  rows.push([btn_('↩️ نقش دیگر', 'A:uR:' + cityId), btn_('🏙 ناحیه دیگر', 'A:un')], homeRow_());
+  panelOut_(chatId, mid, '🏙 ' + cty.name + ' — ' + title + '\n' +
+    (list.length ? list.length + ' کاربر' + (list.length > 40 ? ' (۴۰ مورد اول)' : '') + ' — برای دیدن کارت و تغییر نقش/شهرستان، روی نام بزنید:'
+      : 'هیچ کاربری با این نقش در این ناحیه ثبت نشده است.'), ikb_(rows));
+}
 function showUserCard_(chatId, uid, mid) {
   var u = getUserById_(uid);
   if (!u) { panelOut_(chatId, mid, 'کاربر پیدا نشد.', ikb_([homeRow_()])); return; }
@@ -692,7 +746,8 @@ function showUserCard_(chatId, uid, mid) {
   if (u.status === 'approved') rows.push([btn_('⛔️ غیرفعال‌کردن', 'A:ut:' + uid)]);
   else rows.push([btn_(u.status === 'disabled' ? '✅ فعال‌سازی دوباره' : '✅ تایید و فعال‌سازی', 'A:ut:' + uid)]);
   rows.push([btn_('🏙 تغییر شهرستان', 'A:uy:' + uid + ':0'), btn_('🎖 تعیین نقش', 'A:uq:' + uid)]);
-  rows.push([btn_('🔎 جستجوی دیگر', 'A:u'), btn_('🏠 پنل اصلی', 'A:m')]);
+  if (cty) rows.push([btn_('🏙 کاربران ' + cut_(cty.name, 18), 'A:uR:' + cty.city_id)]);
+  rows.push([btn_('↩️ کاربران', 'A:u'), btn_('🏠 پنل اصلی', 'A:m')]);
   panelOut_(chatId, mid, text, ikb_(rows));
 }
 function toggleUser_(cb, chatId, uid, mid) {
@@ -734,8 +789,9 @@ function setUserPosition_(cb, chatId, uid, code, mid) {
   showUserCard_(chatId, uid, mid);
 }
 // کیبورد شهرستان‌ها برای پنل: pickPrefix + city_id (+ پسوند اختیاری)، navPrefix + page
-function adminCitiesKb_(pickPrefix, navPrefix, page, tailRows, suffixFn, counts) {
-  var p = paginate_(getCities_(), page || 0, CFG.CITIES_PER_PAGE), rows = [], row = [];
+// perPage (اختیاری): مثلاً 100 یعنی همه ناحیه‌ها در یک صفحه
+function adminCitiesKb_(pickPrefix, navPrefix, page, tailRows, suffixFn, counts, perPage) {
+  var p = paginate_(getCities_(), page || 0, perPage || CFG.CITIES_PER_PAGE), rows = [], row = [];
   p.chunk.forEach(function (c) {
     var label = c.name + (counts ? ' (' + (counts[num_(c.city_id)] || 0) + ')' : '');
     row.push(btn_(label, pickPrefix + c.city_id + (suffixFn ? suffixFn(c.city_id) : '')));
