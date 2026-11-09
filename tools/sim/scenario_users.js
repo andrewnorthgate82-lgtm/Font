@@ -99,6 +99,11 @@ const sheetsN = doc.p.document.parts.filter(p => /^xl\/worksheets\/sheet\d\.xml$
 const wb = doc.p.document.parts.find(p => p.n === 'xl/workbook.xml').c;
 ok(sheetsN === 5 && wb.indexOf('مسئولین فضای مجازی') < wb.indexOf('فرماندهان گردان برادر') && wb.indexOf('فرماندهان گردان برادر') < wb.indexOf('مسئولین نسرا خواهران'), 'همه نقش‌ها: ۵ برگه به ترتیب');
 ok(/مسئولین نسرا خواهران: 0 نفر/.test(doc.p.caption), 'کپشن همه: ' + doc.p.caption);
+const cities = C.getCities_(), x5 = sheetXml(doc, 5);
+ok(cities.every(c => x5.includes('>' + c.name + '<')) && (x5.match(/<row /g) || []).length === cities.length + 2, 'نقش بدون کاربر: همه ' + cities.length + ' ناحیه با خانه خالی');
+const x3 = sheetXml(doc, 3), i29 = cities.findIndex(c => +c.city_id === 29);
+ok(new RegExp('<c r="A' + (i29 + 3) + '" s="2"><v>' + (i29 + 1) + '</v></c>' + '.*?' + 'نجف آباد.*?حسن نسرایی، علی برادری.*?09130000702، 09130000701').test(x3), 'ردیف ثابت ناحیه + دو نفر در یک سطر');
+ok(doc.p.caption.includes('(همه ' + cities.length + ' ناحیه به ترتیب ثابت؛ ناحیه بدون مسئول = خانه خالی'), 'کپشن: توضیح فهرست ثابت');
 n = env.tgCalls.length; cb('A:uX:9');
 ok(!lastDoc(n), 'نقش نامعتبر ← فایلی نمی‌رود');
 

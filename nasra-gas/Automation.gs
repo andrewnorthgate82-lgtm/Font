@@ -323,22 +323,28 @@ function sendExcel_(chatId, jy, jm, cityId, side) {
 }
 
 // ---------- خروجی اکسل کاربران هر نقش (پنل ← 👤 کاربران ← 📥 خروجی اکسل) ----------
-// تیتر بالای برگه + ردیف / نام ناحیه / نام و نام خانوادگی / شماره تماس — فقط کاربران فعال (approved)
+// تیتر بالای برگه + ردیف / نام ناحیه / نام و نام خانوادگی / شماره تماس — همه ناحیه‌ها (ثابت)، فقط کاربران فعال (approved)
 var STAFF_TITLES = ['مسئولین فضای مجازی', 'فرماندهان گردان خواهر', 'مسئولین نسرا خواهران', 'فرماندهان گردان برادر', 'مسئولین نسرا برادران']; // هم‌ترتیب POSITIONS
-var STAFF_COLS = [['ردیف', 7], ['نام ناحیه', 20], ['نام و نام خانوادگی', 28], ['شماره تماس', 16]];
+var STAFF_COLS = [['ردیف', 7], ['نام ناحیه', 20], ['نام و نام خانوادگی', 34], ['شماره تماس', 26]];
+// فهرست ثابت: همه ناحیه‌ها به ترتیب برگه Cities، یک سطر برای هر ناحیه؛ ناحیه بدون مسئول ← نام و شماره خالی.
+// اگر ناحیه‌ای بیش از یک نفر با این نقش داشته باشد، نام‌ها و شماره‌ها در همان سطر با «، » کنار هم می‌آیند.
 function staffSheet_(users, cities, i) {
-  var cname = {}, has = {};
-  cities.forEach(function (c) { cname[num_(c.city_id)] = c.name; });
-  var list = users.filter(function (u) { return u.status === 'approved' && positionOf_(u.position) === POSITIONS[i] && cname[num_(u.city_id)]; })
-    .sort(function (a, b) {
-      return String(cname[num_(a.city_id)]).localeCompare(String(cname[num_(b.city_id)]), 'fa') || String(a.full_name).localeCompare(String(b.full_name), 'fa');
-    });
-  var rows = list.map(function (u, k) {
-    has[num_(u.city_id)] = 1;
-    return [k + 1, cname[num_(u.city_id)], String(u.full_name || ''), normalizePhone_(u.phone) || String(cellToStr_(u.phone) || '')];
+  var by = {};
+  users.forEach(function (u) {
+    if (u.status !== 'approved' || positionOf_(u.position) !== POSITIONS[i]) return;
+    (by[num_(u.city_id)] = by[num_(u.city_id)] || []).push(u);
   });
-  var missing = cities.filter(function (c) { return !has[num_(c.city_id)]; }).map(function (c) { return c.name; });
-  return { name: STAFF_TITLES[i], title: STAFF_TITLES[i], cols: STAFF_COLS, rows: rows, missing: missing };
+  var missing = [];
+  var rows = cities.map(function (c, k) {
+    var list = (by[num_(c.city_id)] || []).sort(function (a, b) { return String(a.full_name).localeCompare(String(b.full_name), 'fa'); });
+    if (!list.length) missing.push(c.name);
+    return [k + 1, c.name,
+      list.map(function (u) { return String(u.full_name || ''); }).join('، '),
+      list.map(function (u) { return normalizePhone_(u.phone) || String(cellToStr_(u.phone) || ''); }).join('، ')];
+  });
+  var people = 0;
+  Object.keys(by).forEach(function (cid) { if (cities.some(function (c) { return num_(c.city_id) === num_(cid); })) people += by[cid].length; });
+  return { name: STAFF_TITLES[i], title: STAFF_TITLES[i], cols: STAFF_COLS, rows: rows, missing: missing, people: people };
 }
 // code: شماره نقش در POSITIONS یا 'a' = همه نقش‌ها (۵ برگه در یک فایل، به ترتیب نمایش)
 function sendStaffExcel_(chatId, code) {
@@ -351,9 +357,9 @@ function sendStaffExcel_(chatId, code) {
   var blob = Utilities.zip(parts.map(function (p) { return Utilities.newBlob(p.content, 'application/xml', p.name); }), fileName);
   blob.setContentType('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   var cap = code === 'a'
-    ? '📥 ' + title + ' (۵ برگه)\n' + sheets.map(function (s) { return '• ' + s.title + ': ' + s.rows.length + ' نفر' + (s.missing.length ? ' — ' + s.missing.length + ' ناحیه بدون مسئول' : ''); }).join('\n')
-    : '📥 ' + title + ': ' + sheets[0].rows.length + ' نفر' + (sheets[0].missing.length ? '\n⚠️ ناحیه‌های بدون ' + title + ' (' + sheets[0].missing.length + '): ' + sheets[0].missing.join('، ') : '\n✅ همه ناحیه‌ها پوشش دارند');
-  return tgSendDocument_(chatId, blob, cut_(cap + '\n(فقط کاربران فعال؛ نقش از برگه Users، ستون position)', 1000));
+    ? '📥 ' + title + ' (۵ برگه)\n' + sheets.map(function (s) { return '• ' + s.title + ': ' + s.people + ' نفر' + (s.missing.length ? ' — ' + s.missing.length + ' ناحیه بدون مسئول' : ''); }).join('\n')
+    : '📥 ' + title + ': ' + sheets[0].people + ' نفر' + (sheets[0].missing.length ? '\n⚠️ ناحیه‌های بدون ' + title + ' (' + sheets[0].missing.length + '): ' + sheets[0].missing.join('، ') : '\n✅ همه ناحیه‌ها پوشش دارند');
+  return tgSendDocument_(chatId, blob, cut_(cap + '\n(همه ' + cities.length + ' ناحیه به ترتیب ثابت؛ ناحیه بدون مسئول = خانه خالی. فقط کاربران فعال)', 1000));
 }
 
 // ---------- بکاپ ----------

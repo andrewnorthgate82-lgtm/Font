@@ -686,8 +686,11 @@ function runTests() {
     var sh = staffSheet_(users, cities, 0);
     eq(sh.title, 'مسئولین فضای مجازی', 'تیتر برگه');
     eq(sh.cols.map(function (c) { return c[0]; }).join('/'), 'ردیف/نام ناحیه/نام و نام خانوادگی/شماره تماس', 'ستون‌ها');
-    eq(JSON.stringify(sh.rows), JSON.stringify([[1, 'اردستان', 'رضا', '09132223344'], [2, 'کاشان', 'علی', '09131112233']]), 'فقط فعال‌ها، به ترتیب ناحیه، شماره با صفر');
-    eq(sh.missing.join(','), 'نایین', 'ناحیه بدون مسئول');
+    eq(JSON.stringify(sh.rows), JSON.stringify([[1, 'کاشان', 'علی', '09131112233'], [2, 'اردستان', 'رضا', '09132223344'], [3, 'نایین', '', '']]), 'همه ناحیه‌ها به ترتیب ثابت؛ بدون مسئول ← خالی؛ فقط فعال‌ها؛ شماره با صفر');
+    eq(sh.missing.join(',') + '|' + sh.people, 'نایین|2', 'ناحیه بدون مسئول + تعداد نفرات');
+    users.push({ full_name: 'احمد', city_id: 1, status: 'approved', position: 'مسئول فضای مجازی', phone: '09135556677' });
+    eq(JSON.stringify(staffSheet_(users, cities, 0).rows[0]), JSON.stringify([1, 'کاشان', 'احمد، علی', '09135556677، 09131112233']), 'دو نفر در یک ناحیه ← همان سطر');
+    eq(staffSheet_(users, cities, 1).rows.length, 3, 'نقش بدون هیچ کاربری هم همه ناحیه‌ها را دارد');
     eq(STAFF_TITLES.length, POSITIONS.length, 'یک تیتر برای هر نقش');
     var x = xlsxBook_([sh]).filter(function (p) { return p.name === 'xl/worksheets/sheet1.xml'; })[0].content;
     ok(x.indexOf('<mergeCell ref="A1:D1"/>') !== -1 && x.indexOf('مسئولین فضای مجازی') < x.indexOf('ردیف') && x.indexOf('<c r="A2" s="1"') !== -1 && x.indexOf('ySplit="2"') !== -1, 'تیتر بالا (ادغام‌شده) + عنوان ستون‌ها در سطر ۲');
