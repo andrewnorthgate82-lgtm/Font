@@ -432,7 +432,10 @@ test('long polling persists the offset and feeds the shared worker', async t => 
   await new Promise(resolve => setTimeout(resolve, 1200));
   poller.stop();
 
-  assert.equal(fake.state.webhookDeleted, 1, 'the webhook must be deleted before polling');
+  /* Default policy is "do not touch the webhook": the token may be shared with a
+     production bot. Deleting it requires TELEGRAM_DELETE_WEBHOOK=1, which is
+     covered by its own test in tests/telegram-control.test.mjs. */
+  assert.equal(fake.state.webhookDeleted, 0, 'the webhook must not be deleted by default');
   assert.ok(poller.state.updates >= 2, `expected at least 2 processed updates, got ${poller.state.updates}`);
   assert.equal(poller.state.last_update_at !== null, true);
 

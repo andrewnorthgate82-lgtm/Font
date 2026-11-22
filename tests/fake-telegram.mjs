@@ -4,7 +4,8 @@
  * It exists so long polling, owner commands and the publish guard can be
  * exercised end-to-end without a token, without internet and without ever
  * touching the real bot or channel. It intentionally implements a tiny subset:
- * getMe, getUpdates, deleteWebhook, and recording endpoints for anything else.
+ * getMe, getUpdates, getWebhookInfo, deleteWebhook, and recording endpoints for
+ * anything else.
  *
  *   node tests/fake-telegram.mjs           → prints the port it listens on
  *   TELEGRAM_BASE_URL=http://127.0.0.1:<port> ALLOW_INSECURE_TELEGRAM_BASE=1 ...
@@ -18,6 +19,8 @@ export function createFakeTelegram({ botUsername = 'nasra_test_bot' } = {}) {
     nextUpdateId: 1000,
     offset: 0,
     webhookDeleted: 0,
+    webhookInfoCalls: 0,
+    webhookUrl: '',
     getUpdatesCalls: 0,
     sent: [],
     callbacks: []
@@ -37,6 +40,10 @@ export function createFakeTelegram({ botUsername = 'nasra_test_bot' } = {}) {
 
       if (method === 'getMe') {
         return reply(res, 200, { ok: true, result: { id: 424242, is_bot: true, first_name: 'Nasra Test', username: botUsername } });
+      }
+      if (method === 'getWebhookInfo') {
+        state.webhookInfoCalls += 1;
+        return reply(res, 200, { ok: true, result: { url: state.webhookUrl, pending_update_count: state.updates.length, has_custom_certificate: false } });
       }
       if (method === 'deleteWebhook') {
         state.webhookDeleted += 1;

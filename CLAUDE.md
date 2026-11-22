@@ -16,8 +16,10 @@
    یک دستور از بین می‌روند.
 2. **هرگز روی `wrangler.toml`، پوشه `.github/workflows` یا مسیر Cloudflare کار نکن**
    مگر اینکه صریحاً خواسته شود. این نسخه فقط از نظر محلی/خودمیزبان تست می‌شود.
-3. **هرگز `setWebhook` یا `deleteWebhook` صدا نزن.** ربات تلگرام از قبل وجود دارد و
-   این پروژه به آن دست نمی‌زند. `TG_BOT_TOKEN` را در `.env` نساز و در چت نگذار.
+3. **هرگز `setWebhook` صدا نزن، و `deleteWebhook` فقط با اجازه صریح.**
+   ربات تلگرام از قبل وجود دارد. `TelegramPoller` پیش‌فرض webhook را دست نمی‌زند و
+   فقط `getWebhookInfo` می‌خواند؛ حذف فقط با `TELEGRAM_DELETE_WEBHOOK=1` انجام
+   می‌شود. `TG_BOT_TOKEN` را در `.env` نساز و در چت نگذار.
 4. **کلیدهای API را در چت، کد یا لاگ نگذار.** فقط در `.env` روی دستگاه خودِ کاربر.
 5. **`PUBLISH_GUARD_MODE` پیش‌فرض `dry_run` است.** آن را `live` نکن مگر کاربر صریحاً
    بخواهد و `PUBLISH_ALLOWLIST` پر باشد.
@@ -39,11 +41,14 @@
 | `server/media-store.mjs` | ذخیره/سرو/prune رسانه محلی |
 | `server/publish-guard.mjs` | رهگیری fetch و جلوگیری از انتشار واقعی |
 | `server/scheduler.mjs` | زمان‌بند انتشار |
-| `server/telegram-poller.mjs` | long polling تلگرام (بدون نیاز به IP عمومی) |
+| `server/telegram-poller.mjs` | long polling تلگرام؛ webhook را دست نمی‌زند |
+| `server/telegram-control.mjs` | دستورهای تلگرام، پرچم توقف انتشار، ضربان عمر، کد بیدارباش |
 | `scripts/setup-env.mjs` | ساخت `.env` با رمز و Secret تصادفی |
 | `scripts/doctor.mjs` | بررسی پیش از اجرا (نسخه Node، sqlite، پوشه‌ها، بندر) |
 | `scripts/start-nasra.mjs` | اجرای یک‌دستوری با باز کردن مرورگر |
 | `scripts/local-https.mjs` | پروکسی HTTPS محلی برای تست لینک رسانه |
+| `scripts/setup-wizard.mjs` | راه‌اندازی پرسشی برای کسی که کد نمی‌نویسد |
+| `scripts/wake.mjs` | روشن‌کردن از راه دور با کد روزانه و تأیید واقعی |
 | `public/` | پنل (HTML/CSS/JS بدون build step) |
 | `tests/` | `node --test` — بدون فریمورک |
 
@@ -51,6 +56,7 @@
 
 ```
 npm run doctor    # قبل از هر چیز؛ اگر «آماده اجراست» نگفت، سرور بالا نمی‌آید
+npm run setup:wizard  # راه‌اندازی پرسشی (برای کسی که کد نمی‌نویسد)
 npm start         # اجرای واقعی
 npm run dev       # اجرای تمرینی: MOCK_AI=1، تلگرام خاموش، dry_run
 npm test          # ۲۹ تست
@@ -82,6 +88,19 @@ SCHEDULED → PUBLISHED`؛ یا `REJECTED`/`ERROR`.
 سه گیت دستی/خودکار. `gatePolicy()` در `server/autopilot.mjs` تصمیم می‌گیرد کدام گیت
 قابل تأیید خودکار است؛ آن تابع خالص است و تست دارد — منطق گیت را داخل `worker.js`
 تکرار نکن.
+
+## کنترل از تلگرام
+
+`handleCommand()` در `server/telegram-control.mjs` **تابع خالص** است و تست دارد.
+هر دستور جدید باید آنجا اضافه شود، نه در `worker.js`. دو قاعده:
+
+- هیچ دستوری نباید منتشر کند. قوی‌ترین دستور (`/now`) فقط یک درخواست چرخه
+  می‌گذارد که حلقه اتوپایلوت مصرف می‌کند.
+- پاسخ‌ها باید راست باشند: اگر کاری انجام نشده، همان گفته شود. `/wake` هرگز
+  ادعا نمی‌کند دستگاه روشن شد.
+
+`publish_paused` در `studio_settings` تنها ترمز انتشار است و در `runCron`
+بررسی می‌شود — همان یک جایی که همه مسیرها از آن می‌گذرند.
 
 `FACTCHECK_FAIL` و `NO_SOURCED_CLAIMS` خطا **نیستند**: گیت عمدی است. بدون
 `source_items` هر محتوایی در گیت ۲/۳ متوقف می‌شود. این رفتار را «رفع» نکنید.

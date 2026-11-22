@@ -74,7 +74,10 @@ export function normalizePolicy(input = {}) {
       .slice(0, 6),
     max_new_per_day: int(input.max_new_per_day, 2, 0, 10),
     auto_reject_risky: boolish(input.auto_reject_risky, false),
-    require_source: boolish(input.require_source, true)
+    require_source: boolish(input.require_source, true),
+    /* Told to the owner on Telegram when a gate stops and waits for a human.
+       On by default: on a laptop this is the whole point of the bot. */
+    notify: boolish(input.notify, true)
   };
 }
 
@@ -296,6 +299,39 @@ export class Autopilot {
     return normalizePolicy(await this.#setting('autopilot', { policy: 'off' }));
   }
 
+  /* Owner brake, shared with the Telegram control module. */
+  async #paused() {
+    const value = await this.#setting('publish_paused', { paused: false });
+    return Boolean(value?.paused);
+  }
+
+  async paused() {
+    return await this.#paused();
+  }
+
+  /*
+   * One short Telegram message to the owner, at most once per entity.
+   *
+   * Why dedupe: the loop runs every minute and the same pending gate would
+   * otherwise produce a message per tick, which is how a helpful bot becomes a
+   * muted bot. The audit row is the receipt.
+   */
+  async #notifyOnce(action, entityType, entityId, text) {
+    try {
+      const seen = await this.#first(
+        'SELECT id FROM audit_logs WHERE action=? AND entity_id=? LIMIT 1',
+        [action, entityId]
+      );
+      if (seen) return false;
+      await this.#audit(action, entityType, entityId, { notified: true });
+      await this.#callWorker('/api/ops/notify', { body: { text: String(text).slice(0, 900) } });
+      return true;
+    } catch (error) {
+      this.logger.warn?.(`[autopilot] notify failed: ${error.message}`);
+      return false;
+    }
+  }
+
   async status() {
     const policy = policySummary(await this.policy());
     const [inFlight, pendingGates, scheduled, publishedToday] = await Promise.all([
@@ -306,6 +342,7 @@ export class Autopilot {
     ]);
     return {
       policy,
+      paused: await this.#paused(),
       running: this.running,
       image_provider: this.imageProvider?.status?.() || { configured: false },
       media_store: {
@@ -333,6 +370,14 @@ export class Autopilot {
       const policy = await this.policy();
       if (!policy.enabled || policy.policy === 'off') {
         this.state.last_summary = { ...summary, skipped: 'policy_off' };
+        return this.state.last_summary;
+      }
+      /* The owner's /pause from Telegram is an absolute brake: no new content is
+         created and no gate is auto-approved while it is set. Publishing itself
+         is stopped by the runtime, so this only has to stop the front of the
+         pipeline. */
+      if (await this.#paused()) {
+        this.state.last_summary = { ...summary, skipped: 'paused' };
         return this.state.last_summary;
       }
 
@@ -492,6 +537,12 @@ export class Autopilot {
         await this.#audit('autopilot_poster_failed', 'content', content.id, { message: String(error.message).slice(0, 400) });
         this.logger.warn?.(`[autopilot] poster failed for ${content.id}: ${error.message}`);
         await this.#escalate(content, `تولید پوستر ناموفق بود: ${String(error.message).slice(0, 200)}`);
+        if (policy.notify) {
+          await this.#notifyOnce(
+            'autopilot_poster_failed_notified', 'content', content.id,
+            `تولید پوستر ناموفق بود\n${String(content.title || '').slice(0, 120)}\n${String(error.message).slice(0, 200)}\n\nتا ۶ ساعت تلاش دوباره انجام نمی‌شود.`
+          );
+        }
         break;
       }
     }
@@ -603,6 +654,33 @@ export class Autopilot {
    * Ordering is oldest first so the pipeline drains in the order the owner would
    * have seen the cards.
    */
+  /*
+   * Convert a gate that the policy will not approve into a question the owner can
+   * answer from the phone. This is what makes the bot a control surface: without
+   * it, the owner sees "waiting for you" and then has to open the panel on a
+   * laptop to actually do something.
+   */
+  async #askOwner(row, reason) {
+    try {
+      const seen = await this.#first(
+        'SELECT id FROM audit_logs WHERE action=? AND entity_id=? LIMIT 1',
+        ['autopilot_gate_asked', row.gate_id]
+      );
+      if (seen) return false;
+      const { response } = await this.#callWorker(`/api/ops/gate-request/${encodeURIComponent(row.gate_id)}`, {
+        body: { reason: String(reason).slice(0, 200) }
+      });
+      if (response.ok) {
+        await this.#audit('autopilot_gate_asked', 'content', row.gate_id, { gate: Number(row.gate_number) });
+        return true;
+      }
+      return false;
+    } catch (error) {
+      this.logger.warn?.(`[autopilot] gate question failed: ${error.message}`);
+      return false;
+    }
+  }
+
   async #approvePendingGates(policy) {
     let approved = 0;
     let escalated = 0;
@@ -619,6 +697,18 @@ export class Autopilot {
       if (!verdict.allow) {
         await this.#markEscalated(row.gate_id, verdict.reason);
         escalated += 1;
+        if (policy.notify) {
+          /* One message with the actual buttons, so approving needs no laptop.
+             Falls back to a plain notice only if the question could not be sent. */
+          const asked = await this.#askOwner(row, verdict.reason);
+          if (!asked) {
+            const label = { 1: 'ایده', 2: 'سناریو', 3: 'بسته نهایی' }[Number(row.gate_number)] || 'گیت';
+            await this.#notifyOnce(
+              'autopilot_escalated_notified', 'content', `${row.id}:${row.gate_number}`,
+              `گیت ${row.gate_number} (${label}) منتظر شماست\n${String(row.title || '').slice(0, 120)}\nدلیل توقف: ${String(verdict.reason).slice(0, 200)}\n\nدر ربات: /queue`
+            );
+          }
+        }
         continue;
       }
       const { response, payload } = await this.#callWorker(`/api/content/${encodeURIComponent(row.id)}/gates/${row.gate_number}`, {

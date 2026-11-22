@@ -15,6 +15,8 @@
  * Telegram Bot API: https://core.telegram.org/bots/api
  */
 
+import { handleCommand, readPaused, writePaused, requestTick } from './server/telegram-control.mjs';
+
 const APP_VERSION = '1.0.0';
 const TEHRAN_OFFSET_MINUTES = 210; // Iran is UTC+03:30 year-round; no DST.
 const MINUTE = 60 * 1000;
@@ -2018,6 +2020,13 @@ async function runCron(env, db) {
     await weeklyDigest(env, db);
   }
   if (!specialSlot) {
+    // The owner's /pause in Telegram stops publications, not content creation.
+    // Checked here — the single place every runtime path reaches — so neither
+    // the self-hosted scheduler nor a Cloudflare cron can bypass it.
+    if (await readPaused(db)) {
+      summary.paused = true;
+      return summary;
+    }
     // One generic job OR one publish job per tick keeps D1 queries and external
     // subrequests comfortably inside the free Worker invocation budget.
     const jobs = await dbAll(db, "SELECT id FROM jobs WHERE status IN ('QUEUED','RETRY') AND run_after<=? ORDER BY priority ASC,run_after ASC LIMIT 1", [isoNow()]);
@@ -2440,6 +2449,22 @@ async function handleApi(request, env, db, ctx, url) {
     await audit(db, actor, 'settings_updated', 'settings', 'general', { keys: Object.keys(body).filter(k => allowed.includes(k)) }, ip);
     return jsonResponse({ ok: true, data: next });
   }
+  if (path.startsWith('/api/ops/gate-request/') && method === 'POST') {
+    /* Internal: the autopilot asks the owner a question it already decided is
+       needed. It can only message the owner's own chat and only for a gate that
+       is genuinely pending, so this cannot be used to post anywhere else. */
+    const gateId = decodeURIComponent(path.slice('/api/ops/gate-request/'.length));
+    const body = await requestJson(request, 8 * 1024);
+    return jsonResponse({ ok: true, data: await sendGateRequest(env, db, gateId, body.reason || '') });
+  }
+  if (path === '/api/ops/notify' && method === 'POST') {
+    /* Internal, in-process notification used by server/autopilot.mjs. It can only
+       message the owner's own chat: there is no destination parameter, so this
+       route can never be turned into a channel publisher. */
+    const body = await requestJson(request, 16 * 1024);
+    const sent = await sendTelegramNotice(env, db, str(body.text, 900));
+    return jsonResponse({ ok: true, data: { sent } });
+  }
   if (path === '/api/logs' && method === 'GET') return jsonResponse({ ok: true, data: await dbAll(db, 'SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 300') });
   if (path === '/api/backup/export' && method === 'GET') {
     const backup = await exportBackup(db);
@@ -2462,6 +2487,44 @@ async function handleApi(request, env, db, ctx, url) {
 // ---------------------------------------------------------------------------
 // Telegram webhook and owner commands (fast ACK; background work in waitUntil)
 // ---------------------------------------------------------------------------
+/*
+ * Commands that come from server/telegram-control.mjs. Keeping the decision in a
+ * pure module is what makes "the bot can never publish" a testable statement
+ * rather than a convention. /status falls through to the older implementation
+ * below, which knows the content/publish tables.
+ */
+async function telegramControlCommand(env, db, chatId, text) {
+  const base = String(text || '').trim().split(/\s+/)[0].toLowerCase().split('@')[0];
+  const paused = await readPaused(db);
+  const policy = await getSetting(db, 'autopilot', null);
+  const decision = handleCommand({
+    text,
+    ownerChatId: String(env.TG_OWNER_CHAT_ID || ''),
+    chatId: String(chatId || ''),
+    heartbeat: env.NASRA_HEARTBEAT || { present: false, stale: true },
+    paused,
+    autopilot: policy ? { policy: policy.policy, platforms: policy.platforms } : null
+  });
+  if (decision.ignored === 'not_owner') {
+    await audit(db, 'system', 'telegram_command_ignored', 'telegram', String(chatId), { command: base });
+    return { ignored: true };
+  }
+  if (decision.action === 'pause' || decision.action === 'resume') {
+    await writePaused(db, decision.action === 'pause', 'owner_telegram');
+    await audit(db, 'owner_telegram', decision.action === 'pause' ? 'publish_paused' : 'publish_resumed', 'setting', 'publish_paused', {});
+  }
+  if (decision.action === 'tick') {
+    /* The worker has no handle on the autopilot loop, so it leaves a short-lived
+       request that the loop consumes on its next wake-up. Nothing pretends the
+       cycle already ran. */
+    await requestTick(db, 'owner_telegram');
+    await audit(db, 'owner_telegram', 'autopilot_tick_requested', 'setting', 'autopilot_force_tick', {});
+  }
+  if (decision.action === 'wake') await audit(db, 'owner_telegram', 'wake_requested', 'telegram', String(chatId), {});
+  await tgRequest(env, 'sendMessage', { chat_id: chatId, text: decision.reply });
+  return { ok: true, command: base, action: decision.action };
+}
+
 async function telegramCommand(env, db, chatId, text) {
   const command = String(text || '').trim().split(/\s+/)[0].toLowerCase();
   if (command === '/status') {
@@ -2485,8 +2548,49 @@ async function telegramCommand(env, db, chatId, text) {
     const row = await dbFirst(db, "SELECT COUNT(*) AS n FROM inbox_messages WHERE reply_status IN ('PENDING_REVIEW','DRAFT_READY','MANUAL_READY')");
     return await tgRequest(env, 'sendMessage', { chat_id: chatId, text: `پیام‌های در انتظار بررسی مالک: ${row?.n || 0}\nبرای تأیید و ارسال به صفحه Inbox در استودیو بروید.` });
   }
-  return await tgRequest(env, 'sendMessage', { chat_id: chatId, text: 'دستورهای available: /status /today /queue /inbox\nهمه انتشارها و پاسخ‌ها فقط با تأیید صریح مالک انجام می‌شوند.' });
+  return await tgRequest(env, 'sendMessage', { chat_id: chatId, text: 'دستورهای موجود:\n/help /ping /status /today /queue /wake /pause /resume /now\nهمه انتشارها و پاسخ‌ها فقط با تأیید صریح مالک انجام می‌شوند.' });
 }
+/*
+ * Ask the owner about one pending gate, with buttons.
+ *
+ * This is the worker half of the Telegram control surface: the autopilot decides
+ * that a gate needs a human, this turns it into a message the owner can act on
+ * without opening the panel. It refuses to ask twice for the same gate/version,
+ * because a re-sent keyboard on every tick trains people to ignore the bot.
+ */
+async function sendGateRequest(env, db, gateId, reason = '') {
+  if (!env.TG_BOT_TOKEN || !env.TG_OWNER_CHAT_ID) return { sent: false, reason: 'TG_OWNER_CHAT_ID تنظیم نشده است' };
+  const row = await dbFirst(db, 'SELECT g.id,g.gate_number,g.version,g.status,g.content_id,c.title,c.selected_format,c.current_version FROM gate_decisions g JOIN content_items c ON c.id=g.content_id WHERE g.id=?', [gateId]);
+  if (!row) throw new HttpError(404, 'GATE_NOT_FOUND', 'گیت پیدا نشد');
+  if (row.status !== 'PENDING') return { sent: false, reason: `گیت در وضعیت ${row.status} است` };
+  if (String(row.version) !== String(row.current_version)) return { sent: false, reason: 'این گیت مربوط به نسخه قدیمی است' };
+
+  const label = { 1: 'ایده', 2: 'سناریو', 3: 'بسته نهایی' }[Number(row.gate_number)] || 'گیت';
+  const lines = [
+    `${label} — گیت ${row.gate_number}`,
+    String(row.title || '').slice(0, 160),
+    row.selected_format ? `قالب: ${row.selected_format}` : '',
+    reason ? `دلیل توقف خودکار: ${String(reason).slice(0, 200)}` : '',
+    '',
+    'تصمیم شما؟'
+  ].filter(Boolean);
+
+  const rows = [[
+    { text: '✅ تأیید', callback_data: `gate:${row.id}:APPROVE` },
+    { text: '✍️ اصلاح', callback_data: `gate:${row.id}:REQUEST_CHANGES` }
+  ], [{ text: '⛔ رد', callback_data: `gate:${row.id}:REJECT` }]];
+
+  const sent = await tgRequest(env, 'sendMessage', {
+    chat_id: env.TG_OWNER_CHAT_ID,
+    text: lines.join('\n'),
+    reply_markup: { inline_keyboard: rows },
+    disable_web_page_preview: true
+  });
+  if (sent?.message_id) await dbRun(db, 'UPDATE gate_decisions SET tg_message_id=? WHERE id=?', [String(sent.message_id), row.id]);
+  await audit(db, 'system:autopilot', 'gate_question_sent', 'gate_decision', row.id, { gate: Number(row.gate_number), reason: str(reason, 200) });
+  return { sent: true, message_id: sent?.message_id || null, gate: Number(row.gate_number) };
+}
+
 async function processTelegramUpdate(env, db, update) {
   const callback = update.callback_query;
   if (callback) {
@@ -2528,7 +2632,16 @@ async function processTelegramUpdate(env, db, update) {
     const result = await decideGate(env, db, pending.content_id, pending.gate_number, 'REQUEST_CHANGES', { note: text, actor: 'owner_telegram' });
     return await tgRequest(env, 'sendMessage', { chat_id: chatId, text: result.already_decided ? 'already decided' : 'درخواست اصلاح با یادداشت ثبت شد؛ نسخه جدید در صف تولید است.' });
   }
-  if (text.startsWith('/')) return await telegramCommand(env, db, chatId, text);
+  if (text.startsWith('/')) {
+    /* /status /today /queue /inbox need the content and publish tables, so they
+       stay in telegramCommand(). Everything else is handled by the shared,
+       side-effect-free control module. */
+    const base = text.trim().split(/\s+/)[0].toLowerCase().split('@')[0];
+    if (!['/status', '/today', '/queue', '/inbox'].includes(base)) {
+      return await telegramControlCommand(env, db, chatId, text);
+    }
+    return await telegramCommand(env, db, chatId, text);
+  }
   return { ignored: true };
 }
 

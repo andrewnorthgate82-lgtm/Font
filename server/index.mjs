@@ -29,6 +29,7 @@ import { createNasraServer } from './http-server.mjs';
 import { MediaStore } from './media-store.mjs';
 import { ImageProvider } from './image-provider.mjs';
 import { Autopilot, normalizePolicy, policySummary } from './autopilot.mjs';
+import { readHeartbeat, writeHeartbeat, consumeTickRequest } from './telegram-control.mjs';
 import worker from '../worker.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -79,6 +80,15 @@ const guard = new PublishGuard({
   approvalTtlMs: config.guard.approvalTtlMs
 });
 
+/* Freshness of this process, readable from disk without asking the server.
+   The Telegram control module uses it to answer /ping and /wake honestly. */
+function refreshHeartbeat() {
+  return writeHeartbeat(config.dataDir, { port: config.port, url: `http://localhost:${config.port}`, version: APP_VERSION });
+}
+refreshHeartbeat();
+const heartbeatTimer = setInterval(refreshHeartbeat, 30 * 1000);
+if (typeof heartbeatTimer.unref === 'function') heartbeatTimer.unref();
+
 const env = {
   ...workerEnv(config, process.env),
   DB: db,
@@ -86,6 +96,15 @@ const env = {
   APP_VERSION,
   PREVIEW_MODE: '0'
 };
+/*
+ * A getter, not a snapshot: "/ping" must report the age of the heartbeat at the
+ * moment the owner asks, not at the moment the process started. worker.js has no
+ * filesystem access on Cloudflare, so the reading is injected here.
+ */
+Object.defineProperty(env, 'NASRA_HEARTBEAT', {
+  enumerable: true,
+  get: () => readHeartbeat(config.dataDir)
+});
 
 /*
  * MOCK_AI=1 answers every agent call locally with deterministic JSON. It is off
@@ -286,6 +305,9 @@ async function handleOps(req, res, url) {
   if (url.pathname === '/api/ops/scheduler' && req.method === 'GET') {
     return sendJson(res, 200, { ok: true, data: scheduler.status() });
   }
+  if (url.pathname === '/api/ops/heartbeat' && req.method === 'GET') {
+    return sendJson(res, 200, { ok: true, data: readHeartbeat(config.dataDir) });
+  }
   if (url.pathname === '/api/ops/autopilot' && req.method === 'GET') {
     return sendJson(res, 200, { ok: true, data: await autopilot.status() });
   }
@@ -379,14 +401,29 @@ autopilot.start();
  * slow tick never double-creates content.
  */
 if (config.autopilotEnabled) {
+  /* A /now from Telegram leaves a short-lived request; the loop honours it on its
+     next wake-up instead of waiting for the full interval. */
+  const intervalMs = Math.min(config.autopilotIntervalMs, 15_000);
   const loop = async () => {
     while (!autopilot.stopped) {
-      try { await autopilot.tick(); } catch (error) { console.error('[autopilot] loop error:', error?.message || error); }
-      await new Promise(resolve => setTimeout(resolve, config.autopilotIntervalMs));
+      let summary = null;
+      try {
+        const wake = await consumeTickRequest(db);
+        summary = await autopilot.tick();
+        if (wake.requested) console.log('[autopilot] manual tick requested from Telegram');
+      } catch (error) {
+        console.error('[autopilot] loop error:', error?.message || error);
+      }
+      if (summary && (summary.created || summary.approved || summary.posters)) {
+        /* The owner asked for this cycle and should see the outcome in the same
+           conversation, not have to open the panel. */
+        console.log(`[autopilot] tick result created=${summary.created} approved=${summary.approved} posters=${summary.posters}`);
+      }
+      await new Promise(resolve => setTimeout(resolve, intervalMs));
     }
   };
   loop().catch(error => console.error('[autopilot] loop crashed:', error?.message || error));
-  console.log(`[autopilot] loop every ${Math.round(config.autopilotIntervalMs / 1000)}s (policy is read from studio_settings each tick)`);
+  console.log(`[autopilot] loop every ${Math.round(intervalMs / 1000)}s (policy is read from studio_settings each tick; /now in Telegram forces one cycle)`);
 } else {
   autopilot.stop();
   console.log('[autopilot] disabled (AUTOPILOT_ENABLED=0)');
@@ -401,6 +438,7 @@ server.listen(config.port, config.host, async () => {
   console.log(`[nasra] listening on http://${config.host}:${config.port} (SillyDev forwards SERVER_PORT)`);
   console.log(`[nasra] media: ${path.relative(ROOT, config.media.dir)}${mediaStore.configured ? ` → ${config.publicBaseUrl}${mediaStore.urlPath}/` : ' (PUBLIC_BASE_URL empty: local media is not fetchable by platforms)'}`);
   console.log(`[nasra] image provider: ${imageProvider.configured ? `gemini (${imageProvider.candidates[0]})` : 'not configured — posters stay manual'}`);
+  console.log(`[nasra] telegram control: ${env.TG_OWNER_CHAT_ID ? 'commands accepted from the owner chat only' : 'no TG_OWNER_CHAT_ID — commands ignored'}${config.wake.secret ? ` · wake helper ${config.wake.command ? 'armed' : 'watching only'}` : ''}`);
   console.log(`[nasra] publish guard: ${guard.mode}${guard.mode === 'dry_run' ? ' — no real post can be sent' : ` — allowlist ${config.guard.allowlist.length} destination(s), owner confirmation required`}`);
   await poller.start();
 });
@@ -413,6 +451,10 @@ function shutdown(signal) {
   poller.stop();
   scheduler.stop();
   autopilot.stop();
+  clearInterval(heartbeatTimer);
+  /* A stale heartbeat is the honest signal that this process is gone; leaving
+     the last one in place would make /ping claim a dead studio is alive. */
+  try { fs.rmSync(path.join(config.dataDir, 'nasra-heartbeat.json'), { force: true }); } catch { /* ignore */ }
   uninstallGuard();
   try { scheduler.backupNow('shutdown'); } catch { /* best effort */ }
   const forceExit = setTimeout(() => process.exit(1), 15000);

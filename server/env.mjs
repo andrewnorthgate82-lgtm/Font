@@ -33,6 +33,25 @@ export function parseDotEnv(text) {
   return out;
 }
 
+/*
+ * Rewrite a .env text with the given values, keeping every comment and every
+ * unrelated key. Used by the setup wizard: someone who does not write code must
+ * never see their file reordered or their notes deleted by an installer.
+ */
+export function mergeEnvText(text, values = {}) {
+  let out = String(text ?? '');
+  let touched = 0;
+  for (const [key, raw] of Object.entries(values)) {
+    if (raw === undefined || raw === null) continue;
+    const value = String(raw);
+    const pattern = new RegExp(`^${key}=.*$`, 'm');
+    if (pattern.test(out)) out = out.replace(pattern, `${key}=${value}`);
+    else out = `${out.replace(/\s*$/, '')}\n${key}=${value}\n`;
+    touched += 1;
+  }
+  return { text: out, touched };
+}
+
 export function loadEnvFiles(rootDir, fileName = '.env') {
   const loaded = [];
   const file = path.join(rootDir, fileName);
@@ -120,6 +139,15 @@ export function readConfig(env = process.env, { rootDir = process.cwd() } = {}) 
       jpegQuality: int(env.IMAGE_JPEG_QUALITY, 90, 50, 100)
     },
     healthToken: env.HEALTH_TOKEN || '',
+    /* Permission to wake this machine from outside. Only used by the wake
+       helper; without it, remote start is not attempted at all. */
+    wake: {
+      secret: env.TG_WAKE_SECRET || '',
+      command: env.WAKE_COMMAND || '',
+      user: env.WAKE_USER || '',
+      watch: bool(env.WAKE_WATCH, false),
+      pollSec: int(env.WAKE_POLL_SEC, 10, 3, 300)
+    },
     publicBaseUrl: /^https?:\/\//.test(env.PUBLIC_BASE_URL || '') ? env.PUBLIC_BASE_URL.replace(/\/+$/, '') : ''
   };
   return config;
@@ -172,7 +200,8 @@ export function configSummary(config) {
     owner_password_set: Boolean(config.ownerPassword),
     session_secret_set: Boolean(config.sessionSecret),
     allowed_origins: config.allowedOrigins,
-    public_base_url: config.publicBaseUrl || '(derived from request headers)'
+    public_base_url: config.publicBaseUrl || '(derived from request headers)',
+    wake: { configured: Boolean(config.wake.secret && (config.wake.command || config.wake.watch)) }
   };
 }
 
@@ -199,6 +228,7 @@ export function validateConfig(config, env = process.env) {
     }
   }
   if (config.mockAi) warnings.push('MOCK_AI=1: AI answers are a local stub (development only).');
+  if (config.wake.command && !config.wake.secret) warnings.push('WAKE_COMMAND بدون TG_WAKE_SECRET: دستور روشن‌کردن اجرا نخواهد شد (عمدی است).');
   if (config.image.provider && config.image.provider !== 'gemini') warnings.push('IMAGE_PROVIDER پشتیبانی نمی‌شود؛ فقط gemini.');
   if (config.image.provider === 'gemini' && !config.image.apiKey) warnings.push('IMAGE_PROVIDER=gemini بدون IMAGE_API_KEY: تولید پوستر خودکار غیرفعال می‌ماند.');
   if (config.image.provider === 'gemini' && config.image.apiKey && config.publicBaseUrl && !/^https:\/\//i.test(config.publicBaseUrl)) {
