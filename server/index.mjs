@@ -401,29 +401,41 @@ autopilot.start();
  * slow tick never double-creates content.
  */
 if (config.autopilotEnabled) {
-  /* A /now from Telegram leaves a short-lived request; the loop honours it on its
-     next wake-up instead of waiting for the full interval. */
-  const intervalMs = Math.min(config.autopilotIntervalMs, 15_000);
+  /*
+   * Cadence: the autopilot runs every AUTOPILOT_INTERVAL_MS (default 60s), but the
+   * loop wakes every 15s to check for a /now request from Telegram. A request makes
+   * it run immediately instead of at the next full interval — without increasing
+   * how often the pipeline itself runs.
+   */
+  const intervalMs = Math.max(5_000, config.autopilotIntervalMs);
+  const WATCH_MS = Math.min(15_000, intervalMs);
+  let lastRun = 0;
   const loop = async () => {
     while (!autopilot.stopped) {
-      let summary = null;
+      let due = true;
       try {
         const wake = await consumeTickRequest(db);
-        summary = await autopilot.tick();
-        if (wake.requested) console.log('[autopilot] manual tick requested from Telegram');
+        if (wake.requested) {
+          console.log('[autopilot] manual tick requested from Telegram — running now');
+        } else {
+          due = Date.now() - lastRun >= intervalMs;
+        }
+        if (due) {
+          const summary = await autopilot.tick();
+          lastRun = Date.now();
+          if (summary?.created || summary?.approved || summary?.posters) {
+            console.log(`[autopilot] tick created=${summary.created} approved=${summary.approved} posters=${summary.posters} escalated=${summary.escalated}`);
+          }
+        }
       } catch (error) {
         console.error('[autopilot] loop error:', error?.message || error);
+        lastRun = Date.now();
       }
-      if (summary && (summary.created || summary.approved || summary.posters)) {
-        /* The owner asked for this cycle and should see the outcome in the same
-           conversation, not have to open the panel. */
-        console.log(`[autopilot] tick result created=${summary.created} approved=${summary.approved} posters=${summary.posters}`);
-      }
-      await new Promise(resolve => setTimeout(resolve, intervalMs));
+      await new Promise(resolve => setTimeout(resolve, due ? Math.max(1_000, Math.min(WATCH_MS, 5_000)) : WATCH_MS));
     }
   };
   loop().catch(error => console.error('[autopilot] loop crashed:', error?.message || error));
-  console.log(`[autopilot] loop every ${Math.round(intervalMs / 1000)}s (policy is read from studio_settings each tick; /now in Telegram forces one cycle)`);
+  console.log(`[autopilot] loop every ${Math.round(intervalMs / 1000)}s (policy is read from studio_settings each tick; /now in Telegram runs one cycle within ${Math.round(WATCH_MS / 1000)}s)`);
 } else {
   autopilot.stop();
   console.log('[autopilot] disabled (AUTOPILOT_ENABLED=0)');

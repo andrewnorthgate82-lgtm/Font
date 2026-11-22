@@ -28,6 +28,7 @@ Font/
 ├── server/                     # اجرای self-hosted (SillyDev): Entry point، SQLite، Scheduler، Polling، Guard
 ├── tests/                      # آزمون محلی runtime + تلگرام تقلبی (بدون شبکه)
 ├── .env.example               # الگوی متغیرهای محیطی اجرای self-hosted (بدون Secret واقعی)
+├── START-HERE.fa.md           # شروع از صفر: پنج گام برای کسی که کد نمی‌نویسد
 ├── CLAUDE.md                  # راهنمای عامل هوش مصنوعی (Claude Code) در این مخزن
 ├── LAPTOP.fa.md               # اجرای پروژه روی لپ‌تاپ ویندوز، قدم‌به‌قدم و بدون کدنویسی
 ├── GUIDE.fa.md                # همین راهنما
