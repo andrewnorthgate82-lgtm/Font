@@ -83,11 +83,15 @@ PUBLIC_BASE_URL=https://your-app.sillydev.example
 ### اجرای محلی
 
 ```bash
-cp .env.example .env          # مقادیر را پر کنید (‎.env در git نیست)
-NODE_ENV=development node server/index.mjs
-# یا برای دیدن کل خط تولید بدون AI واقعی:
-NODE_ENV=development MOCK_AI=1 node server/index.mjs
+npm run setup                 # .env با رمز و Secret تصادفی ساخته می‌شود
+npm run doctor                # بررسی پیش از اجرا
+npm start                     # اجرای واقعی، مرورگر خودکار باز می‌شود
+npm run dev                   # اجرای تمرینی: MOCK_AI=1، تلگرام خاموش، dry_run
 ```
+
+همان مسیر قبلی هم کار می‌کند: `cp .env.example .env` و بعد `node server/index.mjs`.
+روی ویندوز راهنمای کامل در **`LAPTOP.fa.md`** است (نصب Node، Task Scheduler، عیب‌یابی).
+`MOCK_AI=1` فقط در `NODE_ENV` غیر production کار می‌کند.
 
 `MOCK_AI=1` فقط در `NODE_ENV` غیر production کار می‌کند و پاسخ Agentها یک استاب محلی و قطعی است.
 
