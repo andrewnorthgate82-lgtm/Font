@@ -40,8 +40,13 @@ function cmpVersion(actual, min) {
 
 /* 1. Node version — node:sqlite needs 22.13+ or the flag below. */
 const version = process.versions.node.split('.').map(Number);
+const major = version[0];
 if (cmpVersion(version, MIN_NODE) >= 0) {
-  ok(`Node ${process.versions.node}`, 'نسخه کافی برای node:sqlite');
+  /* Say which branch of the compatibility rule was used: "newer than 22" is a
+     different reason from "22.13 or later", and the owner may be asked about it. */
+  ok(`Node ${process.versions.node}`, major >= 24
+    ? 'نسخه جدیدتر از حد لازم؛ پایگاه‌داده داخلی بررسی می‌شود'
+    : 'نسخه کافی برای node:sqlite (۲۲.۱۳ یا بالاتر)');
 } else if (cmpVersion(version, [22, 5, 0]) >= 0) {
   fail(`Node ${process.versions.node}`, 'برای node:sqlite به Node 22.13 یا بالاتر نیاز است (نسخه‌های 22.5–22.12 فقط با --experimental-sqlite کار می‌کنند). Node را به‌روزرسانی کنید.');
 } else {
