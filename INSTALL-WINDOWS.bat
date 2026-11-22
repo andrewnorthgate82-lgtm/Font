@@ -39,10 +39,18 @@ echo.
 
 if exist "%EXE_DIR%\package.json" goto checknode
 
+REM --- اگر از قبل nasra.zip را در همین پوشه گذاشته‌اید، از آن استفاده کن ---
+if exist "%EXE_DIR%\%ZIP_NAME%" (
+  echo   فایل %ZIP_NAME% از قبل موجود است؛ از همان استفاده می‌شود.
+  goto extractnow
+)
+
 curl.exe -L --fail --silent --show-error -o "%EXE_DIR%\%ZIP_NAME%" "%PROJECT_URL%"
 if errorlevel 1 goto downloadfail
 
-echo   دریافت شد. در حال باز کردن...
+:extractnow
+
+echo   در حال باز کردن...
 echo.
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
@@ -84,14 +92,22 @@ pause
 exit /b 1
 
 :downloadfail
-echo   [!] دانلود پروژه انجام نشد.
+echo   [!] گرفتن پروژه از اینترنت انجام نشد.
 echo.
-echo   این یعنی یا اینترنت قطع است، یا آدرس در دسترس نیست.
-echo   1) اتصال اینترنت را بررسی کنید
-echo   2) دوباره روی همین فایل دوبار کلیک کنید
+echo   این یعنی اتصال به GitHub برقرار نشد (فیلترینگ، قطعی، یا پروکسی).
 echo.
-echo   اگر تکرار شد، این پیام را برای پشتیبانی بفرستید:
-echo       download failed: %PROJECT_URL%
+echo   راه دیگر، بدون نیاز به اینترنت از داخل این پنجره:
+echo.
+echo     1) این آدرس را در مرورگر باز کنید (با فیلترشکن اگر لازم است):
+echo        https://codeload.github.com/andrewnorthgate82-lgtm/Font/zip/refs/heads/arena/b48083ae-font
+echo     2) فایل zip را در همین پوشه بگذارید:
+echo        %EXE_DIR%
+echo     3) نامش را دقیقا بگذارید:  %ZIP_NAME%
+echo     4) دوباره روی همین فایل دوبار کلیک کنید
+echo.
+echo   اگر فایل zip را از قبل دارید، فقط مرحله 2 و 3 و 4 را انجام دهید.
+echo   برای بررسی خطای شبکه، این آدرس را در مرورگر امتحان کنید:
+echo        https://github.com
 echo.
 pause
 exit /b 1
