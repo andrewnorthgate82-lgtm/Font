@@ -100,6 +100,25 @@ export function readConfig(env = process.env, { rootDir = process.cwd() } = {}) 
       keep: int(env.BACKUP_KEEP, 14, 1, 200)
     },
     mockAi: bool(env.MOCK_AI, false),
+    // Autopilot: creates content on schedule and (per policy) drives the gates.
+    // Policy itself lives in studio_settings so the owner can change it live.
+    autopilotEnabled: bool(env.AUTOPILOT_ENABLED, true),
+    autopilotIntervalMs: int(env.AUTOPILOT_INTERVAL_MS, 60000, 10000, 600000),
+    media: {
+      // Local media folder + the public HTTPS base that platforms download from.
+      dir: path.resolve(rootDir, env.MEDIA_DIR || path.join(dataDir, 'media')),
+      urlPath: (env.MEDIA_URL_PATH || '/media').replace(/\/+$/, '') || '/media',
+      keep: int(env.MEDIA_KEEP, 200, 10, 5000),
+      maxBytes: int(env.MEDIA_MAX_MB, 300, 10, 2048) * 1024 * 1024
+    },
+    image: {
+      provider: (env.IMAGE_PROVIDER || '').trim().toLowerCase(),
+      apiKey: env.IMAGE_API_KEY || '',
+      models: String(env.IMAGE_MODELS || '').split(',').map(m => m.trim()).filter(Boolean),
+      baseUrl: (env.IMAGE_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/+$/, ''),
+      timeoutMs: int(env.IMAGE_TIMEOUT_MS, 120000, 15000, 300000),
+      jpegQuality: int(env.IMAGE_JPEG_QUALITY, 90, 50, 100)
+    },
     healthToken: env.HEALTH_TOKEN || '',
     publicBaseUrl: /^https?:\/\//.test(env.PUBLIC_BASE_URL || '') ? env.PUBLIC_BASE_URL.replace(/\/+$/, '') : ''
   };
@@ -145,6 +164,10 @@ export function configSummary(config) {
     db_file: config.dbFile,
     scheduler: { enabled: config.schedulerEnabled, interval_ms: config.schedulerIntervalMs },
     telegram_polling: config.telegramPolling,
+    autopilot: { enabled: config.autopilotEnabled, interval_ms: config.autopilotIntervalMs },
+    media_dir: config.media.dir,
+    media_url_path: config.media.urlPath,
+    image_provider: config.image.provider || '(none)',
     publish_guard: config.guard,
     owner_password_set: Boolean(config.ownerPassword),
     session_secret_set: Boolean(config.sessionSecret),
@@ -176,6 +199,14 @@ export function validateConfig(config, env = process.env) {
     }
   }
   if (config.mockAi) warnings.push('MOCK_AI=1: AI answers are a local stub (development only).');
+  if (config.image.provider && config.image.provider !== 'gemini') warnings.push('IMAGE_PROVIDER پشتیبانی نمی‌شود؛ فقط gemini.');
+  if (config.image.provider === 'gemini' && !config.image.apiKey) warnings.push('IMAGE_PROVIDER=gemini بدون IMAGE_API_KEY: تولید پوستر خودکار غیرفعال می‌ماند.');
+  if (config.image.provider === 'gemini' && config.image.apiKey && config.publicBaseUrl && !/^https:\/\//i.test(config.publicBaseUrl)) {
+    warnings.push('PUBLIC_BASE_URL باید https باشد؛ با آدرس http لینک رسانه برای تلگرام/اینستاگرام قابل استفاده نیست و تولید خودکار پوستر غیرفعال می‌ماند.');
+  }
+  if (config.image.provider === 'gemini' && config.image.apiKey && !config.publicBaseUrl) {
+    warnings.push('PUBLIC_BASE_URL خالی است: لینک رسانه محلی برای تلگرام/اینستاگرام قابل دانلود نیست؛ پوستر خودکار تا تنظیم آن غیرفعال بماند بهتر است.');
+  }
   if (config.guard.mode === 'dry_run') warnings.push('Publish guard is in dry_run: no real post can leave this process.');
   if (!env.AI_PROVIDER || (env.AI_PROVIDER !== 'workers_ai' && !env.AI_API_KEY)) warnings.push(`No usable AI provider; agents will queue in manual mode. ${PROVIDER_HINT}`);
   return { ok: problems.length === 0, problems, warnings };

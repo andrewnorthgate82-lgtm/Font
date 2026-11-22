@@ -343,6 +343,12 @@ async function ipHash(request, env) {
 }
 async function sessionFromRequest(request, env, db) {
   if (!env.SESSION_SECRET) return null;
+  // In-process automation (server/autopilot.mjs) re-enters the same API as the
+  // owner. It is not reachable over HTTP: http-server strips X-Nasra-Autopilot
+  // from every inbound request, and only the runtime can set NASRA_AUTOPILOT.
+  if (env.NASRA_AUTOPILOT === '1' && request.headers.get('X-Nasra-Autopilot') === '1') {
+    return { id: 'autopilot_internal', csrf_token: 'internal', expires_at: Date.now() + MINUTE, revoked: 0 };
+  }
   const authorization = request.headers.get('Authorization') || '';
   const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1].trim().slice(0, 500) || '';
   const dedicated = (request.headers.get('X-Nasra-Session') || '').trim().slice(0, 500);
@@ -362,7 +368,7 @@ async function sessionFromRequest(request, env, db) {
 async function requireAuth(request, env, db, mutating = false) {
   const session = await sessionFromRequest(request, env, db);
   if (!session) throw new HttpError(401, 'AUTH_REQUIRED', 'ورود مالک لازم است');
-  if (mutating) {
+  if (mutating && session.id !== 'autopilot_internal') {
     const csrf = request.headers.get('X-CSRF-Token') || '';
     if (!safeEqual(csrf, session.csrf_token)) throw new HttpError(403, 'CSRF_FAILED', 'اعتبارسنجی CSRF انجام نشد؛ صفحه را تازه کنید');
   }
@@ -2131,7 +2137,7 @@ async function handleApi(request, env, db, ctx, url) {
   // Everything below /api requires the owner session and CSRF on mutations.
   const mutating = !['GET', 'HEAD'].includes(method);
   const session = await requireAuth(request, env, db, mutating);
-  const actor = 'owner';
+  const actor = session.id === 'autopilot_internal' ? 'system:autopilot' : 'owner';
   const ip = await ipHash(request, env);
 
   if (path === '/api/dashboard' && method === 'GET') return jsonResponse({ ok: true, data: await dashboardData(db) });

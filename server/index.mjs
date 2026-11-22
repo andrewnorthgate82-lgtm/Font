@@ -26,6 +26,9 @@ import { PublishGuard, classifyPublishRequest, dryRunResponse } from './publish-
 import { Scheduler } from './scheduler.mjs';
 import { TelegramPoller } from './telegram-poller.mjs';
 import { createNasraServer } from './http-server.mjs';
+import { MediaStore } from './media-store.mjs';
+import { ImageProvider } from './image-provider.mjs';
+import { Autopilot, normalizePolicy, policySummary } from './autopilot.mjs';
 import worker from '../worker.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -221,6 +224,9 @@ function healthSnapshot() {
       pending_approvals: guard.listApprovals().length,
       stats: guard.stats
     },
+    autopilot: { running: autopilot.running, ticks: autopilot.state.ticks, last_error: autopilot.state.last_error },
+    media: { dir: path.relative(ROOT, config.media.dir) || '.', public_base_url: config.publicBaseUrl || '', configured: mediaStore.configured },
+    image: imageProvider.status(),
     config_warnings: validation.warnings
   };
 }
@@ -280,10 +286,64 @@ async function handleOps(req, res, url) {
   if (url.pathname === '/api/ops/scheduler' && req.method === 'GET') {
     return sendJson(res, 200, { ok: true, data: scheduler.status() });
   }
+  if (url.pathname === '/api/ops/autopilot' && req.method === 'GET') {
+    return sendJson(res, 200, { ok: true, data: await autopilot.status() });
+  }
+  if (url.pathname === '/api/ops/autopilot' && req.method === 'PUT') {
+    const body = await readJsonBody(req);
+    const next = normalizePolicy(body);
+    await db.prepare('INSERT INTO studio_settings (key,value_json,updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json,updated_at=excluded.updated_at')
+      .bind('autopilot', JSON.stringify(next), new Date().toISOString()).run();
+    console.warn(`[autopilot] policy set to ${next.policy} (enabled=${next.enabled}, platforms=${next.platforms.join(',')})`);
+    return sendJson(res, 200, { ok: true, data: policySummary(next) });
+  }
+  if (url.pathname === '/api/ops/autopilot/tick' && req.method === 'POST') {
+    return sendJson(res, 200, { ok: true, data: await autopilot.tick() });
+  }
+  if (url.pathname === '/api/ops/media' && req.method === 'GET') {
+    return sendJson(res, 200, {
+      ok: true,
+      data: {
+        configured: mediaStore.configured,
+        public_base_url: mediaStore.publicBaseUrl,
+        url_path: mediaStore.urlPath,
+        files: mediaStore.list(60),
+        image: imageProvider.status()
+      }
+    });
+  }
+  if (url.pathname === '/api/ops/media/prune' && req.method === 'POST') {
+    return sendJson(res, 200, { ok: true, data: mediaStore.prune({ keep: config.media.keep, maxBytes: config.media.maxBytes }) });
+  }
   return sendJson(res, 404, { ok: false, error: { code: 'OPS_ROUTE_NOT_FOUND', message: 'مسیر Ops یافت نشد' } });
 }
 
 /* ------------------------------------------------------------ composition */
+
+/*
+ * Local media store: written posters are served from this process so Telegram
+ * and Instagram have an HTTPS URL to download. It needs PUBLIC_BASE_URL to be
+ * reachable, so it stays inert (configured=false) when that is missing.
+ */
+fs.mkdirSync(config.media.dir, { recursive: true });
+const mediaStore = new MediaStore({
+  dir: config.media.dir,
+  publicBaseUrl: config.publicBaseUrl,
+  urlPath: config.media.urlPath,
+  logger: console
+});
+
+const imageProvider = new ImageProvider({
+  provider: config.image.provider,
+  apiKey: config.image.apiKey,
+  models: config.image.models,
+  baseUrl: config.image.baseUrl,
+  timeoutMs: config.image.timeoutMs,
+  stateFile: path.join(config.dataDir, 'image-model.json'),
+  logger: console
+});
+
+const autopilot = new Autopilot({ db, worker, env, config, mediaStore, imageProvider, logger: console });
 
 const scheduler = new Scheduler({ worker, env, db, config, logger: console });
 const poller = new TelegramPoller({ config, env, db, worker, logger: console });
@@ -293,6 +353,7 @@ const server = createNasraServer({
   env,
   config,
   db,
+  mediaStore,
   logger: console,
   preHandle: async (req, res, url) => {
     if (url.pathname.startsWith('/api/ops/')) {
@@ -309,6 +370,27 @@ const server = createNasraServer({
 
 installGuard();
 scheduler.start();
+autopilot.start();
+
+/*
+ * The autopilot loop is separate from the worker scheduler on purpose: the
+ * scheduler must stay exactly what it was (queue drain + publish), while the
+ * autopilot decides what enters the queue. Both are idempotent per slot, so a
+ * slow tick never double-creates content.
+ */
+if (config.autopilotEnabled) {
+  const loop = async () => {
+    while (!autopilot.stopped) {
+      try { await autopilot.tick(); } catch (error) { console.error('[autopilot] loop error:', error?.message || error); }
+      await new Promise(resolve => setTimeout(resolve, config.autopilotIntervalMs));
+    }
+  };
+  loop().catch(error => console.error('[autopilot] loop crashed:', error?.message || error));
+  console.log(`[autopilot] loop every ${Math.round(config.autopilotIntervalMs / 1000)}s (policy is read from studio_settings each tick)`);
+} else {
+  autopilot.stop();
+  console.log('[autopilot] disabled (AUTOPILOT_ENABLED=0)');
+}
 
 if (config.backup.intervalHours > 0) {
   const timer = setInterval(() => scheduler.backupNow('scheduled'), config.backup.intervalHours * 60 * 60 * 1000);
@@ -317,6 +399,8 @@ if (config.backup.intervalHours > 0) {
 
 server.listen(config.port, config.host, async () => {
   console.log(`[nasra] listening on http://${config.host}:${config.port} (SillyDev forwards SERVER_PORT)`);
+  console.log(`[nasra] media: ${path.relative(ROOT, config.media.dir)}${mediaStore.configured ? ` → ${config.publicBaseUrl}${mediaStore.urlPath}/` : ' (PUBLIC_BASE_URL empty: local media is not fetchable by platforms)'}`);
+  console.log(`[nasra] image provider: ${imageProvider.configured ? `gemini (${imageProvider.candidates[0]})` : 'not configured — posters stay manual'}`);
   console.log(`[nasra] publish guard: ${guard.mode}${guard.mode === 'dry_run' ? ' — no real post can be sent' : ` — allowlist ${config.guard.allowlist.length} destination(s), owner confirmation required`}`);
   await poller.start();
 });
@@ -328,6 +412,7 @@ function shutdown(signal) {
   console.log(`\n[nasra] ${signal} received; shutting down`);
   poller.stop();
   scheduler.stop();
+  autopilot.stop();
   uninstallGuard();
   try { scheduler.backupNow('shutdown'); } catch { /* best effort */ }
   const forceExit = setTimeout(() => process.exit(1), 15000);
