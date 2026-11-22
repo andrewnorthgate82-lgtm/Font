@@ -71,8 +71,19 @@ try {
   process.exit(1);
 }
 
-/* 2. .env — password and secret are generated, never invented by the owner. */
+/* 2. The template must exist before anything can be generated from it. This is
+      checked explicitly because a missing .env.example used to produce a
+      confusing failure two steps later. */
 step(2);
+const examplePath = path.join(ROOT, '.env.example');
+if (!fs.existsSync(examplePath)) {
+  say(`  ${c.red}✗${c.reset} فایل .env.example پیدا نشد.`);
+  say('');
+  say('  یعنی فایل‌های پروژه کامل استخراج نشده‌اند.');
+  say('  فایل zip را دوباره استخراج کنید (راهنما: START-HERE.fa.md، گام ۲).');
+  say('');
+  process.exit(1);
+}
 const envPath = path.join(ROOT, '.env');
 if (fs.existsSync(envPath)) {
   say(`  ${c.green}✓${c.reset} فایل تنظیمات از قبل هست؛ دست نخورد.`);

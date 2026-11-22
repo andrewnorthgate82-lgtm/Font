@@ -5,8 +5,11 @@ nasra-backup-*.json
 node_modules/
 wrangler.generated.toml
 .deploy-public/
+# Real secrets only. The template must stay tracked, or a fresh clone has no
+# .env.example and `npm install` cannot build .env from it.
 .env
 .env.*
+!.env.example
 .dev.vars
 # Self-hosted runtime (SillyDev): database, WAL sidecars and backups stay out of Git.
 data/
