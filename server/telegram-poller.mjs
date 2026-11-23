@@ -53,6 +53,8 @@ export class TelegramPoller {
     const response = await this.fetchImpl(`${this.baseUrl}/bot${this.token}/${method}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      /* Nothing in this module is a publication; making that explicit means the
+         publish guard can never mistake a control call for a post. */
       body: JSON.stringify(payload),
       signal
     });
@@ -87,10 +89,26 @@ export class TelegramPoller {
    * The owner decides: TELEGRAM_DELETE_WEBHOOK=0 keeps the current webhook and
    * polling stays disabled.
    */
+  /*
+   * Read-only look at the bot's current webhook. Never modifies anything: the
+   * owner may be running a production bot with this token, and a control feature
+   * must not be the reason their webhook disappears.
+   */
+  async webhookStatus() {
+    try {
+      const info = await this.#api('getWebhookInfo', {});
+      return { url: info?.url || '', pending: info?.pending_update_count || 0, last_error: info?.last_error_message || null };
+    } catch (error) {
+      return { url: '', error: String(error.message || error).slice(0, 200) };
+    }
+  }
+
   async detachWebhook() {
-    if (process.env.TELEGRAM_DELETE_WEBHOOK === '0') {
+    /* Default is "do not touch". Removing a webhook is destructive for whatever
+       else shares this token, so it only happens when explicitly allowed. */
+    if (process.env.TELEGRAM_DELETE_WEBHOOK !== '1') {
       this.state.mode = 'webhook-kept';
-      this.logger.warn('[telegram] TELEGRAM_DELETE_WEBHOOK=0 — polling stays off, the existing webhook is kept.');
+      this.logger.warn('[telegram] webhook is left untouched (TELEGRAM_DELETE_WEBHOOK is not 1). Long polling cannot start while a webhook is set.');
       return false;
     }
     try {
@@ -118,6 +136,16 @@ export class TelegramPoller {
     this.stopped = false;
     this.state.mode = 'polling';
     this.state.offset = await this.loadOffset();
+    const webhook = await this.webhookStatus();
+    this.state.webhook = webhook;
+    if (webhook.url) {
+      /* Honest, actionable, and it does not touch the other configuration. */
+      this.logger.warn(`[telegram] this bot currently has a webhook set (${webhook.url.slice(0, 60)}…).`);
+      this.logger.warn('[telegram] Telegram will not deliver getUpdates while a webhook exists. Remove it in BotFather (Bot Settings → Delete Webhook) or set TELEGRAM_DELETE_WEBHOOK=1 yourself.');
+      this.state.mode = 'webhook-present';
+      this.running = false;
+      return this;
+    }
     await this.detachWebhook();
     this.loop().catch(error => this.logger.error('[telegram] poller crashed:', error.message));
     return this;
@@ -149,9 +177,13 @@ export class TelegramPoller {
           return;
         }
         if (error.status === 409) {
-          this.logger.warn('[telegram] another getUpdates consumer or webhook is active (409). Retrying after detaching the webhook.');
           this.state.mode = 'conflict';
-          await this.detachWebhook();
+          const detached = await this.detachWebhook();
+          if (!detached) {
+            this.logger.error('[telegram] 409 conflict: a webhook or another bot instance is consuming updates. Polling stopped; nothing was changed on the Telegram side.');
+            this.running = false;
+            return;
+          }
         } else {
           this.logger.warn('[telegram] poll failed:', this.state.last_error.message);
         }

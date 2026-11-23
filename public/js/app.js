@@ -86,7 +86,7 @@ export function confirmExternal(message = 'این اقدام خارجی پس ا�
 export function countdownText(seconds) { if (!Number.isFinite(seconds) || seconds <= 0) return 'بسته شده'; const d = Math.floor(seconds / 86400), h = Math.floor((seconds % 86400) / 3600), m = Math.floor((seconds % 3600) / 60), s = Math.floor(seconds % 60); return faDigits(`${d ? `${d}روز ` : ''}${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`); }
 export function startLiveWidgets() { clearInterval(state.timer); state.timer = setInterval(() => { const now = utcToJalali(); const clock = $('#live-clock'); if (clock) clock.textContent = faDigits(`${now.date} · ${now.time}`); $$('[data-countdown]').forEach(el => { const end = Number(el.dataset.countdown); const seconds = Math.floor((end - Date.now()) / 1000); el.textContent = countdownText(seconds); el.classList.toggle('expired', seconds <= 0); }); }, 1000); }
 
-const titles = { dashboard: 'داشبورد', approvals: 'صف تأییدها', pipeline: 'کانبان تولید', calendar: 'تقویم جلالی', sources: 'کتابخانه منابع', playbook: 'پلی‌بوک و برند', agents: 'تیم AI و پرامپت‌ها', inbox: 'صندوق ورودی', analytics: 'تحلیل و آزمایش', publish: 'مرکز انتشار', integrations: 'یکپارچه‌سازی‌ها', settings: 'تنظیمات و سلامت', logs: 'لاگ و حسابرسی', backup: 'پشتیبان‌گیری', selftest: 'آزمون پذیرش', content: 'جزئیات محتوا' };
+const titles = { dashboard: 'داشبورد', approvals: 'صف تأییدها', pipeline: 'کانبان تولید', calendar: 'تقویم جلالی', autopilot: 'اتوپایلوت', sources: 'کتابخانه منابع', playbook: 'پلی‌بوک و برند', agents: 'تیم AI و پرامپت‌ها', inbox: 'صندوق ورودی', analytics: 'تحلیل و آزمایش', publish: 'مرکز انتشار', integrations: 'یکپارچه‌سازی‌ها', settings: 'تنظیمات و سلامت', logs: 'لاگ و حسابرسی', backup: 'پشتیبان‌گیری', selftest: 'آزمون پذیرش', content: 'جزئیات محتوا' };
 export function currentRoute() { const raw = location.hash.replace(/^#\/?/, '') || 'dashboard'; const [name, id] = raw.split('/'); return { name: titles[name] ? name : 'dashboard', id: id ? decodeURIComponent(id) : null }; }
 export function navigate(route) { location.hash = `#/${route}`; }
 export async function renderRoute() {
@@ -97,7 +97,7 @@ export async function renderRoute() {
   $('#page-kicker').textContent = route.name === 'content' ? 'NASRA / CONTENT DETAIL' : `NASRA / ${route.name.toUpperCase()}`;
   $('#sidebar').classList.remove('open'); $('#sidebar-backdrop').classList.add('hidden');
   const app = $('#app'); app.innerHTML = loading(); state.pageLoading = true;
-  try { const module = await import('./pages.js?v=20261105-copy-fallback'); const page = await module.renderPageRoute(route); app.innerHTML = page.html; if (page.mount) await page.mount(); }
+  try { const module = await import('./pages.js?v=20261122-autopilot'); const page = await module.renderPageRoute(route); app.innerHTML = page.html; if (page.mount) await page.mount(); }
   catch (error) { app.innerHTML = `<div class="notice danger"><strong>صفحه بارگذاری نشد</strong><br>${escapeHtml(errorText(error))}</div><div class="form-actions"><button class="btn ghost" id="page-retry">تلاش دوباره</button></div>`; $('#page-retry')?.addEventListener('click', renderRoute); console.error(error); }
   finally { state.pageLoading = false; }
 }

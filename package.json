@@ -8,13 +8,25 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "start": "node server/index.mjs",
-    "dev": "node server/index.mjs",
-    "test": "node --test tests/runtime.test.mjs",
-    "check": "node --check worker.js && node --check server/index.mjs && node --check server/http-server.mjs",
+    "start": "node scripts/start-nasra.mjs",
+    "serve": "node server/index.mjs",
+    "dev": "node scripts/start-nasra.mjs --dev",
+    "setup": "node scripts/setup.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "test": "node --test tests/runtime.test.mjs tests/autopilot.test.mjs tests/telegram-control.test.mjs",
+    "check": "node --check worker.js && node --check server/index.mjs && node --check server/http-server.mjs && node --check server/autopilot.mjs && node --check server/media-store.mjs && node --check server/image-provider.mjs && node --check scripts/doctor.mjs && node --check scripts/start-nasra.mjs && node --check scripts/setup-env.mjs && node --check server/telegram-control.mjs && node --check scripts/setup.mjs && node --check scripts/wake.mjs && node --check scripts/telegram-status.mjs",
     "preview": "node dev-preview.mjs",
-    "fake-telegram": "node tests/fake-telegram.mjs"
+    "fake-telegram": "node tests/fake-telegram.mjs",
+    "wake": "node scripts/wake.mjs",
+    "telegram:status": "node scripts/telegram-status.mjs",
+    "setup:auto": "node scripts/setup.mjs --non-interactive"
   },
-  "keywords": ["nasra", "media-studio", "sqlite", "sillydev", "cloudflare-worker"],
+  "keywords": [
+    "nasra",
+    "media-studio",
+    "sqlite",
+    "sillydev",
+    "cloudflare-worker"
+  ],
   "license": "UNLICENSED"
 }

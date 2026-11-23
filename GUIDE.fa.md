@@ -28,7 +28,14 @@ Font/
 ├── server/                     # اجرای self-hosted (SillyDev): Entry point، SQLite، Scheduler، Polling، Guard
 ├── tests/                      # آزمون محلی runtime + تلگرام تقلبی (بدون شبکه)
 ├── .env.example               # الگوی متغیرهای محیطی اجرای self-hosted (بدون Secret واقعی)
+├── START-HERE.fa.md           # شروع از صفر: پنج گام برای کسی که کد نمی‌نویسد
+├── CLAUDE.md                  # راهنمای عامل هوش مصنوعی (Claude Code) در این مخزن
+├── LAPTOP.fa.md               # اجرای پروژه روی لپ‌تاپ ویندوز، قدم‌به‌قدم و بدون کدنویسی
 ├── GUIDE.fa.md                # همین راهنما
+├── scripts/
+│   ├── setup-env.mjs         # ساخت .env با رمز و Secret تصادفی (بدون هیچ ارسال بیرونی)
+│   ├── doctor.mjs            # بررسی پیش از اجرا: Node، sqlite، پوشه‌ها، بندر
+│   └── start-nasra.mjs       # اجرای یک‌دستوری + باز کردن خودکار مرورگر
 ├── gas/
 │   ├── Code.gs                # Mirror و Snapshot در Google Sheets
 │   └── appsscript.json        # Manifest با Asia/Tehran

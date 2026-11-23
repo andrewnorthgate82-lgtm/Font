@@ -1,4 +1,4 @@
-import { api, state, navigate, renderRoute, toast, showError, errorText, openModal, closeModal, copy, downloadBlob, apiBlob, parse, pretty, escapeHtml, faDigits, formatJalali, utcToJalali, relativeTime, badge, stateBadge, statusBadge, stateName, jobStatusName, platformName, notice, empty, formData, checked, confirmExternal, countdownText, refreshApprovalCount } from './app.js?v=20261105-copy-fallback';
+import { api, state, navigate, renderRoute, toast, showError, errorText, openModal, closeModal, copy, downloadBlob, apiBlob, parse, pretty, escapeHtml, faDigits, formatJalali, utcToJalali, relativeTime, badge, stateBadge, statusBadge, stateName, jobStatusName, platformName, notice, empty, formData, checked, confirmExternal, countdownText, refreshApprovalCount } from './app.js?v=20261122-autopilot';
 import { monthNames, monthGrid, shiftMonth, jalaliString, todayJalali, gregorianToJalali } from './jalali.js';
 import { captionCheck, carouselCheck, imageCheck, reelCheck, storyCheck, mediaKind, mediaUrl, extensionOf, validHttps } from './validators.js';
 import { sanitizeSvg, svgToJpeg, downloadText } from './svg-export.js';
@@ -291,6 +291,100 @@ async function settingsPage() {
   return page(html, () => { const form = $('#settings-form'); form.ig_auth_mode.value = d.ig_auth_mode || 'instagram'; form.addEventListener('submit', async event => { event.preventDefault(); const data = formData(form); data.carousel_strict_no_mixed = form.carousel_strict_no_mixed.checked; data.r2_enabled = form.r2_enabled.checked; data.default_posting_hours = data.posting_hours.split(',').map(x => x.trim()).filter(Boolean); delete data.posting_hours; try { await api('/api/settings', { method: 'PUT', body: data }); toast('تنظیمات ذخیره شد', 'success'); } catch (e) { showError(e); } }); $('#settings-health')?.addEventListener('click', async () => { try { const h = await api('/api/health'); $('#health-result').innerHTML = `<div class="notice ok">سلامت بررسی شد: ${formatJalali(h.time)} · D1 ${h.db ? 'متصل' : 'قطع'}</div>`; } catch (e) { showError(e); } }); });
 }
 
+
+/*
+ * Autopilot control. The policy lives in studio_settings and is read by the
+ * runtime on every tick, so saving here changes behaviour immediately without a
+ * restart. Nothing on this page publishes: it decides what the machine may do on
+ * its own, and shows what it actually did.
+ */
+async function autopilotPage() {
+  const [statusResult, guardResult] = await Promise.all([
+    api('/api/ops/autopilot').catch(e => ({ data: null, error: e })),
+    api('/api/ops/guard').catch(() => ({ data: null }))
+  ]);
+  const s = statusResult.data || {};
+  const p = s.policy || { policy: 'off', enabled: false, platforms: ['telegram'], daily_slots: ['09:00', '21:00'], max_new_per_day: 2, require_source: true };
+  const guard = guardResult.data || {};
+  const policyLabels = { off: 'خاموش', assisted: 'دستیار (بدون تأیید خودکار)', auto_gates: 'خودکار تا انتشار', full_auto: 'کاملاً خودکار' };
+  const platforms = ['telegram', 'rubika', 'instagram'];
+  const image = s.image_provider || {};
+  const media = s.media_store || {};
+  const ticks = Number(s.ticks || 0);
+  const html = `${intro('اتوپایلوت', 'اینجا تعیین می‌کنید ماشین تا کجا اجازهٔ تصمیم دارد. هیچ‌چیز بدون سیاستِ روشن و بدون فیلترهای ایمنی منتشر نمی‌شود.', '<button class="btn ghost" id="ap-refresh">↻ تازه‌سازی</button><button class="btn subtle" id="ap-tick">اجرای یک چرخه</button>')}
+    <div class="grid four">
+      <div class="card metric-card"><span class="metric-icon">⚙</span><div class="metric-label">سیاست فعال</div><div class="metric-value" style="font-size:17px">${escapeHtml(policyLabels[p.policy] || p.policy)}</div><div class="metric-note">${p.enabled ? 'فعال' : 'غیرفعال'}</div></div>
+      <div class="card metric-card"><span class="metric-icon">▦</span><div class="metric-label">کارهای در جریان</div><div class="metric-value">${number(s.content_in_flight)}</div><div class="metric-note">${number(s.pending_gates)} گیت در انتظار</div></div>
+      <div class="card metric-card"><span class="metric-icon">◷</span><div class="metric-label">انتشار زمان‌بندی‌شده</div><div class="metric-value">${number(s.scheduled_jobs)}</div><div class="metric-note">۲۴ ساعت گذشته: ${number(s.published_last_24h)}</div></div>
+      <div class="card metric-card"><span class="metric-icon">◌</span><div class="metric-label">چرخه‌های اجراشده</div><div class="metric-value">${number(ticks)}</div><div class="metric-note">${s.last_tick_at ? escapeHtml(relativeTime(s.last_tick_at)) : 'هنوز اجرا نشده'}</div></div>
+    </div>
+    <div class="grid two" style="margin-top:16px"><div>
+    ${card('سیاست اجرا', `<form id="ap-form" class="stack">
+      <label>سطح خودکاری<select name="policy">${Object.entries(policyLabels).map(([key, label]) => `<option value="${key}" ${p.policy === key ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}</select><span class="help">«دستیار» فقط محتوا و پوستر می‌سازد و هیچ گیتی را تأیید نمی‌کند. «خودکار تا انتشار» گیت‌ها را فقط وقتی تأیید می‌کند که همهٔ بررسی‌ها تمیز باشند.</span></label>
+      <label class="check-label"><input type="checkbox" name="enabled" ${p.enabled ? 'checked' : ''}> اتوپایلوت فعال باشد</label>
+      <div>پلتفرم‌های هدف<div class="grid three" style="margin-top:6px">${platforms.map(x => `<label class="check-label"><input type="checkbox" name="platform_${x}" ${(p.platforms || []).includes(x) ? 'checked' : ''}> ${escapeHtml(platformName(x))}</label>`).join('')}</div></div>
+      <div class="form-grid"><label>ساعت‌های ساخت محتوا (با ویرگول)<input name="daily_slots" dir="ltr" value="${escapeHtml((p.daily_slots || []).join(','))}" placeholder="09:00,21:00"></label><label>حداکثر محتوای تازه در روز<input name="max_new_per_day" type="number" min="0" max="10" value="${Number(p.max_new_per_day ?? 2)}"></label></div>
+      <label class="check-label"><input type="checkbox" name="require_source" ${p.require_source !== false ? 'checked' : ''}> بدون منبع تأییدشده و راستی‌آزمایی pass، گیت ۳ به‌طور خودکار تأیید نشود</label>
+      <div class="form-actions"><button class="btn primary" type="submit">ذخیرهٔ سیاست</button></div>
+    </form>`)}
+    ${card('قواعدی که همیشه اعمال می‌شوند', `<ul class="small" style="line-height:2;padding-right:18px">
+      <li>هر <b>risk_flag</b> یا <b>needs_info</b> در ایده، محتوا را به شما برمی‌گرداند.</li>
+      <li>راستی‌آزمایی باید <b>pass</b> باشد و حداقل یک ادعای <b>تأییدشده</b> داشته باشد؛ نتیجهٔ pass بدون هیچ منبع کافی نیست.</li>
+      <li>گیت ۳ فقط با <b>بررسی فنی بدون خطا</b> و <b>رسانهٔ پیوست‌شده</b> تأیید می‌شود.</li>
+      <li>هر تأیید خودکار با نام <code>system:autopilot</code> در لاگ حسابرسی ثبت می‌شود.</li>
+      <li>حالت <b>${escapeHtml(guard.mode === 'live' ? 'live' : 'dry_run')}</b> شیر اطمینان انتشار: ${guard.mode === 'live' ? 'ارسال واقعی فقط برای مقصدهای مجاز و با تأیید.' : 'هیچ ارسال واقعی از این پروسه خارج نمی‌شود.'}</li>
+    </ul>`)}
+    </div><div>
+    ${card('تولید رسانه', `<div class="status-grid">
+      <div class="status-row"><span>مدل تصویر</span>${image.configured ? badge('آماده', 'ok') : badge('تنظیم نشده', 'warn')}</div>
+      <div class="status-row"><span>مدل فعال</span><code>${escapeHtml(image.working_model || '—')}</code></div>
+      <div class="status-row"><span>تصاویر ساخته‌شده</span><strong>${number(image.stats?.images)}</strong></div>
+      <div class="status-row"><span>خطاهای اخیر</span><strong>${number(image.stats?.failures)}</strong></div>
+      <div class="status-row"><span>پوشهٔ رسانه</span>${media.configured ? badge('قابل دانلود', 'ok') : badge('PUBLIC_BASE_URL ندارد', 'warn')}</div>
+      <div class="status-row"><span>فایل‌های ذخیره‌شده</span><strong>${number(media.files)}</strong></div>
+    </div>${image.configured ? '' : notice('برای تولید خودکار پوستر، IMAGE_PROVIDER=gemini و IMAGE_API_KEY را در فایل .env اضافه کنید. تا آن زمان مسیر دستی «دانلود JPEG» در صفحهٔ محتوا کار می‌کند.', 'info')}${media.configured ? '' : notice('PUBLIC_BASE_URL خالی است؛ لینک رسانهٔ محلی برای تلگرام/اینستاگرام قابل دانلود نیست. آدرس تونل یا دامنه را در .env قرار دهید.', 'warn')}
+      <div class="form-actions"><button class="btn ghost small-btn" id="ap-media">مشاهدهٔ فایل‌های رسانه</button><button class="btn ghost small-btn" id="ap-prune">پاک‌سازی فایل‌های قدیمی</button></div>`)}
+    ${card('آخرین چرخه', `<pre class="json-box">${escapeHtml(JSON.stringify(s.last_summary || { message: 'هنوز اجرا نشده است' }, null, 2))}</pre>${s.last_error ? notice(`آخرین خطا: ${s.last_error.message}`, 'danger') : ''}`)}
+    </div></div>`;
+  return page(html, () => {
+    $('#ap-refresh')?.addEventListener('click', renderRoute);
+    $('#ap-tick')?.addEventListener('click', async event => {
+      event.target.disabled = true;
+      try { const r = await api('/api/ops/autopilot/tick', { method: 'POST', body: {} }); toast(`چرخه اجرا شد: ${number(r.data?.created)} محتوا، ${number(r.data?.approved)} تأیید`, 'success'); await renderRoute(); }
+      catch (e) { showError(e); } finally { event.target.disabled = false; }
+    });
+    const form = $('#ap-form');
+    form?.addEventListener('submit', async event => {
+      event.preventDefault();
+      const selectedPlatforms = platforms.filter(x => form[`platform_${x}`]?.checked);
+      if (!selectedPlatforms.length) { toast('حداقل یک پلتفرم انتخاب کنید', 'error'); return; }
+      const payload = {
+        policy: form.policy.value,
+        enabled: form.enabled.checked,
+        platforms: selectedPlatforms,
+        daily_slots: String(form.daily_slots.value || '').split(',').map(x => x.trim()).filter(Boolean),
+        max_new_per_day: Number(form.max_new_per_day.value || 0),
+        require_source: form.require_source.checked
+      };
+      if (payload.policy !== 'off' && !window.confirm(`سیاست «${policyLabels[payload.policy]}» ذخیره شود؟ ${payload.policy === 'off' ? '' : 'از این پس ماشین طبق همین قاعده تصمیم می‌گیرد.'}`)) return;
+      try { await api('/api/ops/autopilot', { method: 'PUT', body: payload }); toast('سیاست ذخیره شد', 'success'); await renderRoute(); }
+      catch (e) { showError(e); }
+    });
+    $('#ap-media')?.addEventListener('click', async () => {
+      try {
+        const r = await api('/api/ops/media');
+        const files = r.data?.files || [];
+        openModal('فایل‌های رسانه', files.length ? `<div class="list">${files.map(f => `<div class="list-item spread"><a href="${escapeHtml(f.url)}" target="_blank" rel="noopener" class="truncate">${escapeHtml(f.name)}</a><span class="small muted">${number(Math.round(f.bytes / 1024))} KB</span></div>`).join('')}</div>` : empty('فایلی ذخیره نشده است'));
+      } catch (e) { showError(e); }
+    });
+    $('#ap-prune')?.addEventListener('click', async () => {
+      if (!window.confirm('فایل‌های رسانهٔ قدیمی پاک شوند؟ فایل‌هایی که در محتوای منتشرنشده استفاده شده‌اند باید دستی بررسی شوند.')) return;
+      try { const r = await api('/api/ops/media/prune', { method: 'POST', body: {} }); toast(`${number(r.data?.removed)} فایل پاک شد`, 'success'); await renderRoute(); }
+      catch (e) { showError(e); }
+    });
+  });
+}
+
 async function logsPage() {
   const r = await api('/api/logs'); const logs = r.data || [];
   const html = `${intro('لاگ و حسابرسی', 'هر تأیید، تغییر پرامپت، انتشار، خطا و بازیابی در Audit Log ثبت می‌شود. IP فقط به شکل hash و Secrets هرگز ثبت نمی‌شوند.', '<button class="btn ghost" id="logs-refresh">↻</button>')}${logs.length ? `<div class="table-wrap"><table><thead><tr><th>زمان</th><th>کننده</th><th>عمل</th><th>موجودیت</th><th>جزئیات امن</th></tr></thead><tbody>${logs.map(l => `<tr><td>${formatJalali(l.created_at)}</td><td>${escapeHtml(l.actor)}</td><td>${badge(l.action, l.action.includes('failed') || l.action.includes('error') ? 'danger' : 'info')}</td><td>${escapeHtml(l.entity_type)}<br><code>${escapeHtml(l.entity_id || '')}</code></td><td><pre style="max-width:360px;max-height:150px;margin:0">${pretty(parse(l.details_json, {}))}</pre></td></tr>`).join('')}</tbody></table></div>` : empty('لاگی وجود ندارد')}`;
@@ -336,6 +430,7 @@ export async function renderPageRoute(route) {
   if (route.name === 'publish') return publishPage();
   if (route.name === 'integrations') return integrationsPage();
   if (route.name === 'settings') return settingsPage();
+  if (route.name === 'autopilot') return autopilotPage();
   if (route.name === 'logs') return logsPage();
   if (route.name === 'backup') return backupPage();
   if (route.name === 'selftest') return selftestPage();

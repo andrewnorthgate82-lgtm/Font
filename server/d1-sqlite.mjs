@@ -16,6 +16,21 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 let DatabaseSync;
+/*
+ * node:sqlite is still marked experimental, so Node prints an ExperimentalWarning
+ * when it is imported. The owner reads that as "something is broken". It is not.
+ *
+ * The filter is deliberately narrow: only that one sentence is dropped. Every
+ * other warning still reaches the console, and DeprecationWarnings are untouched.
+ */
+const originalEmitWarning = process.emitWarning;
+process.emitWarning = function emitWarning(warning, ...rest) {
+  const message = typeof warning === 'string' ? warning : warning?.message;
+  const name = typeof warning === 'string' ? rest[0]?.type || rest[0] : warning?.name;
+  if (/SQLite is an experimental/i.test(String(message || '')) && String(name || '') !== 'DeprecationWarning') return;
+  return originalEmitWarning.call(process, warning, ...rest);
+};
+
 try {
   ({ DatabaseSync } = await import('node:sqlite'));
 } catch {
