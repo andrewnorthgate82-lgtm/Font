@@ -103,14 +103,12 @@ export class TelegramPoller {
     }
   }
 
+  /*
+   * Only ever called when getWebhookInfo reported an actual URL: with no
+   * webhook there is nothing to remove, and warning about one that does not
+   * exist sends the owner hunting for a problem they do not have.
+   */
   async detachWebhook() {
-    /* Default is "do not touch". Removing a webhook is destructive for whatever
-       else shares this token, so it only happens when explicitly allowed. */
-    if (process.env.TELEGRAM_DELETE_WEBHOOK !== '1') {
-      this.state.mode = 'webhook-kept';
-      this.logger.warn('[telegram] webhook is left untouched (TELEGRAM_DELETE_WEBHOOK is not 1). Long polling cannot start while a webhook is set.');
-      return false;
-    }
     try {
       await this.#api('deleteWebhook', { drop_pending_updates: false });
       this.logger.log('[telegram] webhook removed; long polling is now the update source.');
@@ -139,14 +137,19 @@ export class TelegramPoller {
     const webhook = await this.webhookStatus();
     this.state.webhook = webhook;
     if (webhook.url) {
-      /* Honest, actionable, and it does not touch the other configuration. */
-      this.logger.warn(`[telegram] this bot currently has a webhook set (${webhook.url.slice(0, 60)}…).`);
-      this.logger.warn('[telegram] Telegram will not deliver getUpdates while a webhook exists. Remove it in BotFather (Bot Settings → Delete Webhook) or set TELEGRAM_DELETE_WEBHOOK=1 yourself.');
-      this.state.mode = 'webhook-present';
-      this.running = false;
-      return this;
+      /* Default is "do not touch": removing a webhook is destructive for
+         whatever else shares this token, so it needs explicit consent. */
+      if (process.env.TELEGRAM_DELETE_WEBHOOK !== '1') {
+        /* Honest, actionable, and it does not touch the other configuration. */
+        this.logger.warn(`[telegram] this bot currently has a webhook set (${webhook.url.slice(0, 60)}…).`);
+        this.logger.warn('[telegram] Telegram will not deliver getUpdates while a webhook exists. Remove it in BotFather (Bot Settings → Delete Webhook) or set TELEGRAM_DELETE_WEBHOOK=1 yourself.');
+        this.state.mode = 'webhook-present';
+        this.running = false;
+        return this;
+      }
+      const removed = await this.detachWebhook();
+      if (!removed) { this.state.mode = 'webhook-present'; this.running = false; return this; }
     }
-    await this.detachWebhook();
     this.loop().catch(error => this.logger.error('[telegram] poller crashed:', error.message));
     return this;
   }

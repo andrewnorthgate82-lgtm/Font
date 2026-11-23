@@ -249,17 +249,32 @@ test('the poller never deletes a webhook unless the owner explicitly allowed it'
 
     /* Explicit consent is the only path that deletes it. */
     process.env.TELEGRAM_DELETE_WEBHOOK = '1';
+    /* A webhook really exists here: consent must be what removes it, and the
+       removal must let polling take over. */
     fake.state.webhookUrl = 'https://example.com/webhooks/telegram';
     const consented = new TelegramPoller({
       config: { telegramBaseUrl: `http://127.0.0.1:${port}`, telegramPollTimeoutSec: 1, telegramPolling: true, port: 0 },
       env: { TG_BOT_TOKEN: '1:test', TG_OWNER_CHAT_ID: OWNER },
       db, worker, logger: { log() {}, warn() {}, error() {} }
     });
-    fake.state.webhookUrl = '';
     await consented.start();
     assert.equal(fake.state.webhookDeleted, 1, 'TELEGRAM_DELETE_WEBHOOK=1 is explicit consent');
+    assert.equal(consented.running, true, 'with consent, polling must start after the removal');
     consented.stop();
     delete process.env.TELEGRAM_DELETE_WEBHOOK;
+
+    /* No webhook at all: nothing to remove, and nothing alarming to log. */
+    fake.state.webhookUrl = '';
+    const warned = [];
+    const quiet = new TelegramPoller({
+      config: { telegramBaseUrl: `http://127.0.0.1:${port}`, telegramPollTimeoutSec: 1, telegramPolling: true, port: 0 },
+      env: { TG_BOT_TOKEN: '1:test', TG_OWNER_CHAT_ID: OWNER },
+      db, worker, logger: { log() {}, warn: (...a) => warned.push(a.join(' ')), error() {} }
+    });
+    await quiet.start();
+    assert.equal(fake.state.webhookDeleted, 1, 'a poller must not delete a webhook that does not exist');
+    assert.equal(warned.filter(line => /webhook is left untouched/.test(line)).length, 0, 'no warning about a webhook that is not there');
+    quiet.stop();
 
     /* With no webhook set, polling is allowed and consumes updates. */
     fake.state.webhookUrl = '';

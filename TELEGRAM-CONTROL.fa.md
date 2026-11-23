@@ -187,7 +187,7 @@ WAKE_COMMAND=shutdown /r /t 0
 | نشانه | دلیل | راه‌حل |
 |---|---|---|
 | ربات جواب نمی‌دهد | `TG_OWNER_CHAT_ID` تنظیم نشده یا اشتباه است | شناسه را از @userinfobot بگیرید و در `.env` بگذارید |
-| `webhook is left untouched` در لاگ | ربات webhook فعال دارد؛ تلگرام در این حالت `getUpdates` نمی‌دهد | در BotFather: Bot Settings → Delete Webhook. یا اگر مطمئنید: `TELEGRAM_DELETE_WEBHOOK=1` |
+| `this bot currently has a webhook set` در لاگ | ربات webhook فعال دارد؛ تلگرام در این حالت `getUpdates` نمی‌دهد | در BotFather: Bot Settings → Delete Webhook. یا اگر مطمئنید: `TELEGRAM_DELETE_WEBHOOK=1` |
 | `/ping` می‌گوید خاموش، ولی پنل باز است | فایل ضربان قدیمی است (بیش از ۵ دقیقه) | سرور را دوباره با `npm start` بالا بیاورید |
 | دکمه‌های گیت نمی‌آیند | `notify` در سیاست اتوپایلوت خاموش است | در پنل، صفحه اتوپایلوت، سیاست را بررسی کنید |
 | `/pause` کار نمی‌کند | پیام از چت دیگری فرستاده شده | فقط از چت خودِ مالک کار می‌کند (عمدی) |
