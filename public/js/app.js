@@ -53,6 +53,33 @@ export async function apiBlob(path) {
   if (!response.ok) throw new Error('دانلود ناموفق بود');
   return await response.blob();
 }
+/*
+ * Upload one file (poster, photo, video) and get back the media-link object to
+ * attach to a content item. The bytes go to the runtime, not to a third party,
+ * because the laptop has no public URL for Telegram to fetch.
+ */
+export async function uploadMedia(file, title = '') {
+  const headers = new Headers();
+  headers.set('Content-Type', file.type || 'application/octet-stream');
+  headers.set('X-File-Name', encodeURIComponent(file.name || ''));
+  headers.set('X-Media-Title', encodeURIComponent(title || ''));
+  if (state.csrf) headers.set('X-CSRF-Token', state.csrf);
+  if (state.sessionToken) {
+    headers.set('X-Nasra-Session', state.sessionToken);
+    headers.set('Authorization', `Bearer ${state.sessionToken}`);
+  }
+  const response = await fetch(`${API_BASE}/api/ops/media/upload`, { method: 'POST', headers, body: file, credentials: 'include' });
+  const text = await response.text();
+  let payload;
+  try { payload = text ? JSON.parse(text) : {}; } catch { payload = { ok: false, error: { message: text.slice(0, 300) } }; }
+  if (!response.ok || payload.ok === false) {
+    const error = new Error(payload?.error?.message || `HTTP ${response.status}`);
+    error.payload = payload;
+    throw error;
+  }
+  return payload.data;
+}
+
 export function toast(message, kind = '') { const el = $('#toast'); el.textContent = message; el.className = `toast show ${kind}`; clearTimeout(state.toastTimer); state.toastTimer = setTimeout(() => { el.className = 'toast'; }, 4500); }
 export function showError(error) { console.error(error); toast(errorText(error), 'error'); }
 export function openModal(title, html, wide = false) { $('#modal-title').textContent = title; $('#modal-body').innerHTML = html; $('#modal-root').classList.remove('hidden'); $('#modal-root').classList.toggle('modal-wide', wide); }

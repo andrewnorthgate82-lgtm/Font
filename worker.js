@@ -793,7 +793,10 @@ function validatePackage(content, specs, settings = {}) {
   const storySpec = findSpec(specs, 'instagram', 'story', 'story_specs');
   for (const item of media) {
     const url = mediaUrl(item);
-    const urlResult = validateHttpUrl(url);
+    /* upload:<name> is a file this runtime stored; it is delivered as bytes, so
+       there is no URL to validate and no host to reach. */
+    const isUpload = String(url).startsWith('upload:');
+    const urlResult = isUpload ? { ok: true } : validateHttpUrl(url);
     if (!urlResult.ok) results.push({ ok: false, issues: [validationIssue('media_url', 'fail', urlResult.reason)] });
     const meta = typeof item === 'object' ? { ...item, extension: item.extension || extensionOf(url) } : { extension: extensionOf(url) };
     if (format === 'reel') results.push(validateReelMeta(meta, reelSpec));
@@ -2240,8 +2243,23 @@ async function handleApi(request, env, db, ctx, url) {
       if (links.length > 20) throw new HttpError(400, 'TOO_MANY_MEDIA', 'حداکثر ۲۰ لینک رسانه مجاز است');
       const normalized = links.map((item, i) => {
         const url = mediaUrl(item);
+        /* An uploaded file is stored by the runtime and references itself as
+           upload:<name>; the bytes are sent to the platform at publish time. Only
+           a real link has to be a fetchable https URL. */
+        if (String(url).startsWith('upload:')) {
+          if (!/^upload:[a-z0-9][a-z0-9._-]{0,120}\.(jpg|jpeg|png|webp|mp4|mov)$/i.test(String(url))) {
+            throw new HttpError(400, 'INVALID_MEDIA_REF', `فایل رسانه ${i + 1} معتبر نیست`);
+          }
+          return { ...(typeof item === 'object' ? item : {}), url: String(url), kind: mediaKind(item), format: str(item?.format || String(url).split('.').pop(), 20), width: asInt(item?.width, 0) || undefined, height: asInt(item?.height, 0) || undefined, duration_sec: Number(item?.duration_sec) || undefined, size_bytes: Number(item?.size_bytes) || undefined };
+        }
         const valid = validateHttpUrl(url);
         if (!valid.ok) throw new HttpError(400, 'INVALID_MEDIA_URL', `لینک رسانه ${i + 1}: ${valid.reason}`);
+        /* A localhost URL is a link Telegram and Meta can never open, so refusing
+           it here beats a confusing failure at publish time. */
+        const host = new URL(valid.url).hostname.toLowerCase();
+        if (['localhost', '127.0.0.1', '::1', '0.0.0.0'].includes(host) || host.endsWith('.local')) {
+          throw new HttpError(400, 'MEDIA_URL_NOT_PUBLIC', `لینک رسانه ${i + 1}: این آدرس فقط روی همین لپ‌تاپ باز می‌شود؛ از دکمهٔ آپلود استفاده کنید یا لینک عمومی https بدهید`);
+        }
         return { ...(typeof item === 'object' ? item : {}), url: valid.url, kind: mediaKind(item), format: str(item?.format || extensionOf(url), 20), width: asInt(item?.width, 0) || undefined, height: asInt(item?.height, 0) || undefined, duration_sec: Number(item?.duration_sec) || undefined, size_bytes: Number(item?.size_bytes) || undefined };
       });
       if (content.state === 'MEDIA_PENDING') {

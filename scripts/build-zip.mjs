@@ -55,6 +55,8 @@ const FILES = [
   'server/media-store.mjs',
   'server/image-provider.mjs',
   'server/png-to-jpeg.mjs',
+  'server/media-upload.mjs',
+  'server/telegram-media.mjs',
   /* loaded by a dynamic import in server/index.mjs (MOCK_AI=1), so a static
      scan of the imports does not see it; leaving it out breaks mock mode only
      when the owner turns it on, which is exactly the kind of late failure to avoid. */

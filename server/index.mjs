@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 
 import { readConfig, validateConfig, configSummary, workerEnv, loadEnvFiles } from './env.mjs';
 import { openSqliteD1 } from './d1-sqlite.mjs';
-import { PublishGuard, classifyPublishRequest, dryRunResponse } from './publish-guard.mjs';
+import { PublishGuard, classifyPublishRequest, dryRunResponse, guardedFetch } from './publish-guard.mjs';
 import { Scheduler } from './scheduler.mjs';
 import { TelegramPoller } from './telegram-poller.mjs';
 import { createNasraServer } from './http-server.mjs';
@@ -30,6 +30,7 @@ import { MediaStore } from './media-store.mjs';
 import { ImageProvider } from './image-provider.mjs';
 import { Autopilot, normalizePolicy, policySummary } from './autopilot.mjs';
 import { readHeartbeat, writeHeartbeat, consumeTickRequest } from './telegram-control.mjs';
+import { MAX_UPLOAD_BYTES, storeUpload, readRawBody, slugFrom } from './media-upload.mjs';
 import worker from '../worker.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -139,20 +140,7 @@ let guardInstalled = false;
 function installGuard() {
   if (guardInstalled) return;
   guardInstalled = true;
-  globalThis.fetch = async (input, init = {}) => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input?.url;
-    const method = init?.method || (typeof input === 'object' ? input?.method : null) || 'GET';
-    const action = url ? classifyPublishRequest(url, { ...init, method }) : null;
-    if (!action) return realFetch(input, init);
-    const approvalToken = process.env.PUBLISH_APPROVAL_TOKEN || '';
-    const decision = guard.decide(action, { approvalToken });
-    if (decision.decision === 'pass') {
-      console.warn(`[publish-guard] ALLOWED ${action.platform}/${action.action} after explicit owner confirmation`);
-      return realFetch(input, init);
-    }
-    console.warn(`[publish-guard] blocked ${action.platform}/${action.action} (${decision.reason})`);
-    return dryRunResponse(action);
-  };
+  globalThis.fetch = guardedFetch({ guard, realFetch, mediaStore, logger: console });
 }
 
 function uninstallGuard() {
@@ -250,6 +238,38 @@ function healthSnapshot() {
   };
 }
 
+/*
+ * POST /api/ops/media/upload
+ *
+ * The browser sends the file itself as application/octet-stream, with the file
+ * name in X-File-Name. No multipart parser, no dependency, and a hard size limit.
+ * The response is the media-link object to attach to a content item, so the panel
+ * does not have to know how storage works.
+ */
+async function handleUpload(req, res) {
+  const session = await ownerSession(req);
+  if (!session) return sendJson(res, 401, { ok: false, error: { code: 'AUTH_REQUIRED', message: 'ورود مالک لازم است' } });
+  const csrf = String(req.headers['x-csrf-token'] || '');
+  if (!csrf || csrf !== session.csrf) return sendJson(res, 403, { ok: false, error: { code: 'CSRF_FAILED', message: 'توکن CSRF معتبر نیست؛ صفحه را تازه کنید' } });
+
+  let buffer;
+  try {
+    buffer = await readRawBody(req, MAX_UPLOAD_BYTES);
+  } catch (error) {
+    return sendJson(res, error.statusCode || 400, { ok: false, error: { code: 'UPLOAD_TOO_LARGE', message: error.message } });
+  }
+  try {
+    const filename = decodeURIComponent(String(req.headers['x-file-name'] || ''));
+    const mime = String(req.headers['content-type'] || '');
+    const title = decodeURIComponent(String(req.headers['x-media-title'] || ''));
+    const link = storeUpload(mediaStore, { buffer, filename, mime, slug: slugFrom(title) });
+    console.log(`[media] upload stored: ${link.name} (${Math.round(link.size_bytes / 1024)} KB)`);
+    return sendJson(res, 201, { ok: true, data: link });
+  } catch (error) {
+    return sendJson(res, error.statusCode || 500, { ok: false, error: { code: 'UPLOAD_FAILED', message: error.message } });
+  }
+}
+
 async function handleOps(req, res, url) {
   if (url.pathname === '/api/ops/health' && req.method === 'GET') {
     const tokenOk = config.healthToken && req.headers['x-health-token'] === config.healthToken;
@@ -336,6 +356,11 @@ async function handleOps(req, res, url) {
       }
     });
   }
+  if (url.pathname === '/api/ops/media/upload' && req.method === 'POST') {
+    /* Only reachable here when the body was not consumed by preHandle (see the
+       dedicated branch): this keeps the route discoverable in one place. */
+    return sendJson(res, 500, { ok: false, error: { code: 'UPLOAD_ROUTE_MISUSE', message: 'مسیر آپلود باید در ابتدای درخواست مدیریت شود' } });
+  }
   if (url.pathname === '/api/ops/media/prune' && req.method === 'POST') {
     return sendJson(res, 200, { ok: true, data: mediaStore.prune({ keep: config.media.keep, maxBytes: config.media.maxBytes }) });
   }
@@ -380,6 +405,12 @@ const server = createNasraServer({
   mediaStore,
   logger: console,
   preHandle: async (req, res, url) => {
+    /* Upload first: it is the only ops route that streams a file body, and the
+       generic ops router rejects unknown paths before any body is read. */
+    if (url.pathname === '/api/ops/media/upload' && req.method === 'POST') {
+      await handleUpload(req, res);
+      return true;
+    }
     if (url.pathname.startsWith('/api/ops/')) {
       await handleOps(req, res, url);
       return true;

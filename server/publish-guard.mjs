@@ -22,6 +22,8 @@
  */
 import crypto from 'node:crypto';
 
+import { needsMultipartUpload, performMultipartUpload } from './telegram-media.mjs';
+
 const IG_PUBLISH_PATH = /^\/v\d+(?:\.\d+)?\/[^/]+\/(media_publish|media|messages|[^/]+\/replies)\/?$/;
 const IG_HOSTS = new Set(['graph.instagram.com', 'graph.facebook.com', 'rupload.facebook.com']);
 const TG_PUBLISH_METHODS = new Set([
@@ -249,6 +251,34 @@ export class PublishGuard {
   recent(limit = 50) {
     return this.log.slice(-Math.max(1, Math.min(200, Number(limit) || 50))).reverse();
   }
+}
+
+/**
+ * Build the fetch the runtime installs: classify, ask the guard, then either send,
+ * stub, or — for an uploaded file — send the bytes.
+ *
+ * Kept here rather than inline in index.mjs so the whole decision is testable
+ * without starting a server. `realFetch` is injected for the same reason.
+ */
+export function guardedFetch({ guard, realFetch, mediaStore = null, approvalToken = () => process.env.PUBLISH_APPROVAL_TOKEN || '', logger = console }) {
+  return async (input, init = {}) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input?.url;
+    const method = init?.method || (typeof input === 'object' ? input?.method : null) || 'GET';
+    const action = url ? classifyPublishRequest(url, { ...init, method }) : null;
+    if (!action) return realFetch(input, init);
+
+    const decision = guard.decide(action, { approvalToken: approvalToken() });
+    if (decision.decision !== 'pass') {
+      logger.warn(`[publish-guard] blocked ${action.platform}/${action.action} (${decision.reason})`);
+      return dryRunResponse(action);
+    }
+    logger.warn(`[publish-guard] ALLOWED ${action.platform}/${action.action} after explicit owner confirmation`);
+    /* A file the owner uploaded exists only on this machine, so the JSON send
+       would ask Telegram to fetch a URL it cannot reach: send the bytes. */
+    const plan = action.platform === 'telegram' && mediaStore ? needsMultipartUpload(url, init) : null;
+    if (plan) return await performMultipartUpload(realFetch, mediaStore, { url, init, plan });
+    return realFetch(input, init);
+  };
 }
 
 /* Stub response handed to the worker instead of a real external publish. */
