@@ -315,7 +315,7 @@ const aiReady = Boolean(finalEnv.AI_API_KEY);
 say('');
 say(`${c.bold}  آنچه تنظیم شد${c.reset}`);
 say(`    سرور پنل:        http://localhost:8787`);
-say(`    ربات تلگرام:     ${telegramReady ? `${c.green}وصل${c.reset}` : `${c.yellow}وصل نیست${c.reset} (بعداً: npm run setup)`}`);
+say(`    ربات تلگرام:     ${telegramReady ? `${c.green}وصل${c.reset}` : `${c.yellow}وصل نیست${c.reset} (بعداً: nasra-settings.bat)`}`);
 say(`    هوش مصنوعی متن:  ${aiReady ? `${c.green}وصل${c.reset}` : `${c.yellow}وصل نیست${c.reset} (ایجنت‌ها دستی می‌مانند)`}`);
 say(`    انتشار:          ${finalEnv.PUBLISH_GUARD_MODE === 'live' ? `${c.yellow}واقعی${c.reset}` : `${c.green}ایمن (هیچ پستی بیرون نمی‌رود)${c.reset}`}`);
 

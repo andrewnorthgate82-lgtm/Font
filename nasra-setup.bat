@@ -74,8 +74,13 @@ echo.
 
 REM ---------------------------------------------------------------- install --
 :havenv
+REM Once .env exists the questions are already answered. Asking again would make
+REM a daily double-click feel like it lost the settings, and a stray Enter on the
+REM token line would look like the token had to be typed every time.
+if exist "%DIR%\.env" goto already
+
 echo   [3/5] بررسی پایگاه‌داده داخلی
-echo   [4/5] پرسش‌های تنظیمات
+echo   [4/5] پرسش‌های تنظیمات  (فقط همین یک بار)
 echo.
 node "%DIR%\scripts\setup.mjs"
 if errorlevel 1 goto setupfailed
@@ -85,16 +90,29 @@ echo   ==============================================
 echo    راه‌اندازی کامل شد.
 echo   ==============================================
 echo.
-echo   سرور را الان بستید. برای اجرای دوباره (هر بار که لپ‌تاپ را
-echo   روشن می‌کنید) یکی از این دو:
-echo       - دوبار کلیک روی همین فایل  (رمز و تنظیمات دست‌نخورده می‌مانند)
-echo       - یا دوبار کلیک روی فایل:  nasra-start.bat
+echo   از این به بعد، هر بار که لپ‌تاپ را روشن کردید فقط:
+echo        دوبار کلیک روی فایل  nasra-start.bat
+echo   هیچ سؤالی پرسیده نمی‌شود و همین تنظیمات دست‌نخورده می‌مانند.
 echo.
-echo   مرورگر خودش باز می‌شود روی:  http://localhost:8787
+echo   اگر خواستید چیزی را عوض کنید (توکن، کلید، رمز):
+echo        دوبار کلیک روی فایل  nasra-settings.bat
 echo.
 echo   اگر جایی خطا دیدید، این فایل را برای پشتیبانی بفرستید:
 echo        %DIR%\nasra-setup-log.txt
 echo   (رمز ورود و توکن داخل آن نیست.)
+echo.
+pause
+exit /b 0
+
+:already
+echo   [3/5] تنظیمات از قبل انجام شده است
+echo   [4/5] هیچ سؤالی پرسیده نمی‌شود
+echo.
+node "%DIR%\scripts\start-nasra.mjs"
+echo.
+echo   سرور متوقف شد.
+echo   اجرای دوباره:      دوبار کلیک روی nasra-start.bat
+echo   عوض کردن تنظیمات:  دوبار کلیک روی nasra-settings.bat
 echo.
 pause
 exit /b 0

@@ -44,7 +44,9 @@
 | `server/telegram-poller.mjs` | long polling تلگرام؛ webhook را دست نمی‌زند |
 | `server/telegram-control.mjs` | دستورهای تلگرام، پرچم توقف انتشار، ضربان عمر، کد بیدارباش |
 | `scripts/setup.mjs` | **تنها** برنامه راه‌اندازی: بررسی Node، ساخت `.env`، سؤال‌ها، doctor، اجرا |
-| `nasra-setup.bat` | نقطه ورود ویندوز؛ دوبار کلیک → `scripts/setup.mjs` |
+| `nasra-setup.bat` | نصب اولیه ویندوز؛ اگر `.env` هست فقط سرور را بالا می‌آورد |
+| `nasra-start.bat` | اجرای روزمره؛ هیچ سؤالی نمی‌پرسد → `scripts/start-nasra.mjs` |
+| `nasra-settings.bat` | عوض کردن تنظیمات → `scripts/setup.mjs` (Enter = نگه‌داشتن مقدار) |
 | `scripts/setup-env.mjs` | ساخت سریع `.env` بدون سؤال (توسط `setup.mjs` هم استفاده می‌شود) |
 | `scripts/telegram-status.mjs` | وضعیت ربات؛ فقط `getMe` و `getWebhookInfo` |
 | `scripts/doctor.mjs` | بررسی پیش از اجرا (نسخه Node، sqlite، پوشه‌ها، بندر) |
