@@ -609,6 +609,22 @@ async function callAI(env, agent, messages, maxTokens, testProvider = null) {
     }
     if (!response.ok) {
       if (response.status === 429 || /quota|rate.?limit|resource.?exhausted/i.test(JSON.stringify(data))) throw new AgentError('QUOTA_EXHAUSTED', 'سهمیه Gemini تمام شده یا محدودیت نرخ فعال است', 3600);
+      /* 503/500/502/504 is the provider being busy, not a mistake in our setup:
+         retry in a minute rather than waiting half an hour, and try a sibling
+         model immediately — Google's capacity is per model, not per account. */
+      if (response.status >= 500) {
+        const sibling = await resolveGeminiModel(env, agent, { refresh: false, exclude: usedModel });
+        if (sibling && sibling !== usedModel) {
+          usedModel = sibling;
+          response = await fetch(geminiUrl(usedModel), { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.AI_API_KEY }, body });
+          data = await response.json().catch(() => ({}));
+          if (response.ok) {
+            const text = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');
+            return { text, usage: { prompt_tokens: asInt(data.usageMetadata?.promptTokenCount, estimateTokens(JSON.stringify(messages))), completion_tokens: asInt(data.usageMetadata?.candidatesTokenCount, estimateTokens(text)) } };
+          }
+        }
+        if (response.status >= 500) throw new AgentError('AI_OVERLOADED', `سرور Gemini الان شلوغ است (HTTP ${response.status}). این موقتی است؛ کار خودش چند دقیقه بعد دوباره تلاش می‌شود.`, 120);
+      }
       const detail = str(data?.error?.message, 500);
       if (response.status === 404) throw new AgentError('AI_MODEL_RETIRED', `مدل «${usedModel}» دیگر در دسترس نیست و مدل جایگزینی هم پیدا نشد. یک بار دیگر تلاش کنید یا در .env مقدار AI_MODEL را دستی بگذارید. (${detail})`);
       throw new AgentError('AI_HTTP_ERROR', `Gemini HTTP ${response.status}: ${detail}`);
@@ -622,6 +638,7 @@ async function callAI(env, agent, messages, maxTokens, testProvider = null) {
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       if (response.status === 429 || /quota|rate.?limit|insufficient/i.test(JSON.stringify(data))) throw new AgentError('QUOTA_EXHAUSTED', 'سهمیه ارائه‌دهنده OpenAI-compatible تمام شده است', 3600);
+      if (response.status >= 500) throw new AgentError('AI_OVERLOADED', `سرور ارائه‌دهنده الان شلوغ است (HTTP ${response.status}). این موقتی است و کار خودش دوباره تلاش می‌شود.`, 120);
       throw new AgentError('AI_HTTP_ERROR', `AI HTTP ${response.status}: ${str(data?.error?.message, 500)}`);
     }
     const text = data.choices?.[0]?.message?.content || '';
@@ -2112,6 +2129,13 @@ async function processJobById(env, db, id) {
   } catch (error) {
     const code = error.code || 'JOB_ERROR';
     const attempts = Math.max(1, asInt(job.attempts));
+    /* An overloaded provider is bad luck, not a broken setup: keep the job alive
+       (RETRY, not FAILED) so the owner does not have to press retry by hand. */
+    if (code === 'AI_OVERLOADED') {
+      const retry = new Date(Date.now() + (error.retryAfterSec || 120) * 1000).toISOString();
+      await dbRun(db, "UPDATE jobs SET status='RETRY',run_after=?,locked_at=NULL,last_error=?,updated_at=? WHERE id=?", [retry, str(error.message, 1000), isoNow(), id]);
+      return { retry: true, overloaded: true, run_after: retry, error: error.message };
+    }
     if (code === 'QUOTA_EXHAUSTED' || code === 'NOT_CONFIGURED' && job.job_type === 'agent') {
       const retry = new Date(Date.now() + (error.retryAfterSec || 3600) * 1000).toISOString();
       await dbRun(db, "UPDATE jobs SET status='RETRY',run_after=?,locked_at=NULL,last_error=?,updated_at=? WHERE id=?", [retry, str(error.message, 1000), isoNow(), id]);

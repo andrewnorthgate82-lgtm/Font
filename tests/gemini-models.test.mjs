@@ -125,3 +125,73 @@ test('a seeded old model name is reset, so no install keeps a dead version', asy
   assert.notEqual(row.model, 'gemini-2.0-flash', 'a retired name never survives a reboot');
   second.close();
 });
+
+test('an overloaded provider (503) is retried, not marked failed', async () => {
+  const db = freshDb();
+  const env = { DB: db, AI_PROVIDER: 'gemini', AI_API_KEY: 'k-test', OWNER_PASSWORD: 'x'.repeat(12), SESSION_SECRET: 'y'.repeat(32) };
+  const tried = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (target, init = {}) => {
+    const url = String(target);
+    if (url.endsWith('/v1beta/models')) return new Response(JSON.stringify(MODEL_LIST), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    if (url.includes(':generateContent')) {
+      const name = decodeURIComponent(url.match(/models\/(.+):generateContent/)[1]);
+      tried.push(name);
+      /* The first-choice model is busy; its sibling answers fine. */
+      if (tried.length === 1) {
+        return new Response(JSON.stringify({ error: { code: 503, message: 'This model is currently experiencing high demand.' } }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({
+        candidates: [{ content: { parts: [{ text: JSON.stringify({ opportunities: [], risk_flags: [], needs_info: [] }) }] } }],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 }
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return realFetch(target, init);
+  };
+  try {
+    const now = new Date().toISOString();
+    await db.prepare(`INSERT INTO jobs (id,job_type,agent_id,payload_json,status,priority,attempts,max_attempts,run_after,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind('j3', 'agent', 'trend_hunter', JSON.stringify({ agentId: 'trend_hunter', contentId: null, mode: 'manual' }), 'QUEUED', 5, 0, 4, now, now, now).run();
+    const { Scheduler } = await import('../server/scheduler.mjs');
+    const scheduler = new Scheduler({ worker, env, db, config: { schedulerEnabled: false }, logger: { log() {}, error() {} } });
+    await scheduler.tick();
+    const job = await db.prepare("SELECT status,last_error FROM jobs WHERE id='j3'").first();
+    assert.equal(job.status, 'DONE', `503 must not kill the job: ${job.last_error}`);
+    assert.equal(tried.length, 2, 'one busy model, one sibling that answered');
+    assert.notEqual(tried[0], tried[1]);
+  } finally {
+    globalThis.fetch = realFetch;
+    db.close();
+  }
+});
+
+test('if every model is busy, the job waits instead of failing', async () => {
+  const db = freshDb();
+  const env = { DB: db, AI_PROVIDER: 'gemini', AI_API_KEY: 'k-test', OWNER_PASSWORD: 'x'.repeat(12), SESSION_SECRET: 'y'.repeat(32) };
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (target, init = {}) => {
+    const url = String(target);
+    if (url.endsWith('/v1beta/models')) return new Response(JSON.stringify(MODEL_LIST), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    if (url.includes(':generateContent')) {
+      return new Response(JSON.stringify({ error: { code: 503, message: 'high demand' } }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+    }
+    return realFetch(target, init);
+  };
+  try {
+    const now = new Date().toISOString();
+    await db.prepare(`INSERT INTO jobs (id,job_type,agent_id,payload_json,status,priority,attempts,max_attempts,run_after,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind('j4', 'agent', 'trend_hunter', JSON.stringify({ agentId: 'trend_hunter', contentId: null, mode: 'manual' }), 'QUEUED', 5, 0, 4, now, now, now).run();
+    const { Scheduler } = await import('../server/scheduler.mjs');
+    const scheduler = new Scheduler({ worker, env, db, config: { schedulerEnabled: false }, logger: { log() {}, error() {} } });
+    await scheduler.tick();
+    const job = await db.prepare("SELECT status,run_after,last_error,attempts FROM jobs WHERE id='j4'").first();
+    assert.equal(job.status, 'RETRY', 'a busy provider is a wait, not a failure');
+    assert.equal(job.attempts, 1, 'the attempt counter is not burned by capacity');
+    assert.match(job.last_error, /شلوغ/);
+    const waitMs = new Date(job.run_after).getTime() - Date.now();
+    assert.ok(waitMs > 0 && waitMs <= 5 * 60 * 1000, 'retried within minutes, not hours');
+  } finally {
+    globalThis.fetch = realFetch;
+    db.close();
+  }
+});
