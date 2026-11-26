@@ -2,7 +2,6 @@
 .DS_Store
 *.log
 nasra-backup-*.json
-nasra-laptop.zip
 node_modules/
 wrangler.generated.toml
 .deploy-public/

@@ -20,7 +20,7 @@
     "wake": "node scripts/wake.mjs",
     "telegram:status": "node scripts/telegram-status.mjs",
     "setup:auto": "node scripts/setup.mjs --non-interactive",
-    "zip": "node scripts/build-zip.mjs nasra-laptop.zip"
+    "zip": "node scripts/build-zip.mjs releases/nasra-laptop.zip"
   },
   "keywords": [
     "nasra",
