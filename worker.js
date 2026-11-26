@@ -2488,6 +2488,20 @@ async function handleApi(request, env, db, ctx, url) {
 // Telegram webhook and owner commands (fast ACK; background work in waitUntil)
 // ---------------------------------------------------------------------------
 /*
+ * Why a cycle would produce nothing. /now answers with this instead of promising
+ * work it cannot do: an autopilot that is off and a model that is missing both
+ * end with an empty kanban and no explanation anywhere the owner looks.
+ */
+async function automationBlocked(env, db) {
+  const policy = await getSetting(db, 'autopilot', null);
+  if (!policy) return { reason: 'اتوپایلوت هنوز تنظیم نشده است. پنل → اتوپایلوت → سیاست را روی «دستیار» بگذارید و فعال کنید.' };
+  if (!policy.enabled || policy.policy === 'off') return { reason: 'اتوپایلوت خاموش است. پنل → اتوپایلوت → «اتوپایلوت فعال باشد» را روشن کنید.' };
+  if (await readPaused(db)) return { reason: 'انتشار متوقف شده است (/resume را بزنید).' };
+  if (!String(env.AI_PROVIDER || '').trim() || !String(env.AI_API_KEY || '').trim()) return { reason: 'کلید هوش مصنوعی تنظیم نشده است؛ بدون آن هیچ محتوایی ساخته نمی‌شود. nasra-settings.bat را اجرا کنید.' };
+  return { reason: '' };
+}
+
+/*
  * Commands that come from server/telegram-control.mjs. Keeping the decision in a
  * pure module is what makes "the bot can never publish" a testable statement
  * rather than a convention. /status falls through to the older implementation
@@ -2503,13 +2517,7 @@ async function telegramControlCommand(env, db, chatId, text) {
     chatId: String(chatId || ''),
     heartbeat: env.NASRA_HEARTBEAT || { present: false, stale: true },
     paused,
-    autopilot: policy ? { policy: policy.policy, platforms: policy.platforms } : null,
-    /* Same facts the boot log prints, so /status answers "can it produce
-       anything?" without opening the panel. */
-    capabilities: {
-      ai_provider: String(env.AI_PROVIDER || '').trim() && String(env.AI_API_KEY || '').trim() ? env.AI_PROVIDER : '',
-      publish_guard: String(env.PUBLISH_GUARD_MODE || 'dry_run')
-    }
+    autopilot: policy ? { policy: policy.policy, platforms: policy.platforms } : null
   });
   if (decision.ignored === 'not_owner') {
     await audit(db, 'system', 'telegram_command_ignored', 'telegram', String(chatId), { command: base });
@@ -2523,8 +2531,15 @@ async function telegramControlCommand(env, db, chatId, text) {
     /* The worker has no handle on the autopilot loop, so it leaves a short-lived
        request that the loop consumes on its next wake-up. Nothing pretends the
        cycle already ran. */
+    const ready = await automationBlocked(env, db);
     await requestTick(db, 'owner_telegram');
-    await audit(db, 'owner_telegram', 'autopilot_tick_requested', 'setting', 'autopilot_force_tick', {});
+    await audit(db, 'owner_telegram', 'autopilot_tick_requested', 'setting', 'autopilot_force_tick', { blocked: ready.reason || '' });
+    if (ready.reason) {
+      /* Saying "the next cycle will run" while the policy is off is the kind of
+         half-truth that makes the owner wait sixty seconds for nothing. */
+      await tgRequest(env, 'sendMessage', { chat_id: chatId, text: `${decision.reply}\n\nولی چرخه محتوایی نمی‌سازد: ${ready.reason}` });
+      return { ok: true, command: base, action: decision.action, blocked: ready.reason };
+    }
   }
   if (decision.action === 'wake') await audit(db, 'owner_telegram', 'wake_requested', 'telegram', String(chatId), {});
   await tgRequest(env, 'sendMessage', { chat_id: chatId, text: decision.reply });
@@ -2534,13 +2549,30 @@ async function telegramControlCommand(env, db, chatId, text) {
 async function telegramCommand(env, db, chatId, text) {
   const command = String(text || '').trim().split(/\s+/)[0].toLowerCase();
   if (command === '/status') {
-    const [pending, content, jobs, usage] = await Promise.all([
+    const [pending, content, jobs, usage, policy] = await Promise.all([
       dbFirst(db, "SELECT COUNT(*) AS n FROM gate_decisions WHERE status='PENDING'"),
       dbFirst(db, "SELECT COUNT(*) AS n FROM content_items WHERE state NOT IN ('PUBLISHED','REJECTED')"),
       dbFirst(db, "SELECT COUNT(*) AS n FROM publish_jobs WHERE status IN ('SCHEDULED','RETRY','QUEUED_LIMIT','POLLING_CONTAINER')"),
-      usageFor(db, dateKeyUTC(), 'global')
+      usageFor(db, dateKeyUTC(), 'global'),
+      getSetting(db, 'autopilot', null)
     ]);
-    return await tgRequest(env, 'sendMessage', { chat_id: chatId, text: `وضعیت نسرا اصفهان\nگیت در انتظار: ${pending?.n || 0}\nمحتوای فعال: ${content?.n || 0}\nکار انتشار در صف: ${jobs?.n || 0}\nمصرف تخمینی توکن امروز: ${usage.total_tokens || 0}` });
+    /* "It says 0 everywhere" is useless without the two settings that explain it:
+       an off autopilot and a missing model both look exactly like this. */
+    const policyLine = !policy ? 'تنظیم نشده' : `${policy.policy || 'off'}${policy.enabled ? '' : ' (غیرفعال)'}`;
+    const aiLine = String(env.AI_PROVIDER || '').trim() && String(env.AI_API_KEY || '').trim()
+      ? `وصل (${String(env.AI_PROVIDER).slice(0, 24)})`
+      : 'وصل نیست — محتوایی ساخته نمی‌شود';
+    const lines = [
+      'وضعیت نسرا اصفهان',
+      `اتوپایلوت: ${policyLine}`,
+      `هوش مصنوعی متن: ${aiLine}`,
+      `گارد انتشار: ${String(env.PUBLISH_GUARD_MODE || 'dry_run')}`,
+      `گیت در انتظار: ${pending?.n || 0}`,
+      `محتوای فعال: ${content?.n || 0}`,
+      `کار انتشار در صف: ${jobs?.n || 0}`,
+      `مصرف تخمینی توکن امروز: ${usage.total_tokens || 0}`
+    ];
+    return await tgRequest(env, 'sendMessage', { chat_id: chatId, text: lines.join('\n') });
   }
   if (command === '/today') {
     const rows = await dbAll(db, 'SELECT platform,scheduled_jalali,status FROM publish_jobs WHERE scheduled_jalali LIKE ? ORDER BY scheduled_at_utc LIMIT 30', [`${utcToJalali().date}%`]);

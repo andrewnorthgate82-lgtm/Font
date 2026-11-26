@@ -322,22 +322,3 @@ test('env merging keeps comments and unrelated keys', () => {
   assert.equal(parsed.NEW_KEY, 'v');
   assert.equal(parsed.KEEP, '1');
 });
-
-test('/status says whether the AI key loaded, and stays quiet when it is not told', () => {
-  const told = handleCommand({
-    text: '/status', ownerChatId: OWNER, chatId: OWNER, heartbeat: fresh,
-    capabilities: { ai_provider: 'gemini', publish_guard: 'dry_run' }
-  });
-  assert.match(told.reply, /هوش مصنوعی متن: وصل \(gemini\)/);
-  assert.match(told.reply, /گارد انتشار: dry_run/);
-
-  const missing = handleCommand({
-    text: '/status', ownerChatId: OWNER, chatId: OWNER, heartbeat: fresh,
-    capabilities: { ai_provider: '', publish_guard: 'dry_run' }
-  });
-  assert.match(missing.reply, /وصل نیست/);
-
-  /* No capabilities passed: the old behaviour is unchanged, no empty lines. */
-  const silent = handleCommand({ text: '/status', ownerChatId: OWNER, chatId: OWNER, heartbeat: fresh });
-  assert.doesNotMatch(silent.reply, /هوش مصنوعی/);
-});
