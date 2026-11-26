@@ -11,6 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { openSqliteD1 } from '../server/d1-sqlite.mjs';
+import worker from '../worker.js';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const SCHEMA = path.join(ROOT, 'schema.sql');
@@ -100,4 +101,113 @@ test('the daily slot hunts trends only when a trend source is on', async () => {
   assert.match(block, /agentId: 'trend_hunter'/, 'the daily slot asks the trend question');
   assert.match(block, /source_type='trend'/, 'and only when a trend source is enabled');
   assert.match(block, /if \(asInt\(trendSources\?\.n, 0\) > 0\)/, 'guarded by the count, not called blindly');
+});
+
+/* ------------------------------------------------- Google Trends, end to end */
+
+
+/* Authenticate against the worker the way the panel does, and keep the cookie
+   plus the CSRF token the mutating routes require. */
+async function signedIn(db, env) {
+  const login = await worker.fetch(new Request('http://localhost/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: env.OWNER_PASSWORD })
+  }), env, {});
+  const body = await login.json();
+  if (login.status !== 200) throw new Error(`login failed: ${login.status} ${JSON.stringify(body)}`);
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  return { cookie, csrf: body.csrf_token };
+}
+
+const GOOGLE_FEED = `<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:ht="https://trends.google.com/trending/rss" version="2.0">
+  <channel>
+    <title>Daily Search Trends</title>
+    <item>
+      <title>سواد رسانه‌ای</title>
+      <ht:approx_traffic>20000+</ht:approx_traffic>
+      <pubDate>Thu, 06 Nov 2026 06:00:00 +0000</pubDate>
+      <description>Searches spiked after a news report.</description>
+    </item>
+    <item>
+      <title>کلاس عکاسی اصفهان</title>
+      <ht:approx_traffic>5000+</ht:approx_traffic>
+      <pubDate>Thu, 06 Nov 2026 05:00:00 +0000</pubDate>
+      <description>Steady rise this week.</description>
+    </item>
+    <item>
+      <title>بدون حجم جستجو</title>
+      <pubDate>Thu, 06 Nov 2026 04:00:00 +0000</pubDate>
+      <description>No volume element at all.</description>
+    </item>
+  </channel>
+</rss>`;
+
+test('a Google Trends feed becomes items with the publisher\'s own search volume', async () => {
+  const db = freshDb();
+  const env = { DB: db, OWNER_PASSWORD: 'trend-test-password', SESSION_SECRET: 'z'.repeat(40), TG_BOT_TOKEN: '', TG_OWNER_CHAT_ID: '' };
+  /* The feed is served locally: the parser, not the internet, is what is tested. */
+  const realFetch = globalThis.fetch;
+  const requested = [];
+  globalThis.fetch = async (target, init) => {
+    const url = String(target);
+    requested.push(url);
+    if (url.includes('trends.google.com')) {
+      return new Response(GOOGLE_FEED, { status: 200, headers: { 'Content-Type': 'application/rss+xml' } });
+    }
+    return realFetch(target, init);
+  };
+  try {
+    await db.prepare("UPDATE sources SET enabled=1 WHERE id='src_template_gtrends_ir'").run();
+    const ctx = {};
+    const { cookie, csrf } = await signedIn(db, env);
+    const fetchRoute = () => worker.fetch(new Request('http://localhost/api/sources/fetch', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', cookie, 'X-CSRF-Token': csrf }, body: '{}'
+    }), env, ctx);
+    const response = await fetchRoute();
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    const summary = payload.data.find(x => x.source_id === 'src_template_gtrends_ir');
+    assert.equal(summary.ok, true, JSON.stringify(payload.data));
+    assert.equal(summary.imported, 3);
+
+    const rows = await db.prepare("SELECT title,engagement_json,pillar_hint FROM source_items WHERE source_id='src_template_gtrends_ir' ORDER BY title").all();
+    const items = rows.results || rows;
+    const byTitle = Object.fromEntries(items.map(r => [r.title, r]));
+    assert.equal(JSON.parse(byTitle['سواد رسانه‌ای'].engagement_json).approx_traffic, '20000+', 'the publisher number is kept verbatim');
+    assert.equal(JSON.parse(byTitle['کلاس عکاسی اصفهان'].engagement_json).approx_traffic, '5000+');
+    assert.deepEqual(JSON.parse(byTitle['بدون حجم جستجو'].engagement_json), {}, 'no volume stays unknown, never zero');
+    assert.equal(byTitle['سواد رسانه‌ای'].pillar_hint, 'ترند روز');
+
+    /* fetching twice must not duplicate */
+    await fetchRoute();
+    const again = await db.prepare("SELECT COUNT(*) AS n FROM source_items WHERE source_id='src_template_gtrends_ir'").first();
+    assert.equal(again.n, 3, 'the same feed does not insert duplicates');
+  } finally {
+    globalThis.fetch = realFetch;
+    db.close();
+  }
+});
+
+test('a private or localhost feed address is refused before any request', async () => {
+  const db = freshDb();
+  const env = { DB: db, OWNER_PASSWORD: 'trend-test-password', SESSION_SECRET: 'z'.repeat(40) };
+  const realFetch = globalThis.fetch;
+  let called = false;
+  globalThis.fetch = async () => { called = true; return new Response('nope'); };
+  try {
+    await db.prepare("UPDATE sources SET enabled=1, identifier='http://127.0.0.1:8787/feed' WHERE id='src_template_gtrends_ir'").run();
+    const { cookie, csrf } = await signedIn(db, env);
+    const response = await worker.fetch(new Request('http://localhost/api/sources/fetch', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', cookie, 'X-CSRF-Token': csrf }, body: '{}'
+    }), env, {});
+    const payload = await response.json();
+    assert.equal(payload.data[0].ok, false);
+    assert.equal(payload.data[0].error, 'invalid_or_private_feed_url');
+    assert.equal(called, false, 'SSRF guard runs before the fetch');
+  } finally {
+    globalThis.fetch = realFetch;
+    db.close();
+  }
 });

@@ -260,6 +260,15 @@ async function sourcesPage() {
     $('#source-trend-feed')?.addEventListener('click', async event => {
       event.target.disabled = true;
       try {
+        /* The Google Trends template ships switched off so nothing touches the
+           network on its own. Pressing this button IS the owner saying yes, so
+           turn the template on here instead of sending them hunting for a
+           checkbox — one press, then the volume numbers arrive. */
+        const ready = sources.find(s => s.enabled && String(s.identifier || '').trim() && ['trend', 'rss'].includes(s.source_type));
+        if (!ready) {
+          const template = sources.find(s => s.id === 'src_template_gtrends_ir');
+          if (template) await api(`/api/sources/${encodeURIComponent(template.id)}`, { method: 'PUT', body: { enabled: true } });
+        }
         const result = await api('/api/sources/fetch', { method: 'POST', body: {} });
         const list = result.data || [];
         const trends = list.filter(x => x.ok && Number(x.imported) > 0);
