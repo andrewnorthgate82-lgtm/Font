@@ -1,4 +1,4 @@
-import { api, state, navigate, renderRoute, toast, showError, errorText, openModal, closeModal, copy, downloadBlob, apiBlob, parse, pretty, escapeHtml, faDigits, formatJalali, utcToJalali, relativeTime, badge, stateBadge, statusBadge, stateName, jobStatusName, platformName, notice, empty, formData, checked, confirmExternal, countdownText, refreshApprovalCount } from './app.js?v=20261105-copy-fallback';
+import { api, state, navigate, renderRoute, toast, showError, errorText, uploadMedia, openModal, closeModal, copy, downloadBlob, apiBlob, parse, pretty, escapeHtml, faDigits, formatJalali, utcToJalali, relativeTime, badge, stateBadge, statusBadge, stateName, jobStatusName, platformName, notice, empty, formData, checked, confirmExternal, countdownText, refreshApprovalCount } from './app.js?v=20261122-autopilot';
 import { monthNames, monthGrid, shiftMonth, jalaliString, todayJalali, gregorianToJalali } from './jalali.js';
 import { captionCheck, carouselCheck, imageCheck, reelCheck, storyCheck, mediaKind, mediaUrl, extensionOf, validHttps } from './validators.js';
 import { sanitizeSvg, svgToJpeg, downloadText } from './svg-export.js';
@@ -149,7 +149,7 @@ async function contentPage(id) {
   const editorial = parse(c.editorial_json, {}) || {}; const script = parse(c.script_json, {}) || {};
   const versions = d.versions || [];
   const html = `${intro(c.title, `${format(c.selected_format)} · ${stateName(c.state)} · نسخه ${faDigits(c.current_version)}`, '<button class="btn ghost" data-route-link="pipeline">بازگشت به کانبان</button><button class="btn primary" id="content-rerun">اجرای دوباره Agent</button>')}${stageTimeline(c)}${c.state === 'FACTCHECK_FAIL' ? notice('راستی‌آزمایی pass نشده است؛ تولید و تأیید گیت ۲ متوقف شده‌اند. سناریو/منابع را اصلاح کنید و از «اجرای دوباره Agent» گزینه سناریونویس را اجرا کنید.', 'danger') : ''}${pendingGate ? gateForm(c, pendingGate) : ''}
-    <div class="grid two" style="margin-top:16px"><div>${card('وضعیت و رسانه', `<div class="row" style="margin-bottom:12px">${stateBadge(c.state)}${badge(`نسخه ${faDigits(c.current_version)}`, 'info')}</div><p class="small muted">آخرین تغییر: ${formatJalali(c.updated_at)}</p>${mediaList(c)}${['CALENDAR', 'SCHEDULED'].includes(c.state) ? `<form id="schedule-form" class="stack" style="margin-top:15px"><label>زمان تأییدشده مالک (جلالی، تهران)<input name="scheduled_jalali" required dir="ltr" value="${escapeHtml(faDigits(c.scheduled_jalali || formatJalali(c.scheduled_at_utc)))}" placeholder="۱۴۰۵/۰۸/۱۳ ۲۱:۰۰"><span class="help">این زمان صریح مالک بر پیشنهاد مدل و fallback تقویم اولویت دارد. بدون Insights، مدل به‌تنهایی زمان تعیین نمی‌کند.</span></label><button class="btn primary small-btn" type="submit">ذخیره زمان مالک</button></form>` : ''}${['MEDIA_PENDING', 'PRODUCTION'].includes(c.state) ? `<form id="media-form" class="stack" style="margin-top:15px"><label>لینک فایل‌های نهایی (هر خط یک HTTPS)<textarea name="urls" required placeholder="https://drive.google.com/...\nhttps://.../poster.jpg">${(parse(c.media_links_json, []) || []).map(mediaUrl).join('\n')}</textarea><span class="help">برای کروسل ۲ تا ۱۰ لینک JPEG؛ برای ریلز لینک MP4/MOV. فایل روی Drive/Dropbox یا هاست شما می‌ماند.</span></label><label>فراداده اختیاری JSON (برای اعتبارسنجی دقیق)<textarea name="metadata" placeholder='[{"width":1080,"height":1350,"format":"jpg"}]'></textarea></label><button class="btn primary" type="submit">ثبت لینک و ادامه به تحریریه</button></form>` : ''}`)}</div><div>${card('کپشن و بسته تحریریه', editorial.caption ? `<div class="inbox-text">${escapeHtml(editorial.caption)}</div><div class="row" style="margin:9px 0">${(editorial.hashtags || []).map(h => badge(h, 'info')).join('')}</div><p class="small"><strong>Alt Text:</strong> ${escapeHtml(editorial.alt_text || '—')}</p><p class="small"><strong>CTA:</strong> ${escapeHtml(editorial.cta || '—')}</p><button class="btn ghost small-btn" id="copy-caption">کپی کپشن</button>` : empty('کپشن هنوز ساخته نشده است'))}</div></div>
+    <div class="grid two" style="margin-top:16px"><div>${card('وضعیت و رسانه', `<div class="row" style="margin-bottom:12px">${stateBadge(c.state)}${badge(`نسخه ${faDigits(c.current_version)}`, 'info')}</div><p class="small muted">آخرین تغییر: ${formatJalali(c.updated_at)}</p>${mediaList(c)}${['CALENDAR', 'SCHEDULED'].includes(c.state) ? `<form id="schedule-form" class="stack" style="margin-top:15px"><label>زمان تأییدشده مالک (جلالی، تهران)<input name="scheduled_jalali" required dir="ltr" value="${escapeHtml(faDigits(c.scheduled_jalali || formatJalali(c.scheduled_at_utc)))}" placeholder="۱۴۰۵/۰۸/۱۳ ۲۱:۰۰"><span class="help">این زمان صریح مالک بر پیشنهاد مدل و fallback تقویم اولویت دارد. بدون Insights، مدل به‌تنهایی زمان تعیین نمی‌کند.</span></label><button class="btn primary small-btn" type="submit">ذخیره زمان مالک</button></form>` : ''}${['MEDIA_PENDING', 'PRODUCTION'].includes(c.state) ? `<div class="notice warn" style="margin-top:12px"><strong>این بسته اینجا متوقف است تا رسانه بدهید.</strong><br>ماشین بدون تصویر/ویدیو جلو نمی‌رود — این تنها جایی است که تولید خودکار متوقف می‌شود.</div><div class="card" style="margin-top:12px;padding:14px"><strong>آپلود از لپ‌تاپ خودتان</strong><p class="small muted" style="margin:6px 0">فایل را انتخاب کنید؛ مستقیم در همین برنامه ذخیره می‌شود و هنگام انتشار برای تلگرام فرستاده می‌شود. نیازی به Drive یا لینک عمومی نیست.</p><form id="media-upload-form" class="stack"><label>فایل (jpg، png، webp، mp4، mov — حداکثر ۲۰ مگابایت)<input type="file" name="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime" required></label><div id="media-upload-progress" class="small muted"></div><div class="form-actions"><button class="btn primary" type="submit">آپلود و ادامه</button></div></form></div><details style="margin-top:12px"><summary class="small muted">یا لینک عمومی HTTPS بدهید (Drive، هاست خودتان)</summary><form id="media-form" class="stack" style="margin-top:15px"><label>لینک فایل‌های نهایی (هر خط یک HTTPS)<textarea name="urls" required placeholder="https://drive.google.com/...\nhttps://.../poster.jpg">${(parse(c.media_links_json, []) || []).map(mediaUrl).join('\n')}</textarea><span class="help">برای کروسل ۲ تا ۱۰ لینک JPEG؛ برای ریلز لینک MP4/MOV. فایل روی Drive/Dropbox یا هاست شما می‌ماند.</span></label><label>فراداده اختیاری JSON (برای اعتبارسنجی دقیق)<textarea name="metadata" placeholder='[{"width":1080,"height":1350,"format":"jpg"}]'></textarea></label><button class="btn primary" type="submit">ثبت لینک و ادامه به تحریریه</button></form></details>` : ''}`)}</div><div>${card('کپشن و بسته تحریریه', editorial.caption ? `<div class="inbox-text">${escapeHtml(editorial.caption)}</div><div class="row" style="margin:9px 0">${(editorial.hashtags || []).map(h => badge(h, 'info')).join('')}</div><p class="small"><strong>Alt Text:</strong> ${escapeHtml(editorial.alt_text || '—')}</p><p class="small"><strong>CTA:</strong> ${escapeHtml(editorial.cta || '—')}</p><button class="btn ghost small-btn" id="copy-caption">کپی کپشن</button>` : empty('کپشن هنوز ساخته نشده است'))}</div></div>
     <div style="margin-top:16px">${card('سناریو و راستی‌آزمایی', `<div class="tabs"><button class="tab active" data-content-tab="script">سناریو</button><button class="tab" data-content-tab="fact">راستی‌آزمایی</button><button class="tab" data-content-tab="ideation">ایده‌ها</button><button class="tab" data-content-tab="tech">بررسی فنی</button></div><div id="content-tab-script">${scriptView(c, script)}</div><div id="content-tab-fact" class="hidden">${factSummary(parse(c.fact_check_json, {}))}<pre class="json-box">${pretty(parse(c.fact_check_json, {}))}</pre></div><div id="content-tab-ideation" class="hidden"><pre class="json-box">${pretty(parse(c.ideation_json, {}))}</pre></div><div id="content-tab-tech" class="hidden"><pre class="json-box">${pretty(parse(c.tech_check_json, {}))}</pre><pre class="json-box">${pretty(parse(c.validator_report_json, {}))}</pre></div>`)}</div>
     <div style="margin-top:16px">${productionView(c)}</div>
     <div class="grid two" style="margin-top:16px"><div>${card('نسخه‌ها و Diff', versions.length ? versions.map((v, i) => `<div class="version-card"><div class="spread"><strong>نسخه ${faDigits(v.version)} · ${escapeHtml(v.stage)}</strong><button class="btn ghost small-btn" data-version-diff="${i}">مقایسه</button></div><div class="small muted">${formatJalali(v.created_at)} ${v.feedback_note ? `· ${escapeHtml(v.feedback_note)}` : ''}</div></div>`).join('') : empty('نسخه‌ای ثبت نشده است'))}</div><div>${card('مسیرهای انتشار', d.publish_jobs?.length ? `<div class="list">${d.publish_jobs.map(j => `<div class="list-item spread"><div><strong>${platformName(j.platform)}</strong><div class="small muted">${formatJalali(j.scheduled_at_utc)}</div></div>${statusBadge(j.status)}</div>`).join('')}</div>` : empty('پس از تأیید گیت ۳، مسیر انتشار ساخته می‌شود'), '<button class="btn ghost small-btn" data-route-link="publish">مرکز انتشار</button>')}</div></div>
@@ -165,6 +165,23 @@ async function contentPage(id) {
     $$('[data-svg-source]').forEach(button => button.addEventListener('click', () => downloadText(sanitizeSvg(svgRegistry.get(button.dataset.svgSource)), `${c.id}.svg`, 'image/svg+xml;charset=utf-8')));
     $$('[data-version-diff]').forEach(button => button.addEventListener('click', () => { const index = Number(button.dataset.versionDiff); const current = versions[index]; const previous = versions[index + 1] || { snapshot_json: '{}' }; openModal(`Diff نسخه ${faDigits(current.version)}`, `<pre class="json-box" style="max-height:65vh">${diffLines(JSON.stringify(parse(previous.snapshot_json, {}), null, 2), JSON.stringify(parse(current.snapshot_json, {}), null, 2))}</pre>`, true); }));
     $('#schedule-form')?.addEventListener('submit', async event => { event.preventDefault(); try { await api(`/api/content/${encodeURIComponent(c.id)}/schedule`, { method: 'POST', body: { scheduled_jalali: event.target.scheduled_jalali.value } }); toast('زمان مالک ذخیره شد', 'success'); await renderRoute(); } catch (e) { showError(e); } });
+    $('#media-upload-form')?.addEventListener('submit', async event => {
+      event.preventDefault();
+      const form = event.target;
+      const file = form.file.files?.[0];
+      if (!file) { toast('اول یک فایل انتخاب کنید', 'error'); return; }
+      const button = form.querySelector('button');
+      const progress = $('#media-upload-progress');
+      button.disabled = true;
+      if (progress) progress.textContent = `در حال آپلود ${Math.round(file.size / 1024)} کیلوبایت…`;
+      try {
+        const link = await uploadMedia(file, c.title || '');
+        const existing = (parse(c.media_links_json, []) || []).filter(x => x && x.url);
+        await api(`/api/content/${encodeURIComponent(c.id)}/media`, { method: 'POST', body: { media_links: [...existing, link] } });
+        toast('فایل آپلود شد؛ تحریریه در حال اجرا است', 'success');
+        await renderRoute();
+      } catch (e) { showError(e); } finally { button.disabled = false; if (progress) progress.textContent = ''; }
+    });
     $('#media-form')?.addEventListener('submit', async event => { event.preventDefault(); const form = event.target; const urls = form.urls.value.split(/\n+/).map(x => x.trim()).filter(Boolean); let metadata = []; try { metadata = form.metadata.value.trim() ? JSON.parse(form.metadata.value) : []; } catch { toast('فراداده JSON معتبر نیست', 'error'); return; } const links = urls.map((url, i) => ({ url, ...(metadata[i] || {}), kind: metadata[i]?.kind || (/\.(mp4|mov)(?:[?#]|$)/i.test(url) ? 'video' : 'image'), format: metadata[i]?.format || extensionOf(url) })); try { await api(`/api/content/${encodeURIComponent(c.id)}/media`, { method: 'POST', body: { media_links: links } }); toast('لینک‌ها ثبت شد؛ تحریریه در حال اجرا است', 'success'); await renderRoute(); } catch (e) { showError(e); } });
   });
 }
@@ -188,7 +205,7 @@ async function calendarPage() {
 }
 
 function sourceForm(source = {}) {
-  return `<form id="source-edit-form" class="stack"><input type="hidden" name="id" value="${escapeHtml(source.id || '')}"><label>نام منبع<input name="title" required value="${escapeHtml(source.title || '')}" placeholder="مثلاً: گزارش کارگاه سوادرسانه"></label><div class="form-grid"><label>نوع<select name="source_type"><option value="manual">یادداشت/ورودی دستی</option><option value="telegram_channel">کانال تلگرامی</option><option value="rss">RSS رسمی</option><option value="url">لینک وب‌سایت</option></select></label><label>سطح اعتماد<select name="trust_tier"><option>داخلی</option><option>بررسی‌شده</option><option>رسمی</option><option>نیازمند بررسی</option></select></label></div><label>شناسه یا آدرس (بدون ساختن URL)<input name="identifier" dir="ltr" value="${escapeHtml(source.identifier || '')}" placeholder="@channel یا https://..."></label><label>قاعده اعتبار/ذکر منبع<input name="credit_rule" value="${escapeHtml(source.credit_rule || '')}"></label><label>مجوز بازنشر<input name="reuse_permission" value="${escapeHtml(source.reuse_permission || '')}"></label><label>یادداشت<textarea name="notes">${escapeHtml(source.notes || '')}</textarea></label><label class="check-label"><input type="checkbox" name="enabled" ${source.enabled === 0 ? '' : 'checked'}> فعال و وارد context سوژه‌یاب شود</label><div class="form-actions"><button type="button" class="btn ghost" data-close-modal>انصراف</button><button class="btn primary" type="submit">ذخیره منبع</button></div></form>`;
+  return `<form id="source-edit-form" class="stack"><input type="hidden" name="id" value="${escapeHtml(source.id || '')}"><label>نام منبع<input name="title" required value="${escapeHtml(source.title || '')}" placeholder="مثلاً: گزارش کارگاه سوادرسانه"></label><div class="form-grid"><label>نوع<select name="source_type"><option value="manual">یادداشت/ورودی دستی</option><option value="telegram_channel">کانال تلگرامی</option><option value="rss">RSS رسمی</option><option value="trend">ترند (گوگل ترندز / اینستاگرام / تیک‌تاک / پینترست)</option><option value="url">لینک وب‌سایت</option></select></label><label>سطح اعتماد<select name="trust_tier"><option>داخلی</option><option>بررسی‌شده</option><option>رسمی</option><option>نیازمند بررسی</option></select></label></div><label>شناسه یا آدرس (بدون ساختن URL)<input name="identifier" dir="ltr" value="${escapeHtml(source.identifier || '')}" placeholder="@channel یا https://..."></label><label>قاعده اعتبار/ذکر منبع<input name="credit_rule" value="${escapeHtml(source.credit_rule || '')}"></label><label>مجوز بازنشر<input name="reuse_permission" value="${escapeHtml(source.reuse_permission || '')}"></label><label>یادداشت<textarea name="notes">${escapeHtml(source.notes || '')}</textarea></label><label class="check-label"><input type="checkbox" name="enabled" ${source.enabled === 0 ? '' : 'checked'}> فعال و وارد context سوژه‌یاب شود</label><div class="form-actions"><button type="button" class="btn ghost" data-close-modal>انصراف</button><button class="btn primary" type="submit">ذخیره منبع</button></div></form>`;
 }
 function bindSourceForm(source = null) {
   const editForm = $('#source-edit-form');
@@ -197,13 +214,80 @@ function bindSourceForm(source = null) {
 }
 async function sourcesPage() {
   const r = await api('/api/sources'); const sources = r.data || []; const items = r.items || [];
-  const html = `${intro('منابع و اعتبار محتوا', 'هیچ URL واقعی ساخته نشده است. متن خارجی پیش از ورود به Agent داخل <untrusted> قرار می‌گیرد و فقط «داده» است.', '<button class="btn primary" id="source-new">＋ منبع جدید</button><button class="btn ghost" id="source-fetch-rss">خواندن RSSهای فعال</button>')}${notice('کانال تلگرامی گزارش کلاس‌ها و کارگاه‌های موجود شما می‌تواند به‌عنوان منبع داخلی اضافه شود. قالب خام زیر عمداً بدون آدرس است؛ شناسه کانال یا متن گزارش‌ها را خودتان وارد کنید.', 'info')}<div class="grid two" style="margin-top:16px"><div>${card('کتابخانه منابع', sources.length ? sources.map(s => `<div class="list-item"><div class="spread"><div><strong>${escapeHtml(s.title)}</strong><div class="small muted">${escapeHtml(s.source_type)} · ${escapeHtml(s.trust_tier)} · ${s.enabled ? 'فعال' : 'غیرفعال'}</div></div><button class="btn ghost small-btn" data-source-edit="${escapeHtml(s.id)}">ویرایش</button></div>${s.identifier ? `<p class="small ltr">${escapeHtml(s.identifier)}</p>` : '<p class="small muted">بدون شناسه — قالب خام</p>'}<p class="small">${escapeHtml(s.credit_rule || '')}</p><p class="small muted">${escapeHtml(s.reuse_permission || '')}</p>${s.notes ? `<p class="small">${escapeHtml(s.notes)}</p>` : ''}<form class="row" data-source-item-form="${escapeHtml(s.id)}"><input name="title" placeholder="عنوان آیتم/گزارش" required style="flex:1;min-width:150px"><input name="raw_text" placeholder="متن خام برای سوژه‌یابی" required style="flex:2;min-width:200px"><button class="btn subtle small-btn" type="submit">افزودن آیتم</button></form></div>`).join('') : empty('منبعی ثبت نشده است'))}</div><div>${card('آخرین آیتم‌های منبع', items.length ? `<div class="list">${items.map(i => `<div class="list-item"><strong>${escapeHtml(i.title)}</strong><div class="small muted">${formatJalali(i.created_at)} · ${escapeHtml(i.pillar_hint || 'بدون ستون')}</div></div>`).join('')}</div>` : empty('آیتمی وجود ندارد', 'متن RSS یا گزارش کانال را از فرم هر منبع اضافه کنید.'), '<button class="btn ghost small-btn" id="source-run-trend">اجرای trend_scout</button>')}</div></div>`;
+  const html = `${intro('منابع و اعتبار محتوا', 'هیچ URL واقعی ساخته نشده است. متن خارجی پیش از ورود به Agent داخل <untrusted> قرار می‌گیرد و فقط «داده» است.', '<button class="btn primary" id="source-new">＋ منبع جدید</button><button class="btn ghost" id="source-fetch-rss">خواندن RSSهای فعال</button>')}${card('ترند روز — منبع ایده‌های شما', `<div class="stack small"><p>اینجا «ترند» را از «خبر» جدا می‌کنیم. ترند یعنی چیزی که در اینستاگرام، تیک‌تاک، پینترست یا اکس <strong>عدد واقعی بازدید</strong> گرفته است.</p><div class="row"><button class="btn primary small-btn" id="source-trend-hunt">شکار ترند امروز</button><button class="btn ghost small-btn" id="source-trend-feed">خواندن گوگل ترندز</button><button class="btn ghost small-btn" id="source-trend-new">＋ منبع ترند</button></div><p class="muted">«شکار ترند» فقط آیتم‌های «ترندی که خودتان دیده‌اید» را می‌خواند و فرصت محتوا می‌سازد. برای گوگل ترندز، منبع قالب «گوگل ترندز ایران» را ویرایش کنید و «فعال» را روشن کنید.</p><p class="muted">⚠️ هیچ عددی ساخته نمی‌شود: اگر بازدید را ننویسید، عامل هوش مصنوعی می‌نویسد «عدد در دسترس نبود» و آن آیتم را «وایرال» نمی‌نامد.</p></div>`)}${notice('سوژه‌یاب بدون منبع هم کار می‌کند و از دانش عمومی پیشنهاد می‌دهد؛ ولی چنین سوژه‌ای «بدون منبع» ثبت می‌شود و اگر گزینهٔ «بدون منبع تأییدشده تأیید نشود» در اتوپایلوت روشن باشد، تا وقتی منبع اضافه نکنید جلوتر نمی‌رود. برای محتوای خبری، اول یک منبع اضافه کنید.', 'info')}<div class="grid two" style="margin-top:16px"><div>${card('کتابخانه منابع', sources.length ? sources.map(s => `<div class="list-item"><div class="spread"><div><strong>${escapeHtml(s.title)}</strong><div class="small muted">${escapeHtml(s.source_type)} · ${escapeHtml(s.trust_tier)} · ${s.enabled ? 'فعال' : 'غیرفعال'}</div></div><button class="btn ghost small-btn" data-source-edit="${escapeHtml(s.id)}">ویرایش</button></div>${s.identifier ? `<p class="small ltr">${escapeHtml(s.identifier)}</p>` : '<p class="small muted">بدون شناسه — قالب خام</p>'}<p class="small">${escapeHtml(s.credit_rule || '')}</p><p class="small muted">${escapeHtml(s.reuse_permission || '')}</p>${s.notes ? `<p class="small">${escapeHtml(s.notes)}</p>` : ''}<form class="row" data-source-item-form="${escapeHtml(s.id)}"><input name="title" placeholder="عنوان آیتم/گزارش" required style="flex:1;min-width:150px"><input name="raw_text" placeholder="متن خام برای سوژه‌یابی" required style="flex:2;min-width:200px">${s.source_type === 'trend' ? '<input name="engagement_views" placeholder="بازدید (عدد واقعی، مثلاً 120000 یا 1.2M)" dir="ltr" style="width:190px"><input name="engagement_likes" placeholder="لایک" dir="ltr" style="width:110px">' : ''}<button class="btn subtle small-btn" type="submit">افزودن آیتم</button></form></div>`).join('') : empty('منبعی ثبت نشده است'))}</div><div>${card('آخرین آیتم‌های منبع', items.length ? `<div class="list">${items.map(i => `<div class="list-item"><strong>${escapeHtml(i.title)}</strong><div class="small muted">${formatJalali(i.created_at)} · ${escapeHtml(i.pillar_hint || 'بدون ستون')}</div></div>`).join('')}</div>` : empty('آیتمی وجود ندارد', 'متن یک گزارش یا خبر را از کادر «افزودن آیتم» زیر هر منبع وارد کنید. برای خواندن خودکار، یک منبع با نوع «RSS رسمی» بسازید و بعد دکمهٔ «خواندن RSSهای فعال» را بزنید.'), '<button class="btn ghost small-btn" id="source-run-trend">اجرای trend_scout</button>')}</div></div>`;
   return page(html, () => {
     $('#source-new')?.addEventListener('click', () => { openModal('منبع جدید', sourceForm()); bindSourceForm(); });
-    $('#source-fetch-rss')?.addEventListener('click', async event => { event.target.disabled = true; try { const result = await api('/api/sources/fetch', { method: 'POST', body: {} }); const imported = result.data.reduce((n, x) => n + Number(x.imported || 0), 0); toast(`خواندن RSS تمام شد؛ ${number(imported)} آیتم تازه`, 'success'); await renderRoute(); } catch (e) { showError(e); } finally { event.target.disabled = false; } });
+    $('#source-fetch-rss')?.addEventListener('click', async event => {
+      event.target.disabled = true;
+      try {
+        const result = await api('/api/sources/fetch', { method: 'POST', body: {} });
+        const list = result.data || [];
+        const imported = list.reduce((n, x) => n + Number(x.imported || 0), 0);
+        /* "0 items" is not a success when every feed failed: say which one failed
+           and why, otherwise the owner keeps pressing the button. */
+        const failed = list.filter(x => x.ok === false);
+        if (!list.length) toast('هیچ منبع RSS فعالی نیست. اول یک منبع با نوع «RSS رسمی» بسازید.', 'error');
+        else if (failed.length) toast(`خواندن RSS ناموفق: ${failed.map(x => x.error || 'خطای نامشخص').join(' · ')}. آیتم تازه: ${number(imported)}`, 'error');
+        else toast(`خواندن RSS تمام شد؛ ${number(imported)} آیتم تازه`, 'success');
+        await renderRoute();
+      } catch (e) { showError(e); } finally { event.target.disabled = false; }
+    });
     $$('[data-source-edit]').forEach(b => b.addEventListener('click', () => { const source = sources.find(s => s.id === b.dataset.sourceEdit); openModal('ویرایش منبع', sourceForm(source)); bindSourceForm(source); }));
-    $$('[data-source-item-form]').forEach(form => form.addEventListener('submit', async event => { event.preventDefault(); const data = formData(form); try { await api(`/api/sources/${encodeURIComponent(form.dataset.sourceItemForm)}/items`, { method: 'POST', body: data }); toast('آیتم منبع اضافه شد', 'success'); await renderRoute(); } catch (e) { showError(e); } }));
-    $('#source-run-trend')?.addEventListener('click', async () => { try { await api('/api/topics/run', { method: 'POST', body: {} }); toast('سوژه‌یابی شروع شد', 'success'); } catch (e) { showError(e); } });
+    $$('[data-source-item-form]').forEach(form => form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const data = formData(form);
+      /* Numbers the owner typed beat anything a model could guess, so they travel
+         as structured engagement rather than being buried in the raw text. */
+      const engagement = {};
+      if (data.engagement_views) engagement.views = data.engagement_views;
+      if (data.engagement_likes) engagement.likes = data.engagement_likes;
+      delete data.engagement_views; delete data.engagement_likes;
+      if (Object.keys(engagement).length) data.engagement = engagement;
+      try { await api(`/api/sources/${encodeURIComponent(form.dataset.sourceItemForm)}/items`, { method: 'POST', body: data }); toast('آیتم منبع اضافه شد', 'success'); await renderRoute(); } catch (e) { showError(e); }
+    }));
+
+    /* Trend hunting is a different question from news ideation, so it gets its own
+       button; both land in «سوژه‌های پیشنهادی» on the kanban page. */
+    const runAgent = async (mode, done) => {
+      try {
+        await api('/api/topics/run', { method: 'POST', body: mode ? { mode } : {} });
+        toast(done, 'success');
+        setTimeout(() => renderRoute().catch(() => {}), 6000);
+      } catch (e) { showError(e); }
+    };
+    $('#source-trend-hunt')?.addEventListener('click', () => runAgent('trend', 'شکار ترند شروع شد؛ چند ثانیه بعد سوژه‌های پیشنهادی تازه می‌شوند'));
+    $('#source-trend-new')?.addEventListener('click', () => { openModal('منبع ترند جدید', sourceForm({ source_type: 'trend', trust_tier: 'نیازمند بررسی' })); bindSourceForm({ source_type: 'trend', trust_tier: 'نیازمند بررسی' }); });
+    $('#source-trend-feed')?.addEventListener('click', async event => {
+      event.target.disabled = true;
+      try {
+        /* The Google Trends template ships switched off so nothing touches the
+           network on its own. Pressing this button IS the owner saying yes, so
+           turn the template on here instead of sending them hunting for a
+           checkbox — one press, then the volume numbers arrive. */
+        const ready = sources.find(s => s.enabled && String(s.identifier || '').trim() && ['trend', 'rss'].includes(s.source_type));
+        if (!ready) {
+          const template = sources.find(s => s.id === 'src_template_gtrends_ir');
+          if (template) await api(`/api/sources/${encodeURIComponent(template.id)}`, { method: 'PUT', body: { enabled: true } });
+        }
+        const result = await api('/api/sources/fetch', { method: 'POST', body: {} });
+        const list = result.data || [];
+        const trends = list.filter(x => x.ok && Number(x.imported) > 0);
+        const failed = list.filter(x => !x.ok);
+        if (!list.length) toast('هیچ منبع RSS/ترند فعالی با آدرس نیست. منبع «گوگل ترندز ایران» را ویرایش کنید و «فعال» را روشن کنید.', 'error');
+        else if (failed.length && !trends.length) toast(`خواندن ناموفق: ${failed.map(x => x.error || 'خطای نامشخص').join(' · ')}. اگر گوگل در شبکه شما باز نیست، متن ترند را دستی اضافه کنید.`, 'error');
+        else toast(`خواندن تمام شد؛ ${number(trends.reduce((n, x) => n + Number(x.imported || 0), 0))} آیتم ترند تازه`, 'success');
+        await renderRoute();
+      } catch (e) { showError(e); } finally { event.target.disabled = false; }
+    });
+    $('#source-run-trend')?.addEventListener('click', async () => {
+      try {
+        await api('/api/topics/run', { method: 'POST', body: {} });
+        /* The agent writes topics a few seconds later; reload once so the owner
+           sees the result instead of an unchanged empty page. */
+        toast('سوژه‌یابی شروع شد؛ چند ثانیه بعد صفحه تازه می‌شود', 'success');
+        setTimeout(() => renderRoute().catch(() => {}), 6000);
+      } catch (e) { showError(e); }
+    });
   });
 }
 
@@ -291,6 +375,100 @@ async function settingsPage() {
   return page(html, () => { const form = $('#settings-form'); form.ig_auth_mode.value = d.ig_auth_mode || 'instagram'; form.addEventListener('submit', async event => { event.preventDefault(); const data = formData(form); data.carousel_strict_no_mixed = form.carousel_strict_no_mixed.checked; data.r2_enabled = form.r2_enabled.checked; data.default_posting_hours = data.posting_hours.split(',').map(x => x.trim()).filter(Boolean); delete data.posting_hours; try { await api('/api/settings', { method: 'PUT', body: data }); toast('تنظیمات ذخیره شد', 'success'); } catch (e) { showError(e); } }); $('#settings-health')?.addEventListener('click', async () => { try { const h = await api('/api/health'); $('#health-result').innerHTML = `<div class="notice ok">سلامت بررسی شد: ${formatJalali(h.time)} · D1 ${h.db ? 'متصل' : 'قطع'}</div>`; } catch (e) { showError(e); } }); });
 }
 
+
+/*
+ * Autopilot control. The policy lives in studio_settings and is read by the
+ * runtime on every tick, so saving here changes behaviour immediately without a
+ * restart. Nothing on this page publishes: it decides what the machine may do on
+ * its own, and shows what it actually did.
+ */
+async function autopilotPage() {
+  const [statusResult, guardResult] = await Promise.all([
+    api('/api/ops/autopilot').catch(e => ({ data: null, error: e })),
+    api('/api/ops/guard').catch(() => ({ data: null }))
+  ]);
+  const s = statusResult.data || {};
+  const p = s.policy || { policy: 'off', enabled: false, platforms: ['telegram'], daily_slots: ['09:00', '21:00'], max_new_per_day: 2, require_source: true };
+  const guard = guardResult.data || {};
+  const policyLabels = { off: 'خاموش', assisted: 'دستیار (بدون تأیید خودکار)', auto_gates: 'خودکار تا انتشار', full_auto: 'کاملاً خودکار' };
+  const platforms = ['telegram', 'rubika', 'instagram'];
+  const image = s.image_provider || {};
+  const media = s.media_store || {};
+  const ticks = Number(s.ticks || 0);
+  const html = `${intro('اتوپایلوت', 'اینجا تعیین می‌کنید ماشین تا کجا اجازهٔ تصمیم دارد. هیچ‌چیز بدون سیاستِ روشن و بدون فیلترهای ایمنی منتشر نمی‌شود.', '<button class="btn ghost" id="ap-refresh">↻ تازه‌سازی</button><button class="btn subtle" id="ap-tick">اجرای یک چرخه</button>')}
+    <div class="grid four">
+      <div class="card metric-card"><span class="metric-icon">⚙</span><div class="metric-label">سیاست فعال</div><div class="metric-value" style="font-size:17px">${escapeHtml(policyLabels[p.policy] || p.policy)}</div><div class="metric-note">${p.enabled ? 'فعال' : 'غیرفعال'}</div></div>
+      <div class="card metric-card"><span class="metric-icon">▦</span><div class="metric-label">کارهای در جریان</div><div class="metric-value">${number(s.content_in_flight)}</div><div class="metric-note">${number(s.pending_gates)} گیت در انتظار</div></div>
+      <div class="card metric-card"><span class="metric-icon">◷</span><div class="metric-label">انتشار زمان‌بندی‌شده</div><div class="metric-value">${number(s.scheduled_jobs)}</div><div class="metric-note">۲۴ ساعت گذشته: ${number(s.published_last_24h)}</div></div>
+      <div class="card metric-card"><span class="metric-icon">◌</span><div class="metric-label">چرخه‌های اجراشده</div><div class="metric-value">${number(ticks)}</div><div class="metric-note">${s.last_tick_at ? escapeHtml(relativeTime(s.last_tick_at)) : 'هنوز اجرا نشده'}</div></div>
+    </div>
+    <div class="grid two" style="margin-top:16px"><div>
+    ${card('سیاست اجرا', `<form id="ap-form" class="stack">
+      <label>سطح خودکاری<select name="policy">${Object.entries(policyLabels).map(([key, label]) => `<option value="${key}" ${p.policy === key ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}</select><span class="help">«دستیار» فقط محتوا و پوستر می‌سازد و هیچ گیتی را تأیید نمی‌کند — یعنی هر سه گیت دست خود شماست و ماشین تا گیت ۱ می‌رود و می‌ایستد. «خودکار تا انتشار» گیت‌ها را فقط وقتی تأیید می‌کند که همهٔ بررسی‌ها تمیز باشند.</span></label>
+      <label class="check-label"><input type="checkbox" name="enabled" ${p.enabled ? 'checked' : ''}> اتوپایلوت فعال باشد</label>
+      <div>پلتفرم‌های هدف<div class="grid three" style="margin-top:6px">${platforms.map(x => `<label class="check-label"><input type="checkbox" name="platform_${x}" ${(p.platforms || []).includes(x) ? 'checked' : ''}> ${escapeHtml(platformName(x))}</label>`).join('')}</div></div>
+      <div class="form-grid"><label>ساعت‌های ساخت محتوا (با ویرگول)<input name="daily_slots" dir="ltr" value="${escapeHtml((p.daily_slots || []).join(','))}" placeholder="09:00,21:00"></label><label>حداکثر محتوای تازه در روز<input name="max_new_per_day" type="number" min="0" max="10" value="${Number(p.max_new_per_day ?? 2)}"></label></div>
+      <label class="check-label"><input type="checkbox" name="require_source" ${p.require_source !== false ? 'checked' : ''}> بدون منبع تأییدشده و راستی‌آزمایی pass، گیت ۳ به‌طور خودکار تأیید نشود</label>
+      <div class="form-actions"><button class="btn primary" type="submit">ذخیرهٔ سیاست</button></div>
+    </form>`)}
+    ${card('قواعدی که همیشه اعمال می‌شوند', `<ul class="small" style="line-height:2;padding-right:18px">
+      <li>هر <b>risk_flag</b> یا <b>needs_info</b> در ایده، محتوا را به شما برمی‌گرداند.</li>
+      <li>راستی‌آزمایی باید <b>pass</b> باشد و حداقل یک ادعای <b>تأییدشده</b> داشته باشد؛ نتیجهٔ pass بدون هیچ منبع کافی نیست.</li>
+      <li>گیت ۳ فقط با <b>بررسی فنی بدون خطا</b> و <b>رسانهٔ پیوست‌شده</b> تأیید می‌شود.</li>
+      <li>هر تأیید خودکار با نام <code>system:autopilot</code> در لاگ حسابرسی ثبت می‌شود.</li>
+      <li>حالت <b>${escapeHtml(guard.mode === 'live' ? 'live' : 'dry_run')}</b> شیر اطمینان انتشار: ${guard.mode === 'live' ? 'ارسال واقعی فقط برای مقصدهای مجاز و با تأیید.' : 'هیچ ارسال واقعی از این پروسه خارج نمی‌شود.'}</li>
+    </ul>`)}
+    </div><div>
+    ${card('تولید رسانه', `<div class="status-grid">
+      <div class="status-row"><span>مدل تصویر</span>${image.configured ? badge('آماده', 'ok') : badge('تنظیم نشده', 'warn')}</div>
+      <div class="status-row"><span>مدل فعال</span><code>${escapeHtml(image.working_model || '—')}</code></div>
+      <div class="status-row"><span>تصاویر ساخته‌شده</span><strong>${number(image.stats?.images)}</strong></div>
+      <div class="status-row"><span>خطاهای اخیر</span><strong>${number(image.stats?.failures)}</strong></div>
+      <div class="status-row"><span>پوشهٔ رسانه</span>${media.configured ? badge('قابل دانلود', 'ok') : badge('PUBLIC_BASE_URL ندارد', 'warn')}</div>
+      <div class="status-row"><span>فایل‌های ذخیره‌شده</span><strong>${number(media.files)}</strong></div>
+    </div>${image.configured ? '' : notice('برای تولید خودکار پوستر، IMAGE_PROVIDER=gemini و IMAGE_API_KEY را در فایل .env اضافه کنید. تا آن زمان مسیر دستی «دانلود JPEG» در صفحهٔ محتوا کار می‌کند.', 'info')}${media.configured ? '' : notice('PUBLIC_BASE_URL خالی است؛ لینک رسانهٔ محلی برای تلگرام/اینستاگرام قابل دانلود نیست. آدرس تونل یا دامنه را در .env قرار دهید.', 'warn')}
+      <div class="form-actions"><button class="btn ghost small-btn" id="ap-media">مشاهدهٔ فایل‌های رسانه</button><button class="btn ghost small-btn" id="ap-prune">پاک‌سازی فایل‌های قدیمی</button></div>`)}
+    ${card('آخرین چرخه', `<pre class="json-box">${escapeHtml(JSON.stringify(s.last_summary || { message: 'هنوز اجرا نشده است' }, null, 2))}</pre>${s.last_error ? notice(`آخرین خطا: ${s.last_error.message}`, 'danger') : ''}`)}
+    </div></div>`;
+  return page(html, () => {
+    $('#ap-refresh')?.addEventListener('click', renderRoute);
+    $('#ap-tick')?.addEventListener('click', async event => {
+      event.target.disabled = true;
+      try { const r = await api('/api/ops/autopilot/tick', { method: 'POST', body: {} }); toast(`چرخه اجرا شد: ${number(r.data?.created)} محتوا، ${number(r.data?.approved)} تأیید`, 'success'); await renderRoute(); }
+      catch (e) { showError(e); } finally { event.target.disabled = false; }
+    });
+    const form = $('#ap-form');
+    form?.addEventListener('submit', async event => {
+      event.preventDefault();
+      const selectedPlatforms = platforms.filter(x => form[`platform_${x}`]?.checked);
+      if (!selectedPlatforms.length) { toast('حداقل یک پلتفرم انتخاب کنید', 'error'); return; }
+      const payload = {
+        policy: form.policy.value,
+        enabled: form.enabled.checked,
+        platforms: selectedPlatforms,
+        daily_slots: String(form.daily_slots.value || '').split(',').map(x => x.trim()).filter(Boolean),
+        max_new_per_day: Number(form.max_new_per_day.value || 0),
+        require_source: form.require_source.checked
+      };
+      if (payload.policy !== 'off' && !window.confirm(`سیاست «${policyLabels[payload.policy]}» ذخیره شود؟ ${payload.policy === 'off' ? '' : 'از این پس ماشین طبق همین قاعده تصمیم می‌گیرد.'}`)) return;
+      try { await api('/api/ops/autopilot', { method: 'PUT', body: payload }); toast('سیاست ذخیره شد', 'success'); await renderRoute(); }
+      catch (e) { showError(e); }
+    });
+    $('#ap-media')?.addEventListener('click', async () => {
+      try {
+        const r = await api('/api/ops/media');
+        const files = r.data?.files || [];
+        openModal('فایل‌های رسانه', files.length ? `<div class="list">${files.map(f => `<div class="list-item spread"><a href="${escapeHtml(f.url)}" target="_blank" rel="noopener" class="truncate">${escapeHtml(f.name)}</a><span class="small muted">${number(Math.round(f.bytes / 1024))} KB</span></div>`).join('')}</div>` : empty('فایلی ذخیره نشده است'));
+      } catch (e) { showError(e); }
+    });
+    $('#ap-prune')?.addEventListener('click', async () => {
+      if (!window.confirm('فایل‌های رسانهٔ قدیمی پاک شوند؟ فایل‌هایی که در محتوای منتشرنشده استفاده شده‌اند باید دستی بررسی شوند.')) return;
+      try { const r = await api('/api/ops/media/prune', { method: 'POST', body: {} }); toast(`${number(r.data?.removed)} فایل پاک شد`, 'success'); await renderRoute(); }
+      catch (e) { showError(e); }
+    });
+  });
+}
+
 async function logsPage() {
   const r = await api('/api/logs'); const logs = r.data || [];
   const html = `${intro('لاگ و حسابرسی', 'هر تأیید، تغییر پرامپت، انتشار، خطا و بازیابی در Audit Log ثبت می‌شود. IP فقط به شکل hash و Secrets هرگز ثبت نمی‌شوند.', '<button class="btn ghost" id="logs-refresh">↻</button>')}${logs.length ? `<div class="table-wrap"><table><thead><tr><th>زمان</th><th>کننده</th><th>عمل</th><th>موجودیت</th><th>جزئیات امن</th></tr></thead><tbody>${logs.map(l => `<tr><td>${formatJalali(l.created_at)}</td><td>${escapeHtml(l.actor)}</td><td>${badge(l.action, l.action.includes('failed') || l.action.includes('error') ? 'danger' : 'info')}</td><td>${escapeHtml(l.entity_type)}<br><code>${escapeHtml(l.entity_id || '')}</code></td><td><pre style="max-width:360px;max-height:150px;margin:0">${pretty(parse(l.details_json, {}))}</pre></td></tr>`).join('')}</tbody></table></div>` : empty('لاگی وجود ندارد')}`;
@@ -336,6 +514,7 @@ export async function renderPageRoute(route) {
   if (route.name === 'publish') return publishPage();
   if (route.name === 'integrations') return integrationsPage();
   if (route.name === 'settings') return settingsPage();
+  if (route.name === 'autopilot') return autopilotPage();
   if (route.name === 'logs') return logsPage();
   if (route.name === 'backup') return backupPage();
   if (route.name === 'selftest') return selftestPage();

@@ -15,6 +15,8 @@
  * Telegram Bot API: https://core.telegram.org/bots/api
  */
 
+import { handleCommand, readPaused, writePaused, requestTick } from './server/telegram-control.mjs';
+
 const APP_VERSION = '1.0.0';
 const TEHRAN_OFFSET_MINUTES = 210; // Iran is UTC+03:30 year-round; no DST.
 const MINUTE = 60 * 1000;
@@ -343,6 +345,12 @@ async function ipHash(request, env) {
 }
 async function sessionFromRequest(request, env, db) {
   if (!env.SESSION_SECRET) return null;
+  // In-process automation (server/autopilot.mjs) re-enters the same API as the
+  // owner. It is not reachable over HTTP: http-server strips X-Nasra-Autopilot
+  // from every inbound request, and only the runtime can set NASRA_AUTOPILOT.
+  if (env.NASRA_AUTOPILOT === '1' && request.headers.get('X-Nasra-Autopilot') === '1') {
+    return { id: 'autopilot_internal', csrf_token: 'internal', expires_at: Date.now() + MINUTE, revoked: 0 };
+  }
   const authorization = request.headers.get('Authorization') || '';
   const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1].trim().slice(0, 500) || '';
   const dedicated = (request.headers.get('X-Nasra-Session') || '').trim().slice(0, 500);
@@ -362,7 +370,7 @@ async function sessionFromRequest(request, env, db) {
 async function requireAuth(request, env, db, mutating = false) {
   const session = await sessionFromRequest(request, env, db);
   if (!session) throw new HttpError(401, 'AUTH_REQUIRED', 'ورود مالک لازم است');
-  if (mutating) {
+  if (mutating && session.id !== 'autopilot_internal') {
     const csrf = request.headers.get('X-CSRF-Token') || '';
     if (!safeEqual(csrf, session.csrf_token)) throw new HttpError(403, 'CSRF_FAILED', 'اعتبارسنجی CSRF انجام نشد؛ صفحه را تازه کنید');
   }
@@ -535,6 +543,12 @@ async function callAI(env, agent, messages, maxTokens, testProvider = null) {
   throw new AgentError('NOT_CONFIGURED', `ارائه‌دهنده AI ناشناخته است: ${provider}`);
 }
 
+/*
+ * Trend freshness window: how many days a trend item stays in the idea-finding
+ * context. A viral post from three weeks ago is a lesson, not a trend.
+ */
+const TREND_WINDOW_DAYS = 10;
+
 async function buildAgentInput(db, agent, contentId = null, mode = null, feedback = '', extra = null) {
   const [playbook, brand, specs, settings] = await Promise.all([
     dbFirst(db, 'SELECT * FROM playbook_versions WHERE is_active=1 ORDER BY version DESC LIMIT 1'),
@@ -543,7 +557,13 @@ async function buildAgentInput(db, agent, contentId = null, mode = null, feedbac
     generalSettings(db)
   ]);
   const content = contentId ? await dbFirst(db, 'SELECT * FROM content_items WHERE id=?', [contentId]) : null;
-  const sourceRows = await dbAll(db, 'SELECT si.id,si.source_id,si.title,si.raw_text,si.published_at FROM source_items si JOIN sources s ON s.id=si.source_id WHERE s.enabled=1 ORDER BY si.created_at DESC LIMIT 30');
+  /* Freshness matters for trends: an 88th-place item from three weeks ago is not
+     a trend. Trend sources get a short window plus their engagement hints. */
+  const sourceRows = await dbAll(db, `SELECT si.id,si.source_id,si.title,si.raw_text,si.published_at,si.pillar_hint,si.engagement_json,s.source_type,s.title AS source_title,s.trust_tier,si.created_at,
+      CAST((julianday('now') - julianday(si.created_at)) AS INTEGER) AS age_days
+    FROM source_items si JOIN sources s ON s.id=si.source_id
+    WHERE s.enabled=1 AND (s.source_type <> 'trend' OR julianday('now') - julianday(si.created_at) <= ${TREND_WINDOW_DAYS})
+    ORDER BY si.created_at DESC LIMIT 40`);
   const recentTopics = await dbAll(db, 'SELECT id,title,pillar,created_at FROM topic_candidates ORDER BY created_at DESC LIMIT 20');
   const metricRows = await dbAll(db, 'SELECT scope,format,posted_hour_tehran,posted_weekday_jalali,reach,views,interactions,saves,shares,follows,metric_date FROM metrics ORDER BY metric_date DESC LIMIT 60');
   const input = {
@@ -553,7 +573,15 @@ async function buildAgentInput(db, agent, contentId = null, mode = null, feedbac
     // Specs are data from the verified DB table, not model memory.
     platform_specs: specs.map(s => ({ ...s, spec_value: parseJson(s.spec_value_json, {}) })),
     content: content ? { id: content.id, title: content.title, pillar: content.pillar, selected_format: content.selected_format, selected_idea_index: content.selected_idea_index, ideation: parseJson(content.ideation_json), script: parseJson(content.script_json), fact_check: parseJson(content.fact_check_json), production: parseJson(content.production_json, {}), media_links: parseJson(content.media_links_json, []), editorial: parseJson(content.editorial_json), owner_notes: content.owner_notes ? wrapUntrusted(content.owner_notes, 3000) : '', scheduled_jalali: content.scheduled_jalali, target_platforms: parseJson(content.target_platforms_json, []) } : null,
-    sources: sourceRows.map(s => ({ id: s.id, source_id: s.source_id, title: s.title, published_at: s.published_at, data: externalData(s.raw_text, s.id) })),
+    sources: sourceRows.map(s => ({
+      id: s.id, source_id: s.source_id, source_type: s.source_type, source_title: s.source_title,
+      trust_tier: s.trust_tier, pillar_hint: s.pillar_hint, age_days: s.age_days,
+      published_at: s.published_at,
+      /* engagement is measured, never guessed: whatever the owner pasted from the
+         platform's own view counter. Empty means "unknown", not zero. */
+      engagement: parseJson(s.engagement_json, {}) || {},
+      data: externalData(s.raw_text, s.id)
+    })),
     recent_topics: recentTopics,
     metrics_summary: metricRows,
     scheduling_context: { timezone: 'Asia/Tehran', now_jalali: (() => { const now = utcToJalali(); return `${now.date} ${now.time}`; })(), default_posting_hours: settings.default_posting_hours || ['13:30', '21:00'] },
@@ -591,7 +619,10 @@ async function runAgent(env, db, agentId, options = {}) {
   if (!agent.enabled && !options.ignoreDisabled) throw new AgentError('AGENT_DISABLED', `${agent.name_fa} غیرفعال است`);
   const settings = await generalSettings(db);
   const input = options.input || await buildAgentInput(db, agent, options.contentId, options.mode, options.feedback || '', options.extra || null);
-  const systemPrompt = String(agent.system_prompt || '');
+  /* An agent may define itself by its own id; a seeded prompt that predates a
+     section header would otherwise reach the model with no schema at all. The
+     id line costs one paragraph and makes the contract explicit either way. */
+  const systemPrompt = `## ${agent.id}\n` + String(agent.system_prompt || '');
   if (!systemPrompt) throw new AgentError('PROMPT_MISSING', 'system prompt در جدول agents خالی است');
   const userText = JSON.stringify(compactAgentInput(input));
   const inputHash = await sha256Hex(`${agent.id}|${agent.version}|${systemPrompt}|${userText}`);
@@ -785,7 +816,10 @@ function validatePackage(content, specs, settings = {}) {
   const storySpec = findSpec(specs, 'instagram', 'story', 'story_specs');
   for (const item of media) {
     const url = mediaUrl(item);
-    const urlResult = validateHttpUrl(url);
+    /* upload:<name> is a file this runtime stored; it is delivered as bytes, so
+       there is no URL to validate and no host to reach. */
+    const isUpload = String(url).startsWith('upload:');
+    const urlResult = isUpload ? { ok: true } : validateHttpUrl(url);
     if (!urlResult.ok) results.push({ ok: false, issues: [validationIssue('media_url', 'fail', urlResult.reason)] });
     const meta = typeof item === 'object' ? { ...item, extension: item.extension || extensionOf(url) } : { extension: extensionOf(url) };
     if (format === 'reel') results.push(validateReelMeta(meta, reelSpec));
@@ -947,6 +981,37 @@ async function processAgentJob(env, db, job, options = {}) {
       seen.add(title);
       const id = uid('topic');
       await dbRun(db, 'INSERT INTO topic_candidates (id,title,why_now,pillar,source_refs_json,sensitivity,urgency,risk_flags_json,needs_info_json,status,agent_run_id,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', [id, title, str(topic.why_now, 2000), str(topic.pillar, 300), json(topic.source_refs || []), str(topic.sensitivity || 'کم', 30), str(topic.urgency || 'این‌هفته', 30), json(parsed.risk_flags || []), json(topic.needs_info || parsed.needs_info || []), 'NEW', result.run.id, isoNow()]);
+    }
+    return result;
+  }
+  /*
+   * trend_hunter answers a different question — "what shape is working elsewhere
+   * right now" — so its output lands as topics too, with the source engagement
+   * folded into why_now. It must not be quietly dropped just because the shape
+   * differs from trend_scout's.
+   */
+  if (agentId === 'trend_hunter') {
+    const items = Array.isArray(parsed.opportunities) ? parsed.opportunities : [];
+    const existing = await dbAll(db, 'SELECT title FROM topic_candidates ORDER BY created_at DESC LIMIT 200');
+    const seen = new Set(existing.map(row => String(row.title || '').trim()));
+    for (const item of items.slice(0, 6)) {
+      const title = str(item.angle_title, 500).trim();
+      if (!title || seen.has(title)) continue;
+      seen.add(title);
+      const why = [
+        str(item.why_now, 800),
+        item.trend_pattern ? `الگوی ترند: ${str(item.trend_pattern, 300)}` : '',
+        item.format ? `قالب پیشنهادی: ${str(item.format, 30)}` : '',
+        item.engagement_evidence ? `شاهد عددی: ${str(item.engagement_evidence, 300)}` : 'شاهد عددی: ثبت نشده',
+        item.confidence ? `اطمینان: ${str(item.confidence, 40)}` : '',
+        item.audience_fit ? `تناسب با مخاطب: ${str(item.audience_fit, 300)}` : '',
+        item.reuse_verdict ? `حق بازنشر: ${str(item.reuse_verdict, 300)}` : '',
+        item.do_not_copy ? `کپی نکنید: ${str(item.do_not_copy, 300)}` : '',
+        item.adaptation_notes ? `اقتباس: ${str(item.adaptation_notes, 400)}` : ''
+      ].filter(Boolean).join(' · ');
+      const id = uid('topic');
+      await dbRun(db, 'INSERT INTO topic_candidates (id,title,why_now,pillar,source_refs_json,sensitivity,urgency,risk_flags_json,needs_info_json,status,agent_run_id,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+        [id, title, why.slice(0, 2000), 'ترند روز', json(item.source_item_id ? [String(item.source_item_id)] : []), 'کم', str(item.urgency || 'این‌هفته', 30), json(parsed.risk_flags || []), json(parsed.needs_info || []), 'NEW', result.run.id, isoNow()]);
     }
     return result;
   }
@@ -1857,6 +1922,28 @@ function xmlText(value) {
   return String(value || '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/<[^>]+>/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim();
 }
 function xmlTag(block, tag) { const match = block.match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, 'i')); return match ? xmlText(match[1]) : ''; }
+/*
+ * Owner-pasted engagement numbers. Stored as measured data, so:
+ *   - only these keys are kept (no free-form blob reaches the model),
+ *   - values must be positive numbers or a human string like "1.2M",
+ *   - anything unparseable is dropped rather than defaulted to zero, because
+ *     "unknown" and "no views" are different facts and the trend agent is told
+ *     to treat them differently.
+ */
+const ENGAGEMENT_KEYS = ['views', 'likes', 'comments', 'saves', 'shares', 'reach', 'approx_traffic'];
+function engagementOf(body = {}) {
+  const raw = body.engagement && typeof body.engagement === 'object' ? body.engagement : body;
+  const out = {};
+  for (const key of ENGAGEMENT_KEYS) {
+    const value = raw[key];
+    if (value === undefined || value === null || value === '') continue;
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) { out[key] = value; continue; }
+    const text = str(value, 40).trim();
+    if (/^[0-9][0-9.,]*\s*(k|m|b|هزار|میلیون|میلیارد|K|M|B)?$/i.test(text)) out[key] = text;
+  }
+  return out;
+}
+
 function safeFeedUrl(value) {
   const checked = validateHttpUrl(value);
   if (!checked.ok) return false;
@@ -1867,7 +1954,10 @@ function safeFeedUrl(value) {
   return true;
 }
 async function fetchRssSources(env, db) {
-  const sources = await dbAll(db, "SELECT * FROM sources WHERE enabled=1 AND source_type='rss' ORDER BY created_at ASC LIMIT 3");
+  /* 'trend' sources with a feed URL are fetched the same way: Google Trends ships
+     its daily list as RSS, so one parser covers both. A trend source with no URL
+     is a manual notebook and is skipped (not an error). */
+  const sources = await dbAll(db, "SELECT * FROM sources WHERE enabled=1 AND source_type IN ('rss','trend') AND identifier <> '' ORDER BY created_at ASC LIMIT 5");
   const summary = [];
   for (const source of sources) {
     if (!safeFeedUrl(source.identifier)) { summary.push({ source_id: source.id, ok: false, error: 'invalid_or_private_feed_url' }); continue; }
@@ -1888,8 +1978,14 @@ async function fetchRssSources(env, db) {
         const published = xmlTag(block, 'pubDate') || xmlTag(block, 'published') || xmlTag(block, 'updated');
         const publishedIso = published && !Number.isNaN(new Date(published).getTime()) ? new Date(published).toISOString() : null;
         const description = xmlTag(block, 'description') || xmlTag(block, 'summary') || xmlTag(block, 'content');
-        const raw = `Title: ${title}\nLink: ${link}\nPublished: ${published}\n${description}`.slice(0, 20000);
-        await dbRun(db, 'INSERT INTO source_items (id,source_id,external_ref,title,raw_text,published_at,created_at) VALUES (?,?,?,?,?,?,?)', [uid('item'), source.id, str(guid, 1000), str(title, 500), raw, publishedIso, isoNow()]);
+        /* Google Trends states an approximate search volume in ht:approx_traffic.
+           It is the publisher's own number, so it is stored as measured data —
+           never estimated. Anything absent stays absent. */
+        const traffic = xmlTag(block, 'ht:approx_traffic');
+        const engagement = traffic ? { approx_traffic: traffic } : {};
+        const trafficLine = traffic ? `\nSearch volume: ${traffic}` : '';
+        const raw = `Title: ${title}\nLink: ${link}\nPublished: ${published}${trafficLine}\n${description}`.slice(0, 20000);
+        await dbRun(db, 'INSERT INTO source_items (id,source_id,external_ref,title,raw_text,published_at,pillar_hint,created_at,engagement_json) VALUES (?,?,?,?,?,?,?,?,?)', [uid('item'), source.id, str(guid, 1000), str(title, 500), raw, publishedIso, 'ترند روز', isoNow(), JSON.stringify(engagement)]);
         seen.add(guid); imported++;
       }
       await dbRun(db, 'UPDATE sources SET last_fetched_at=? WHERE id=?', [isoNow(), source.id]);
@@ -1992,6 +2088,14 @@ async function runCron(env, db) {
     specialSlot = true;
     try { await fetchRssSources(env, db); } catch (error) { await audit(db, 'system', 'daily_rss_partial_failure', 'source', null, { message: str(error.message, 400) }); }
     await enqueueJob(db, 'agent', { agentId: 'trend_scout', contentId: null, mode: 'daily' }, { idempotencyKey: `daily-trend:${day}`, priority: 4 });
+    /* Trend ideas only make sense while they are still fresh, so they ride the
+       same 07:00 slot: one slot, two questions ("what is news" / "what is viral").
+       Skipped when no trend source is switched on — a job that would answer
+       "no data" every morning is noise, not a feature. */
+    const trendSources = await dbFirst(db, "SELECT COUNT(*) AS n FROM sources WHERE enabled=1 AND source_type='trend'");
+    if (asInt(trendSources?.n, 0) > 0) {
+      await enqueueJob(db, 'agent', { agentId: 'trend_hunter', contentId: null, mode: 'daily' }, { idempotencyKey: `daily-trend-hunter:${day}`, priority: 5 });
+    }
   }
   if (p.hour === 8 && await cronOnce(db, 'daily_digest', day)) {
     specialSlot = true;
@@ -2012,6 +2116,13 @@ async function runCron(env, db) {
     await weeklyDigest(env, db);
   }
   if (!specialSlot) {
+    // The owner's /pause in Telegram stops publications, not content creation.
+    // Checked here — the single place every runtime path reaches — so neither
+    // the self-hosted scheduler nor a Cloudflare cron can bypass it.
+    if (await readPaused(db)) {
+      summary.paused = true;
+      return summary;
+    }
     // One generic job OR one publish job per tick keeps D1 queries and external
     // subrequests comfortably inside the free Worker invocation budget.
     const jobs = await dbAll(db, "SELECT id FROM jobs WHERE status IN ('QUEUED','RETRY') AND run_after<=? ORDER BY priority ASC,run_after ASC LIMIT 1", [isoNow()]);
@@ -2131,7 +2242,7 @@ async function handleApi(request, env, db, ctx, url) {
   // Everything below /api requires the owner session and CSRF on mutations.
   const mutating = !['GET', 'HEAD'].includes(method);
   const session = await requireAuth(request, env, db, mutating);
-  const actor = 'owner';
+  const actor = session.id === 'autopilot_internal' ? 'system:autopilot' : 'owner';
   const ip = await ipHash(request, env);
 
   if (path === '/api/dashboard' && method === 'GET') return jsonResponse({ ok: true, data: await dashboardData(db) });
@@ -2165,7 +2276,14 @@ async function handleApi(request, env, db, ctx, url) {
 
   if (path === '/api/topics' && method === 'GET') return jsonResponse({ ok: true, data: await dbAll(db, 'SELECT * FROM topic_candidates ORDER BY created_at DESC LIMIT 100') });
   if (path === '/api/topics/run' && method === 'POST') {
-    const job = await enqueueJob(db, 'agent', { agentId: 'trend_scout', contentId: null, mode: 'manual' }, { idempotencyKey: `manual-trend:${Date.now()}`, priority: 2 });
+    /* Two different jobs: "what should we talk about" (trend_scout) and "what is
+       already working elsewhere" (trend_hunter). Asked explicitly, never guessed. */
+    let agentId = 'trend_scout';
+    try {
+      const body = await requestJson(request, 4000);
+      if (body && str(body.mode, 40) === 'trend') agentId = 'trend_hunter';
+    } catch { /* no body: the default run */ }
+    const job = await enqueueJob(db, 'agent', { agentId, contentId: null, mode: 'manual' }, { idempotencyKey: `manual-${agentId}:${Date.now()}`, priority: 2 });
     ctx?.waitUntil?.(processJobById(env, db, job.id));
     return jsonResponse({ ok: true, data: { queued: true, job_id: job.id } }, 202);
   }
@@ -2225,8 +2343,23 @@ async function handleApi(request, env, db, ctx, url) {
       if (links.length > 20) throw new HttpError(400, 'TOO_MANY_MEDIA', 'حداکثر ۲۰ لینک رسانه مجاز است');
       const normalized = links.map((item, i) => {
         const url = mediaUrl(item);
+        /* An uploaded file is stored by the runtime and references itself as
+           upload:<name>; the bytes are sent to the platform at publish time. Only
+           a real link has to be a fetchable https URL. */
+        if (String(url).startsWith('upload:')) {
+          if (!/^upload:[a-z0-9][a-z0-9._-]{0,120}\.(jpg|jpeg|png|webp|mp4|mov)$/i.test(String(url))) {
+            throw new HttpError(400, 'INVALID_MEDIA_REF', `فایل رسانه ${i + 1} معتبر نیست`);
+          }
+          return { ...(typeof item === 'object' ? item : {}), url: String(url), kind: mediaKind(item), format: str(item?.format || String(url).split('.').pop(), 20), width: asInt(item?.width, 0) || undefined, height: asInt(item?.height, 0) || undefined, duration_sec: Number(item?.duration_sec) || undefined, size_bytes: Number(item?.size_bytes) || undefined };
+        }
         const valid = validateHttpUrl(url);
         if (!valid.ok) throw new HttpError(400, 'INVALID_MEDIA_URL', `لینک رسانه ${i + 1}: ${valid.reason}`);
+        /* A localhost URL is a link Telegram and Meta can never open, so refusing
+           it here beats a confusing failure at publish time. */
+        const host = new URL(valid.url).hostname.toLowerCase();
+        if (['localhost', '127.0.0.1', '::1', '0.0.0.0'].includes(host) || host.endsWith('.local')) {
+          throw new HttpError(400, 'MEDIA_URL_NOT_PUBLIC', `لینک رسانه ${i + 1}: این آدرس فقط روی همین لپ‌تاپ باز می‌شود؛ از دکمهٔ آپلود استفاده کنید یا لینک عمومی https بدهید`);
+        }
         return { ...(typeof item === 'object' ? item : {}), url: valid.url, kind: mediaKind(item), format: str(item?.format || extensionOf(url), 20), width: asInt(item?.width, 0) || undefined, height: asInt(item?.height, 0) || undefined, duration_sec: Number(item?.duration_sec) || undefined, size_bytes: Number(item?.size_bytes) || undefined };
       });
       if (content.state === 'MEDIA_PENDING') {
@@ -2283,7 +2416,8 @@ async function handleApi(request, env, db, ctx, url) {
     const body = await requestJson(request, 50000);
     if (!str(body.raw_text).trim()) throw new HttpError(400, 'TEXT_REQUIRED', 'متن آیتم منبع لازم است');
     const id = uid('item');
-    await dbRun(db, 'INSERT INTO source_items (id,source_id,external_ref,title,raw_text,published_at,pillar_hint,created_at) VALUES (?,?,?,?,?,?,?,?)', [id, parts[2], str(body.external_ref || '', 1000), str(body.title || 'آیتم بدون عنوان', 500), str(body.raw_text, 20000), body.published_at || null, str(body.pillar_hint || '', 300), isoNow()]);
+    const engagement = engagementOf(body);
+    await dbRun(db, 'INSERT INTO source_items (id,source_id,external_ref,title,raw_text,published_at,pillar_hint,created_at,engagement_json) VALUES (?,?,?,?,?,?,?,?,?)', [id, parts[2], str(body.external_ref || '', 1000), str(body.title || 'آیتم بدون عنوان', 500), str(body.raw_text, 20000), body.published_at || null, str(body.pillar_hint || '', 300), isoNow(), JSON.stringify(engagement)]);
     return jsonResponse({ ok: true, data: await dbFirst(db, 'SELECT * FROM source_items WHERE id=?', [id]) }, 201);
   }
 
@@ -2434,6 +2568,22 @@ async function handleApi(request, env, db, ctx, url) {
     await audit(db, actor, 'settings_updated', 'settings', 'general', { keys: Object.keys(body).filter(k => allowed.includes(k)) }, ip);
     return jsonResponse({ ok: true, data: next });
   }
+  if (path.startsWith('/api/ops/gate-request/') && method === 'POST') {
+    /* Internal: the autopilot asks the owner a question it already decided is
+       needed. It can only message the owner's own chat and only for a gate that
+       is genuinely pending, so this cannot be used to post anywhere else. */
+    const gateId = decodeURIComponent(path.slice('/api/ops/gate-request/'.length));
+    const body = await requestJson(request, 8 * 1024);
+    return jsonResponse({ ok: true, data: await sendGateRequest(env, db, gateId, body.reason || '') });
+  }
+  if (path === '/api/ops/notify' && method === 'POST') {
+    /* Internal, in-process notification used by server/autopilot.mjs. It can only
+       message the owner's own chat: there is no destination parameter, so this
+       route can never be turned into a channel publisher. */
+    const body = await requestJson(request, 16 * 1024);
+    const sent = await sendTelegramNotice(env, db, str(body.text, 900));
+    return jsonResponse({ ok: true, data: { sent } });
+  }
   if (path === '/api/logs' && method === 'GET') return jsonResponse({ ok: true, data: await dbAll(db, 'SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 300') });
   if (path === '/api/backup/export' && method === 'GET') {
     const backup = await exportBackup(db);
@@ -2456,16 +2606,92 @@ async function handleApi(request, env, db, ctx, url) {
 // ---------------------------------------------------------------------------
 // Telegram webhook and owner commands (fast ACK; background work in waitUntil)
 // ---------------------------------------------------------------------------
+/*
+ * Why a cycle would produce nothing. /now answers with this instead of promising
+ * work it cannot do: an autopilot that is off and a model that is missing both
+ * end with an empty kanban and no explanation anywhere the owner looks.
+ */
+async function automationBlocked(env, db) {
+  const policy = await getSetting(db, 'autopilot', null);
+  if (!policy) return { reason: 'اتوپایلوت هنوز تنظیم نشده است. پنل → اتوپایلوت → سیاست را روی «دستیار» بگذارید و فعال کنید.' };
+  if (!policy.enabled || policy.policy === 'off') return { reason: 'اتوپایلوت خاموش است. پنل → اتوپایلوت → «اتوپایلوت فعال باشد» را روشن کنید.' };
+  if (await readPaused(db)) return { reason: 'انتشار متوقف شده است (/resume را بزنید).' };
+  if (!String(env.AI_PROVIDER || '').trim() || !String(env.AI_API_KEY || '').trim()) return { reason: 'کلید هوش مصنوعی تنظیم نشده است؛ بدون آن هیچ محتوایی ساخته نمی‌شود. nasra-settings.bat را اجرا کنید.' };
+  return { reason: '' };
+}
+
+/*
+ * Commands that come from server/telegram-control.mjs. Keeping the decision in a
+ * pure module is what makes "the bot can never publish" a testable statement
+ * rather than a convention. /status falls through to the older implementation
+ * below, which knows the content/publish tables.
+ */
+async function telegramControlCommand(env, db, chatId, text) {
+  const base = String(text || '').trim().split(/\s+/)[0].toLowerCase().split('@')[0];
+  const paused = await readPaused(db);
+  const policy = await getSetting(db, 'autopilot', null);
+  const decision = handleCommand({
+    text,
+    ownerChatId: String(env.TG_OWNER_CHAT_ID || ''),
+    chatId: String(chatId || ''),
+    heartbeat: env.NASRA_HEARTBEAT || { present: false, stale: true },
+    paused,
+    autopilot: policy ? { policy: policy.policy, platforms: policy.platforms } : null
+  });
+  if (decision.ignored === 'not_owner') {
+    await audit(db, 'system', 'telegram_command_ignored', 'telegram', String(chatId), { command: base });
+    return { ignored: true };
+  }
+  if (decision.action === 'pause' || decision.action === 'resume') {
+    await writePaused(db, decision.action === 'pause', 'owner_telegram');
+    await audit(db, 'owner_telegram', decision.action === 'pause' ? 'publish_paused' : 'publish_resumed', 'setting', 'publish_paused', {});
+  }
+  if (decision.action === 'tick') {
+    /* The worker has no handle on the autopilot loop, so it leaves a short-lived
+       request that the loop consumes on its next wake-up. Nothing pretends the
+       cycle already ran. */
+    const ready = await automationBlocked(env, db);
+    await requestTick(db, 'owner_telegram');
+    await audit(db, 'owner_telegram', 'autopilot_tick_requested', 'setting', 'autopilot_force_tick', { blocked: ready.reason || '' });
+    if (ready.reason) {
+      /* Saying "the next cycle will run" while the policy is off is the kind of
+         half-truth that makes the owner wait sixty seconds for nothing. */
+      await tgRequest(env, 'sendMessage', { chat_id: chatId, text: `${decision.reply}\n\nولی چرخه محتوایی نمی‌سازد: ${ready.reason}` });
+      return { ok: true, command: base, action: decision.action, blocked: ready.reason };
+    }
+  }
+  if (decision.action === 'wake') await audit(db, 'owner_telegram', 'wake_requested', 'telegram', String(chatId), {});
+  await tgRequest(env, 'sendMessage', { chat_id: chatId, text: decision.reply });
+  return { ok: true, command: base, action: decision.action };
+}
+
 async function telegramCommand(env, db, chatId, text) {
   const command = String(text || '').trim().split(/\s+/)[0].toLowerCase();
   if (command === '/status') {
-    const [pending, content, jobs, usage] = await Promise.all([
+    const [pending, content, jobs, usage, policy] = await Promise.all([
       dbFirst(db, "SELECT COUNT(*) AS n FROM gate_decisions WHERE status='PENDING'"),
       dbFirst(db, "SELECT COUNT(*) AS n FROM content_items WHERE state NOT IN ('PUBLISHED','REJECTED')"),
       dbFirst(db, "SELECT COUNT(*) AS n FROM publish_jobs WHERE status IN ('SCHEDULED','RETRY','QUEUED_LIMIT','POLLING_CONTAINER')"),
-      usageFor(db, dateKeyUTC(), 'global')
+      usageFor(db, dateKeyUTC(), 'global'),
+      getSetting(db, 'autopilot', null)
     ]);
-    return await tgRequest(env, 'sendMessage', { chat_id: chatId, text: `وضعیت نسرا اصفهان\nگیت در انتظار: ${pending?.n || 0}\nمحتوای فعال: ${content?.n || 0}\nکار انتشار در صف: ${jobs?.n || 0}\nمصرف تخمینی توکن امروز: ${usage.total_tokens || 0}` });
+    /* "It says 0 everywhere" is useless without the two settings that explain it:
+       an off autopilot and a missing model both look exactly like this. */
+    const policyLine = !policy ? 'تنظیم نشده' : `${policy.policy || 'off'}${policy.enabled ? '' : ' (غیرفعال)'}`;
+    const aiLine = String(env.AI_PROVIDER || '').trim() && String(env.AI_API_KEY || '').trim()
+      ? `وصل (${String(env.AI_PROVIDER).slice(0, 24)})`
+      : 'وصل نیست — محتوایی ساخته نمی‌شود';
+    const lines = [
+      'وضعیت نسرا اصفهان',
+      `اتوپایلوت: ${policyLine}`,
+      `هوش مصنوعی متن: ${aiLine}`,
+      `گارد انتشار: ${String(env.PUBLISH_GUARD_MODE || 'dry_run')}`,
+      `گیت در انتظار: ${pending?.n || 0}`,
+      `محتوای فعال: ${content?.n || 0}`,
+      `کار انتشار در صف: ${jobs?.n || 0}`,
+      `مصرف تخمینی توکن امروز: ${usage.total_tokens || 0}`
+    ];
+    return await tgRequest(env, 'sendMessage', { chat_id: chatId, text: lines.join('\n') });
   }
   if (command === '/today') {
     const rows = await dbAll(db, 'SELECT platform,scheduled_jalali,status FROM publish_jobs WHERE scheduled_jalali LIKE ? ORDER BY scheduled_at_utc LIMIT 30', [`${utcToJalali().date}%`]);
@@ -2479,8 +2705,49 @@ async function telegramCommand(env, db, chatId, text) {
     const row = await dbFirst(db, "SELECT COUNT(*) AS n FROM inbox_messages WHERE reply_status IN ('PENDING_REVIEW','DRAFT_READY','MANUAL_READY')");
     return await tgRequest(env, 'sendMessage', { chat_id: chatId, text: `پیام‌های در انتظار بررسی مالک: ${row?.n || 0}\nبرای تأیید و ارسال به صفحه Inbox در استودیو بروید.` });
   }
-  return await tgRequest(env, 'sendMessage', { chat_id: chatId, text: 'دستورهای available: /status /today /queue /inbox\nهمه انتشارها و پاسخ‌ها فقط با تأیید صریح مالک انجام می‌شوند.' });
+  return await tgRequest(env, 'sendMessage', { chat_id: chatId, text: 'دستورهای موجود:\n/help /ping /status /today /queue /wake /pause /resume /now\nهمه انتشارها و پاسخ‌ها فقط با تأیید صریح مالک انجام می‌شوند.' });
 }
+/*
+ * Ask the owner about one pending gate, with buttons.
+ *
+ * This is the worker half of the Telegram control surface: the autopilot decides
+ * that a gate needs a human, this turns it into a message the owner can act on
+ * without opening the panel. It refuses to ask twice for the same gate/version,
+ * because a re-sent keyboard on every tick trains people to ignore the bot.
+ */
+async function sendGateRequest(env, db, gateId, reason = '') {
+  if (!env.TG_BOT_TOKEN || !env.TG_OWNER_CHAT_ID) return { sent: false, reason: 'TG_OWNER_CHAT_ID تنظیم نشده است' };
+  const row = await dbFirst(db, 'SELECT g.id,g.gate_number,g.version,g.status,g.content_id,c.title,c.selected_format,c.current_version FROM gate_decisions g JOIN content_items c ON c.id=g.content_id WHERE g.id=?', [gateId]);
+  if (!row) throw new HttpError(404, 'GATE_NOT_FOUND', 'گیت پیدا نشد');
+  if (row.status !== 'PENDING') return { sent: false, reason: `گیت در وضعیت ${row.status} است` };
+  if (String(row.version) !== String(row.current_version)) return { sent: false, reason: 'این گیت مربوط به نسخه قدیمی است' };
+
+  const label = { 1: 'ایده', 2: 'سناریو', 3: 'بسته نهایی' }[Number(row.gate_number)] || 'گیت';
+  const lines = [
+    `${label} — گیت ${row.gate_number}`,
+    String(row.title || '').slice(0, 160),
+    row.selected_format ? `قالب: ${row.selected_format}` : '',
+    reason ? `دلیل توقف خودکار: ${String(reason).slice(0, 200)}` : '',
+    '',
+    'تصمیم شما؟'
+  ].filter(Boolean);
+
+  const rows = [[
+    { text: '✅ تأیید', callback_data: `gate:${row.id}:APPROVE` },
+    { text: '✍️ اصلاح', callback_data: `gate:${row.id}:REQUEST_CHANGES` }
+  ], [{ text: '⛔ رد', callback_data: `gate:${row.id}:REJECT` }]];
+
+  const sent = await tgRequest(env, 'sendMessage', {
+    chat_id: env.TG_OWNER_CHAT_ID,
+    text: lines.join('\n'),
+    reply_markup: { inline_keyboard: rows },
+    disable_web_page_preview: true
+  });
+  if (sent?.message_id) await dbRun(db, 'UPDATE gate_decisions SET tg_message_id=? WHERE id=?', [String(sent.message_id), row.id]);
+  await audit(db, 'system:autopilot', 'gate_question_sent', 'gate_decision', row.id, { gate: Number(row.gate_number), reason: str(reason, 200) });
+  return { sent: true, message_id: sent?.message_id || null, gate: Number(row.gate_number) };
+}
+
 async function processTelegramUpdate(env, db, update) {
   const callback = update.callback_query;
   if (callback) {
@@ -2522,7 +2789,16 @@ async function processTelegramUpdate(env, db, update) {
     const result = await decideGate(env, db, pending.content_id, pending.gate_number, 'REQUEST_CHANGES', { note: text, actor: 'owner_telegram' });
     return await tgRequest(env, 'sendMessage', { chat_id: chatId, text: result.already_decided ? 'already decided' : 'درخواست اصلاح با یادداشت ثبت شد؛ نسخه جدید در صف تولید است.' });
   }
-  if (text.startsWith('/')) return await telegramCommand(env, db, chatId, text);
+  if (text.startsWith('/')) {
+    /* /status /today /queue /inbox need the content and publish tables, so they
+       stay in telegramCommand(). Everything else is handled by the shared,
+       side-effect-free control module. */
+    const base = text.trim().split(/\s+/)[0].toLowerCase().split('@')[0];
+    if (!['/status', '/today', '/queue', '/inbox'].includes(base)) {
+      return await telegramControlCommand(env, db, chatId, text);
+    }
+    return await telegramCommand(env, db, chatId, text);
+  }
   return { ignored: true };
 }
 

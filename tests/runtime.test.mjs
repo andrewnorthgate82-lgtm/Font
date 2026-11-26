@@ -432,7 +432,10 @@ test('long polling persists the offset and feeds the shared worker', async t => 
   await new Promise(resolve => setTimeout(resolve, 1200));
   poller.stop();
 
-  assert.equal(fake.state.webhookDeleted, 1, 'the webhook must be deleted before polling');
+  /* Default policy is "do not touch the webhook": the token may be shared with a
+     production bot. Deleting it requires TELEGRAM_DELETE_WEBHOOK=1, which is
+     covered by its own test in tests/telegram-control.test.mjs. */
+  assert.equal(fake.state.webhookDeleted, 0, 'the webhook must not be deleted by default');
   assert.ok(poller.state.updates >= 2, `expected at least 2 processed updates, got ${poller.state.updates}`);
   assert.equal(poller.state.last_update_at !== null, true);
 
@@ -452,4 +455,53 @@ test('long polling persists the offset and feeds the shared worker', async t => 
   // Restart: a new poller resumes from the stored offset and re-delivery is deduped.
   const again = new TelegramPoller({ config, env, db, worker, logger: { log() {}, warn() {}, error() {} } });
   assert.equal(await again.loadOffset(), offset);
+});
+
+/* ------------------------------------------------ /status and /now honesty */
+
+test('/status explains an idle studio, and /now does not promise a cycle it cannot run', async t => {
+  const { createFakeTelegram } = await import('./fake-telegram.mjs');
+  const { TelegramPoller } = await import('../server/telegram-poller.mjs');
+  const fake = createFakeTelegram();
+  const fakePort = await fake.listen(0);
+  t.after(() => fake.close());
+
+  const dir = tempDir();
+  const db = openSqliteD1({ file: path.join(dir, 'db.sqlite'), schemaFile: SCHEMA });
+  t.after(() => db.close());
+  const config = testConfig(ROOT, dir, { telegramPolling: true, telegramPollTimeoutSec: 1, telegramBaseUrl: `http://127.0.0.1:${fakePort}`, allowInsecureTelegramBase: true });
+
+  /* No AI key: every number on the dashboard would be zero, and that is exactly
+     the state the owner was staring at. A fresh heartbeat is required, because
+     /now is supposed to refuse when the studio looks off. */
+  const { writeHeartbeat, readHeartbeat } = await import('../server/telegram-control.mjs');
+  writeHeartbeat(dir, { at: new Date().toISOString(), pid: process.pid });
+  const env = { DB: db, OWNER_PASSWORD: config.ownerPassword, SESSION_SECRET: config.sessionSecret, TG_BOT_TOKEN: '000:test', TG_OWNER_CHAT_ID: '555000111', PUBLISH_GUARD_MODE: 'dry_run', NASRA_HEARTBEAT: readHeartbeat(dir) };
+
+  const realFetch = globalThis.fetch;
+  const intercepted = [];
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(typeof input === 'string' ? input : input?.url);
+    if (url.startsWith(`http://127.0.0.1:${fakePort}`)) return realFetch(input, init);
+    intercepted.push({ url, body: init.body ? JSON.parse(init.body) : {} });
+    return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), { headers: { 'Content-Type': 'application/json' } });
+  };
+  t.after(() => { globalThis.fetch = realFetch; });
+
+  const poller = new TelegramPoller({ config, env, db, worker, logger: { log() {}, warn() {}, error() {} } });
+  fake.pushMessage({ chatId: '555000111', text: '/status' });
+  fake.pushMessage({ chatId: '555000111', text: '/now' });
+  await poller.start();
+  for (let i = 0; i < 60 && intercepted.filter(e => /sendMessage$/.test(e.url)).length < 2; i++) await new Promise(r => setTimeout(r, 50));
+  poller.stop();
+
+  const texts = intercepted.filter(e => /sendMessage$/.test(e.url)).map(e => String(e.body.text || ''));
+  const status = texts.find(t => t.includes('وضعیت نسرا')) || '';
+  assert.match(status, /اتوپایلوت:/, 'the status must say whether the autopilot can run at all');
+  assert.match(status, /هوش مصنوعی متن: وصل نیست/, 'and whether a model is configured');
+  assert.match(status, /گارد انتشار: dry_run/);
+
+  const now = texts.find(t => t.includes('درخواست ثبت شد')) || '';
+  assert.match(now, /چرخه محتوایی نمی‌سازد/, '/now must not promise content when it cannot be produced');
+  assert.match(now, /اتوپایلوت/, 'and must name the reason');
 });

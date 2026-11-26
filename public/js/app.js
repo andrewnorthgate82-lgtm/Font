@@ -53,6 +53,33 @@ export async function apiBlob(path) {
   if (!response.ok) throw new Error('دانلود ناموفق بود');
   return await response.blob();
 }
+/*
+ * Upload one file (poster, photo, video) and get back the media-link object to
+ * attach to a content item. The bytes go to the runtime, not to a third party,
+ * because the laptop has no public URL for Telegram to fetch.
+ */
+export async function uploadMedia(file, title = '') {
+  const headers = new Headers();
+  headers.set('Content-Type', file.type || 'application/octet-stream');
+  headers.set('X-File-Name', encodeURIComponent(file.name || ''));
+  headers.set('X-Media-Title', encodeURIComponent(title || ''));
+  if (state.csrf) headers.set('X-CSRF-Token', state.csrf);
+  if (state.sessionToken) {
+    headers.set('X-Nasra-Session', state.sessionToken);
+    headers.set('Authorization', `Bearer ${state.sessionToken}`);
+  }
+  const response = await fetch(`${API_BASE}/api/ops/media/upload`, { method: 'POST', headers, body: file, credentials: 'include' });
+  const text = await response.text();
+  let payload;
+  try { payload = text ? JSON.parse(text) : {}; } catch { payload = { ok: false, error: { message: text.slice(0, 300) } }; }
+  if (!response.ok || payload.ok === false) {
+    const error = new Error(payload?.error?.message || `HTTP ${response.status}`);
+    error.payload = payload;
+    throw error;
+  }
+  return payload.data;
+}
+
 export function toast(message, kind = '') { const el = $('#toast'); el.textContent = message; el.className = `toast show ${kind}`; clearTimeout(state.toastTimer); state.toastTimer = setTimeout(() => { el.className = 'toast'; }, 4500); }
 export function showError(error) { console.error(error); toast(errorText(error), 'error'); }
 export function openModal(title, html, wide = false) { $('#modal-title').textContent = title; $('#modal-body').innerHTML = html; $('#modal-root').classList.remove('hidden'); $('#modal-root').classList.toggle('modal-wide', wide); }
@@ -86,7 +113,7 @@ export function confirmExternal(message = 'این اقدام خارجی پس ا�
 export function countdownText(seconds) { if (!Number.isFinite(seconds) || seconds <= 0) return 'بسته شده'; const d = Math.floor(seconds / 86400), h = Math.floor((seconds % 86400) / 3600), m = Math.floor((seconds % 3600) / 60), s = Math.floor(seconds % 60); return faDigits(`${d ? `${d}روز ` : ''}${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`); }
 export function startLiveWidgets() { clearInterval(state.timer); state.timer = setInterval(() => { const now = utcToJalali(); const clock = $('#live-clock'); if (clock) clock.textContent = faDigits(`${now.date} · ${now.time}`); $$('[data-countdown]').forEach(el => { const end = Number(el.dataset.countdown); const seconds = Math.floor((end - Date.now()) / 1000); el.textContent = countdownText(seconds); el.classList.toggle('expired', seconds <= 0); }); }, 1000); }
 
-const titles = { dashboard: 'داشبورد', approvals: 'صف تأییدها', pipeline: 'کانبان تولید', calendar: 'تقویم جلالی', sources: 'کتابخانه منابع', playbook: 'پلی‌بوک و برند', agents: 'تیم AI و پرامپت‌ها', inbox: 'صندوق ورودی', analytics: 'تحلیل و آزمایش', publish: 'مرکز انتشار', integrations: 'یکپارچه‌سازی‌ها', settings: 'تنظیمات و سلامت', logs: 'لاگ و حسابرسی', backup: 'پشتیبان‌گیری', selftest: 'آزمون پذیرش', content: 'جزئیات محتوا' };
+const titles = { dashboard: 'داشبورد', approvals: 'صف تأییدها', pipeline: 'کانبان تولید', calendar: 'تقویم جلالی', autopilot: 'اتوپایلوت', sources: 'کتابخانه منابع', playbook: 'پلی‌بوک و برند', agents: 'تیم AI و پرامپت‌ها', inbox: 'صندوق ورودی', analytics: 'تحلیل و آزمایش', publish: 'مرکز انتشار', integrations: 'یکپارچه‌سازی‌ها', settings: 'تنظیمات و سلامت', logs: 'لاگ و حسابرسی', backup: 'پشتیبان‌گیری', selftest: 'آزمون پذیرش', content: 'جزئیات محتوا' };
 export function currentRoute() { const raw = location.hash.replace(/^#\/?/, '') || 'dashboard'; const [name, id] = raw.split('/'); return { name: titles[name] ? name : 'dashboard', id: id ? decodeURIComponent(id) : null }; }
 export function navigate(route) { location.hash = `#/${route}`; }
 export async function renderRoute() {
@@ -97,7 +124,7 @@ export async function renderRoute() {
   $('#page-kicker').textContent = route.name === 'content' ? 'NASRA / CONTENT DETAIL' : `NASRA / ${route.name.toUpperCase()}`;
   $('#sidebar').classList.remove('open'); $('#sidebar-backdrop').classList.add('hidden');
   const app = $('#app'); app.innerHTML = loading(); state.pageLoading = true;
-  try { const module = await import('./pages.js?v=20261105-copy-fallback'); const page = await module.renderPageRoute(route); app.innerHTML = page.html; if (page.mount) await page.mount(); }
+  try { const module = await import('./pages.js?v=20261122-autopilot'); const page = await module.renderPageRoute(route); app.innerHTML = page.html; if (page.mount) await page.mount(); }
   catch (error) { app.innerHTML = `<div class="notice danger"><strong>صفحه بارگذاری نشد</strong><br>${escapeHtml(errorText(error))}</div><div class="form-actions"><button class="btn ghost" id="page-retry">تلاش دوباره</button></div>`; $('#page-retry')?.addEventListener('click', renderRoute); console.error(error); }
   finally { state.pageLoading = false; }
 }

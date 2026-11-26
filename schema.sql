@@ -111,7 +111,10 @@ CREATE TABLE IF NOT EXISTS source_items (
   published_at TEXT,
   pillar_hint TEXT,
   used_count INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  -- Owner-pasted numbers from the platform (views, likes, saves...). Never
+  -- guessed by a model. Empty object = unknown, which is not the same as zero.
+  engagement_json TEXT NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS idx_source_items_source ON source_items(source_id, created_at DESC);
 
@@ -515,6 +518,29 @@ INSERT OR IGNORE INTO sources (
   '2026-11-04T00:00:00.000Z'
 );
 
+-- Trend sources: the owner's own feed of what is already viral.
+-- Seeded disabled + template (is_template=1) so nothing is fetched until the owner
+-- turns one on: a seed row must never start making network calls on its own.
+INSERT OR IGNORE INTO sources (id, title, source_type, identifier, credit_rule, reuse_permission, trust_tier, notes, is_template, enabled, last_fetched_at, created_at) VALUES
+  ('src_template_gtrends_ir',
+   'گوگل ترندز ایران (روزانه)',
+   'trend',
+   'https://trends.google.com/trending/rss?geo=IR',
+   'ذکر «گوگل ترندز ایران» و تاریخ برداشت',
+   'فقط برای سوژه‌یابی؛ بازنشر مستقیم ممنوع',
+   'رسمی',
+   'قالب آماده: جستجوهای پرجهش امروز ایران. برای فعال‌سازی، منبع را ویرایش کنید و «فعال» را روشن کنید. اگر شبکه شما گوگل را باز نمی‌کند، متن ترندها را دستی در «افزودن آیتم» پیست کنید.',
+   1, 0, NULL, '2026-11-06T00:00:00.000Z'),
+  ('src_template_manual_trend',
+   'ترندهای دیده‌شده در اینستاگرام/تیک‌تاک/پینترست (ورودی دستی)',
+   'trend',
+   '',
+   'ذکر پلتفرم، اکانت اصلی و تاریخ',
+   'اقتباس با ذکر منبع؛ کپی مستقیم ممنوع',
+   'نیازمند بررسی',
+   'قالب آماده: پست/استوری/ریلزی که خودتان وایرال دیدید. زیر همین منبع «افزودن آیتم» را بزنید، عنوان و متن/توضیح را پیست کنید و در فیلد بازدید/لایک عدد واقعی را بنویسید. عدد واقعی، تنها چیزی است که ترند را از حدس جدا می‌کند.',
+   1, 0, NULL, '2026-11-06T00:00:00.000Z');
+
 -- Seed Verified Platform Specs (All verified 2026-11-04 against official Meta, Rubika, and Telegram docs)
 INSERT OR IGNORE INTO platform_specs (id, platform, format, spec_key, spec_value_json, summary_fa, source_url, last_verified) VALUES
   ('ig_caption', 'instagram', 'all', 'caption_and_hashtags',
@@ -603,6 +629,33 @@ Schema: {"topics":[{"title","why_now","pillar","source_refs":[ids فقط از و
 Schema: {"topics":[{"title","why_now","pillar","source_refs":[ids فقط از ورودی],"sensitivity":"کم|متوسط|زیاد","urgency":"امروز|این‌هفته|همیشگی"}]}
 قانون: سوژه‌های حساس سیاسی یا امنیتی را فقط با sensitivity=زیاد و توضیح مختصر علامت بزن.',
   '{"type":"object","required":["topics","risk_flags","needs_info"],"properties":{"topics":{"type":"array","items":{"type":"object","required":["title","why_now","pillar","source_refs","sensitivity","urgency"]}},"risk_flags":{"type":"array"},"needs_info":{"type":"array"}}}',
+  'default', '', '', 2000, 35000, 1, 1, '2026-11-04T00:00:00.000Z'
+);
+
+-- 1b. trend_hunter (شکارچی ترند) — for ideas taken from what is already viral
+INSERT OR IGNORE INTO agents (
+  id, name_fa, role_group, system_prompt, default_system_prompt,
+  output_schema_json, provider, model, base_url, max_tokens, daily_token_cap, enabled, version, updated_at
+) VALUES (
+  'trend_hunter',
+  'شکارچی ترند',
+  'استراتژی محتوا',
+  'تو شکارچی ترند استودیوی رسانه‌ای نسرا اصفهان هستی. ورودی تو آیتم‌هایی است که مالک از گوگل ترندز، اینستاگرام، تیک‌تاک، پینترست یا اکس برداشته و همراه با عدد واقعی بازدید/لایک/سیو در engagement_json آورده است.
+
+وظیفه: از میان این آیتم‌ها، «فرصت محتوا» برای یک استودیوی سوادرسانه و آموزش رسانه در اصفهان پیدا کن. نه تکرار خود ترند.
+
+قوانین آهنین:
+۱. هیچ عددی نساز. اگر engagement_json خالی است، بنویس عدد در دسترس نبوده. مرتب‌سازی را با «age_days کم + عدد موجود» توضیح بده، نه با حدس.
+۲. درباره الگوریتم اینستاگرام/تیک‌تاک یقین‌گویی نکن. آنچه می‌گویی باید «فرضیه قابل آزمایش» باشد و اطمینان (کم/متوسط/زیاد) بگیری.
+۳. فقط چیزی را «وایرال» بخوان که عدد در ورودی دارد. الگوی تکرارشده را می‌توانی «الگوی رایج» بنامی، ولی بازدید ناشناخته را وایرال ننام.
+۴. ترندهای سیاسی/هجومی/چالش‌های خطرناک یا محتوای تهمت‌زده را استفاده نکن؛ به‌جای آن «معادل امن» پیشنهاد بده و در do_not_copy بنویس چه چیزی را نباید کپی کرد.
+۵. حق بازنشر: اگر reuse_permission منبع روشن نیست، بازنشر مستقیم ممنوع است و فقط «اقتباس با ذکر منبع» مجاز است؛ در reuse_verdict بنویس.
+۶. برای هر ایده دقیقاً یک قالب انتخاب کن: post | carousel | reel | story. استوری فقط برای محتوای فوری/پشت‌صحنه.
+۷. تاریخ‌دار شو: اگر age_days بیشتر از ۱۰ باشد، بگو ترند گذرا است و در urgency بنویس «همیشگی» یا رد کن.
+
+خروجی: تنها JSON معتبر مطابق schema. هیچ متن اضافه‌ای بیرون JSON ننویس. اگر ورودی کافی نیست، در needs_info کمبودها را بنویس و حدس نزن.',
+  'گرم‌ترین ترند امروز را برای محتوای بعدی بررسی کن.',
+  '{"type":"object","required":["opportunities","risk_flags","needs_info"],"properties":{"opportunities":{"type":"array","items":{"type":"object","required":["source_item_id","platform","trend_pattern","format","angle_title","why_now","audience_fit","engagement_evidence","confidence","urgency","adaptation_notes","reuse_verdict","do_not_copy"]}},"risk_flags":{"type":"array"},"needs_info":{"type":"array"}}}',
   'default', '', '', 2000, 35000, 1, 1, '2026-11-04T00:00:00.000Z'
 );
 

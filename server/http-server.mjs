@@ -90,6 +90,9 @@ function requestHeaders(req, origin) {
     if (value === undefined || HOP_BY_HOP.has(key.toLowerCase())) continue;
     if (key.toLowerCase().startsWith('x-forwarded-')) continue;
     if (key.toLowerCase() === 'x-nasra-origin') continue;
+    // Only the in-process automations may present this header. Dropping it here
+    // means a client on the internet can never become the autopilot identity.
+    if (key.toLowerCase() === 'x-nasra-autopilot') continue;
     if (Array.isArray(value)) headers.set(key, value.join(','));
     else headers.set(key, value);
   }
@@ -114,7 +117,7 @@ function isApiPath(pathname) {
   return pathname.startsWith('/api/') || pathname.startsWith('/webhooks/') || pathname === '/healthz' || pathname === '/robots.txt';
 }
 
-export function createNasraServer({ worker, env, config, db, logger = console, preHandle = null }) {
+export function createNasraServer({ worker, env, config, db, mediaStore = null, logger = console, preHandle = null }) {
   let closing = false;
 
   const server = http.createServer(async (req, res) => {
@@ -156,6 +159,27 @@ export function createNasraServer({ worker, env, config, db, logger = console, p
         // Let background jobs (agent runs, publishes) finish, but never hold the
         // HTTP response open for them.
         if (background.length) Promise.allSettled(background).catch(() => {});
+        return;
+      }
+
+      // Locally generated media (posters), served so Instagram/Telegram can
+      // fetch an HTTPS URL. Only names this process wrote are accepted.
+      if (mediaStore && pathname.startsWith(`${mediaStore.urlPath}/`)) {
+        const resolved = mediaStore.resolve(pathname.slice(mediaStore.urlPath.length + 1));
+        if (!resolved) {
+          res.writeHead(404, { ...STATIC_HEADERS, 'Content-Type': 'text/plain; charset=utf-8' });
+          res.end('Not found');
+          return;
+        }
+        const buffer = fs.readFileSync(resolved.file);
+        res.writeHead(200, {
+          ...STATIC_HEADERS,
+          'Content-Type': resolved.mime,
+          'Content-Length': buffer.length,
+          'Cache-Control': 'public, max-age=31536000, immutable',
+          'Access-Control-Allow-Origin': '*'
+        });
+        res.end(buffer);
         return;
       }
 

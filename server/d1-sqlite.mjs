@@ -16,6 +16,21 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 let DatabaseSync;
+/*
+ * node:sqlite is still marked experimental, so Node prints an ExperimentalWarning
+ * when it is imported. The owner reads that as "something is broken". It is not.
+ *
+ * The filter is deliberately narrow: only that one sentence is dropped. Every
+ * other warning still reaches the console, and DeprecationWarnings are untouched.
+ */
+const originalEmitWarning = process.emitWarning;
+process.emitWarning = function emitWarning(warning, ...rest) {
+  const message = typeof warning === 'string' ? warning : warning?.message;
+  const name = typeof warning === 'string' ? rest[0]?.type || rest[0] : warning?.name;
+  if (/SQLite is an experimental/i.test(String(message || '')) && String(name || '') !== 'DeprecationWarning') return;
+  return originalEmitWarning.call(process, warning, ...rest);
+};
+
 try {
   ({ DatabaseSync } = await import('node:sqlite'));
 } catch {
@@ -94,7 +109,32 @@ export class SqliteDb {
       if (!statement.trim()) continue;
       this.sqlite.exec(statement);
     }
+    this.addMissingColumns();
     return { applied: true, ms: Date.now() - started };
+  }
+
+  /*
+   * `CREATE TABLE IF NOT EXISTS` will not add a column to a table that already
+   * exists, so a new column would silently never appear on an owner's laptop
+   * that has been running since before the upgrade. SQLite's ADD COLUMN is a
+   * metadata-only change, so this is cheap and safe to run on every boot.
+   */
+  addMissingColumns() {
+    const expected = {
+      source_items: [
+        ['engagement_json', "TEXT NOT NULL DEFAULT '{}'"]
+      ]
+    };
+    for (const [table, columns] of Object.entries(expected)) {
+      const existing = new Set(
+        this.sqlite.prepare(`PRAGMA table_info(${table})`).all().map(row => row.name)
+      );
+      if (!existing.size) continue; // table absent: the schema file did not run
+      for (const [name, definition] of columns) {
+        if (existing.has(name)) continue;
+        this.sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+      }
+    }
   }
 
   statementFor(sql) {

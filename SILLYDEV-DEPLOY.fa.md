@@ -15,7 +15,8 @@
 | Scheduler واقعی (به‌جای Cron Trigger) | فراخوانی `worker.scheduled()` هر `SCHEDULER_INTERVAL_MS`، یک tick در هر لحظه، waitUntil با timeout، بکاپ SQLite | `server/scheduler.mjs` |
 | Telegram Long Polling (بدون Webhook عمومی) | `getUpdates` با offset ماندگار در `studio_settings` و تحویل update به همان مسیر `POST /webhooks/telegram` | `server/telegram-poller.mjs` |
 | «هیچ پست واقعی بدون تأیید جداگانهٔ مالک» | Publish Guard روی `fetch` + تأیید یک‌بارمصرف مالک در `POST /api/ops/approvals` | `server/publish-guard.mjs` |
-| آزمون محلی بدون شبکه | `node --test tests/runtime.test.mjs` و شبیه‌ساز تلگرام `tests/fake-telegram.mjs` | `tests/` |
+| اتوماسیون کامل: ساخت محتوا + تأیید گیت + تولید پوستر | `server/autopilot.mjs`، `server/image-provider.mjs`، `server/png-to-jpeg.mjs`، `server/media-store.mjs` | `AUTOPILOT.fa.md` |
+| آزمون محلی بدون شبکه | `node --test tests/runtime.test.mjs tests/autopilot.test.mjs` و شبیه‌ساز تلگرام `tests/fake-telegram.mjs` | `tests/` |
 
 ---
 
@@ -82,11 +83,15 @@ PUBLIC_BASE_URL=https://your-app.sillydev.example
 ### اجرای محلی
 
 ```bash
-cp .env.example .env          # مقادیر را پر کنید (‎.env در git نیست)
-NODE_ENV=development node server/index.mjs
-# یا برای دیدن کل خط تولید بدون AI واقعی:
-NODE_ENV=development MOCK_AI=1 node server/index.mjs
+npm run setup                 # .env با رمز و Secret تصادفی ساخته می‌شود
+npm run doctor                # بررسی پیش از اجرا
+npm start                     # اجرای واقعی، مرورگر خودکار باز می‌شود
+npm run dev                   # اجرای تمرینی: MOCK_AI=1، تلگرام خاموش، dry_run
 ```
+
+همان مسیر قبلی هم کار می‌کند: `cp .env.example .env` و بعد `node server/index.mjs`.
+روی ویندوز راهنمای کامل در **`LAPTOP.fa.md`** است (نصب Node، Task Scheduler، عیب‌یابی).
+`MOCK_AI=1` فقط در `NODE_ENV` غیر production کار می‌کند.
 
 `MOCK_AI=1` فقط در `NODE_ENV` غیر production کار می‌کند و پاسخ Agentها یک استاب محلی و قطعی است.
 
@@ -200,9 +205,17 @@ TELEGRAM_BASE_URL=http://127.0.0.1:PORT ALLOW_INSECURE_TELEGRAM_BASE=1 TELEGRAM_
 | `GET/DELETE /api/ops/approvals` | مشاهده/لغو تأییدها |
 | `POST /api/ops/backup` | بکاپ فوری SQLite |
 | `GET /api/ops/scheduler` / `POST /api/ops/scheduler/tick` | وضعیت و اجرای دستی یک tick |
+| `GET /api/ops/autopilot` | سیاست فعلی، کارهای در جریان، وضعیت مدل تصویر و پوشهٔ رسانه |
+| `PUT /api/ops/autopilot` | تغییر سیاست اتوپایلوت (بدون ری‌استارت اعمال می‌شود) |
+| `POST /api/ops/autopilot/tick` | اجرای دستی یک چرخهٔ اتوپایلوت |
+| `GET /api/ops/media` / `POST /api/ops/media/prune` | فهرست و پاک‌سازی فایل‌های رسانهٔ محلی |
+| `/media/<name>` | دانلود پوسترهای تولیدشده (عمومی، فقط فایل‌های خودِ سرور) |
 | `GET /readyz` | liveness ساده |
 
 همهٔ مسیرهای موجود استودیو (`/api/...`) بدون تغییر کار می‌کنند، چون از همان Worker می‌آیند.
+
+> **اتوپایلوت:** برای راهنمای کامل این لایه (سیاست‌ها، فیلترهای ایمنی، تولید پوستر و
+> متغیرهای تازهٔ `.env`) فایل `AUTOPILOT.fa.md` را ببینید.
 
 ---
 
