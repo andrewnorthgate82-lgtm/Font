@@ -197,13 +197,35 @@ function bindSourceForm(source = null) {
 }
 async function sourcesPage() {
   const r = await api('/api/sources'); const sources = r.data || []; const items = r.items || [];
-  const html = `${intro('منابع و اعتبار محتوا', 'هیچ URL واقعی ساخته نشده است. متن خارجی پیش از ورود به Agent داخل <untrusted> قرار می‌گیرد و فقط «داده» است.', '<button class="btn primary" id="source-new">＋ منبع جدید</button><button class="btn ghost" id="source-fetch-rss">خواندن RSSهای فعال</button>')}${notice('کانال تلگرامی گزارش کلاس‌ها و کارگاه‌های موجود شما می‌تواند به‌عنوان منبع داخلی اضافه شود. قالب خام زیر عمداً بدون آدرس است؛ شناسه کانال یا متن گزارش‌ها را خودتان وارد کنید.', 'info')}<div class="grid two" style="margin-top:16px"><div>${card('کتابخانه منابع', sources.length ? sources.map(s => `<div class="list-item"><div class="spread"><div><strong>${escapeHtml(s.title)}</strong><div class="small muted">${escapeHtml(s.source_type)} · ${escapeHtml(s.trust_tier)} · ${s.enabled ? 'فعال' : 'غیرفعال'}</div></div><button class="btn ghost small-btn" data-source-edit="${escapeHtml(s.id)}">ویرایش</button></div>${s.identifier ? `<p class="small ltr">${escapeHtml(s.identifier)}</p>` : '<p class="small muted">بدون شناسه — قالب خام</p>'}<p class="small">${escapeHtml(s.credit_rule || '')}</p><p class="small muted">${escapeHtml(s.reuse_permission || '')}</p>${s.notes ? `<p class="small">${escapeHtml(s.notes)}</p>` : ''}<form class="row" data-source-item-form="${escapeHtml(s.id)}"><input name="title" placeholder="عنوان آیتم/گزارش" required style="flex:1;min-width:150px"><input name="raw_text" placeholder="متن خام برای سوژه‌یابی" required style="flex:2;min-width:200px"><button class="btn subtle small-btn" type="submit">افزودن آیتم</button></form></div>`).join('') : empty('منبعی ثبت نشده است'))}</div><div>${card('آخرین آیتم‌های منبع', items.length ? `<div class="list">${items.map(i => `<div class="list-item"><strong>${escapeHtml(i.title)}</strong><div class="small muted">${formatJalali(i.created_at)} · ${escapeHtml(i.pillar_hint || 'بدون ستون')}</div></div>`).join('')}</div>` : empty('آیتمی وجود ندارد', 'متن RSS یا گزارش کانال را از فرم هر منبع اضافه کنید.'), '<button class="btn ghost small-btn" id="source-run-trend">اجرای trend_scout</button>')}</div></div>`;
+  const html = `${intro('منابع و اعتبار محتوا', 'هیچ URL واقعی ساخته نشده است. متن خارجی پیش از ورود به Agent داخل <untrusted> قرار می‌گیرد و فقط «داده» است.', '<button class="btn primary" id="source-new">＋ منبع جدید</button><button class="btn ghost" id="source-fetch-rss">خواندن RSSهای فعال</button>')}${notice('سوژه‌یاب بدون منبع هم کار می‌کند و از دانش عمومی پیشنهاد می‌دهد؛ ولی چنین سوژه‌ای «بدون منبع» ثبت می‌شود و اگر گزینهٔ «بدون منبع تأییدشده تأیید نشود» در اتوپایلوت روشن باشد، تا وقتی منبع اضافه نکنید جلوتر نمی‌رود. برای محتوای خبری، اول یک منبع اضافه کنید.', 'info')}<div class="grid two" style="margin-top:16px"><div>${card('کتابخانه منابع', sources.length ? sources.map(s => `<div class="list-item"><div class="spread"><div><strong>${escapeHtml(s.title)}</strong><div class="small muted">${escapeHtml(s.source_type)} · ${escapeHtml(s.trust_tier)} · ${s.enabled ? 'فعال' : 'غیرفعال'}</div></div><button class="btn ghost small-btn" data-source-edit="${escapeHtml(s.id)}">ویرایش</button></div>${s.identifier ? `<p class="small ltr">${escapeHtml(s.identifier)}</p>` : '<p class="small muted">بدون شناسه — قالب خام</p>'}<p class="small">${escapeHtml(s.credit_rule || '')}</p><p class="small muted">${escapeHtml(s.reuse_permission || '')}</p>${s.notes ? `<p class="small">${escapeHtml(s.notes)}</p>` : ''}<form class="row" data-source-item-form="${escapeHtml(s.id)}"><input name="title" placeholder="عنوان آیتم/گزارش" required style="flex:1;min-width:150px"><input name="raw_text" placeholder="متن خام برای سوژه‌یابی" required style="flex:2;min-width:200px"><button class="btn subtle small-btn" type="submit">افزودن آیتم</button></form></div>`).join('') : empty('منبعی ثبت نشده است'))}</div><div>${card('آخرین آیتم‌های منبع', items.length ? `<div class="list">${items.map(i => `<div class="list-item"><strong>${escapeHtml(i.title)}</strong><div class="small muted">${formatJalali(i.created_at)} · ${escapeHtml(i.pillar_hint || 'بدون ستون')}</div></div>`).join('')}</div>` : empty('آیتمی وجود ندارد', 'متن یک گزارش یا خبر را از کادر «افزودن آیتم» زیر هر منبع وارد کنید. برای خواندن خودکار، یک منبع با نوع «RSS رسمی» بسازید و بعد دکمهٔ «خواندن RSSهای فعال» را بزنید.'), '<button class="btn ghost small-btn" id="source-run-trend">اجرای trend_scout</button>')}</div></div>`;
   return page(html, () => {
     $('#source-new')?.addEventListener('click', () => { openModal('منبع جدید', sourceForm()); bindSourceForm(); });
-    $('#source-fetch-rss')?.addEventListener('click', async event => { event.target.disabled = true; try { const result = await api('/api/sources/fetch', { method: 'POST', body: {} }); const imported = result.data.reduce((n, x) => n + Number(x.imported || 0), 0); toast(`خواندن RSS تمام شد؛ ${number(imported)} آیتم تازه`, 'success'); await renderRoute(); } catch (e) { showError(e); } finally { event.target.disabled = false; } });
+    $('#source-fetch-rss')?.addEventListener('click', async event => {
+      event.target.disabled = true;
+      try {
+        const result = await api('/api/sources/fetch', { method: 'POST', body: {} });
+        const list = result.data || [];
+        const imported = list.reduce((n, x) => n + Number(x.imported || 0), 0);
+        /* "0 items" is not a success when every feed failed: say which one failed
+           and why, otherwise the owner keeps pressing the button. */
+        const failed = list.filter(x => x.ok === false);
+        if (!list.length) toast('هیچ منبع RSS فعالی نیست. اول یک منبع با نوع «RSS رسمی» بسازید.', 'error');
+        else if (failed.length) toast(`خواندن RSS ناموفق: ${failed.map(x => x.error || 'خطای نامشخص').join(' · ')}. آیتم تازه: ${number(imported)}`, 'error');
+        else toast(`خواندن RSS تمام شد؛ ${number(imported)} آیتم تازه`, 'success');
+        await renderRoute();
+      } catch (e) { showError(e); } finally { event.target.disabled = false; }
+    });
     $$('[data-source-edit]').forEach(b => b.addEventListener('click', () => { const source = sources.find(s => s.id === b.dataset.sourceEdit); openModal('ویرایش منبع', sourceForm(source)); bindSourceForm(source); }));
     $$('[data-source-item-form]').forEach(form => form.addEventListener('submit', async event => { event.preventDefault(); const data = formData(form); try { await api(`/api/sources/${encodeURIComponent(form.dataset.sourceItemForm)}/items`, { method: 'POST', body: data }); toast('آیتم منبع اضافه شد', 'success'); await renderRoute(); } catch (e) { showError(e); } }));
-    $('#source-run-trend')?.addEventListener('click', async () => { try { await api('/api/topics/run', { method: 'POST', body: {} }); toast('سوژه‌یابی شروع شد', 'success'); } catch (e) { showError(e); } });
+    $('#source-run-trend')?.addEventListener('click', async () => {
+      try {
+        await api('/api/topics/run', { method: 'POST', body: {} });
+        /* The agent writes topics a few seconds later; reload once so the owner
+           sees the result instead of an unchanged empty page. */
+        toast('سوژه‌یابی شروع شد؛ چند ثانیه بعد صفحه تازه می‌شود', 'success');
+        setTimeout(() => renderRoute().catch(() => {}), 6000);
+      } catch (e) { showError(e); }
+    });
   });
 }
 
