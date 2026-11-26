@@ -518,6 +518,13 @@ INSERT OR IGNORE INTO sources (
   '2026-11-04T00:00:00.000Z'
 );
 
+-- Agent model names were once seeded with a Gemini version, which silently rots:
+-- the day Google retires that name every install fails with HTTP 404. The default
+-- is now 'default' (the runtime asks the provider what exists and caches it).
+-- This is idempotent and only touches rows still holding a retired 2.0-flash name.
+UPDATE agents SET model='default', version=version+1, updated_at='2026-11-06T00:00:00.000Z'
+ WHERE model IN ('gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-lite');
+
 -- Trend sources: the owner's own feed of what is already viral.
 -- Seeded disabled + template (is_template=1) so nothing is fetched until the owner
 -- turns one on: a seed row must never start making network calls on its own.

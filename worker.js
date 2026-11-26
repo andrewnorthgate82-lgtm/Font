@@ -505,11 +505,82 @@ async function settleUsage(db, date, agentId, estimated, actualPrompt, actualCom
   }
 }
 
+
+/*
+ * Gemini model selection.
+ *
+ * A hardcoded model name is a time bomb: Google retires names (gemini-2.0-flash
+ * now answers 404 with "no longer available"), and every install that shipped
+ * that string dies on the day of the retirement. So the model is discovered from
+ * the provider's own model list, cached, and re-discovered when a request comes
+ * back 404.
+ */
+const GEMINI_MODEL_CACHE = new Map(); // apiKeyHash -> { at, models }
+const GEMINI_CACHE_MS = 6 * 60 * 60 * 1000;
+const GEMINI_EXCLUDE = /(embedding|aqa|imagen|image|tts|veo|live|learnlm|gemma|vision)/i;
+
+/* Rank the live list instead of guessing versions: prefer flash (fast/cheap),
+   stable over preview/exp, then the highest version number. */
+function pickGeminiModel(models = []) {
+  const usable = models
+    .filter(m => m && typeof m.name === 'string')
+    .map(m => ({ ...m, id: m.name.replace(/^models\//, '') }))
+    .filter(m => !GEMINI_EXCLUDE.test(m.id))
+    .filter(m => !Array.isArray(m.supportedGenerationMethods) || m.supportedGenerationMethods.includes('generateContent'));
+  if (!usable.length) return null;
+  const score = m => {
+    let n = 0;
+    if (/flash/i.test(m.id)) n += 100;
+    if (/pro/i.test(m.id) && !/flash/i.test(m.id)) n += 40;
+    if (/(preview|exp|experimental)/i.test(m.id)) n -= 30;
+    if (/latest/i.test(m.id)) n += 25;
+    const version = m.id.match(/(\d+)(?:[.-](\d+))?/);
+    if (version) n += Math.min(Number(version[1]), 9) * 5 + Math.min(Number(version[2] || 0), 9);
+    return n;
+  };
+  return usable.sort((a, b) => score(b) - score(a))[0].id;
+}
+
+async function listGeminiModels(env, { refresh = false } = {}) {
+  const key = String(env.AI_API_KEY || '');
+  if (!key) return [];
+  const hash = await sha256Hex(key);
+  const cached = GEMINI_MODEL_CACHE.get(hash);
+  if (!refresh && cached && Date.now() - cached.at < GEMINI_CACHE_MS) return cached.models;
+  const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models', {
+    headers: { 'x-goog-api-key': key }
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new AgentError('AI_MODEL_LIST_FAILED', `فهرست مدل‌های Gemini خوانده نشد (HTTP ${response.status})`);
+  const models = Array.isArray(data.models) ? data.models : [];
+  GEMINI_MODEL_CACHE.set(hash, { at: Date.now(), models });
+  return models;
+}
+
+async function resolveGeminiModel(env, agent, { refresh = false, exclude = null } = {}) {
+  /* An explicit choice wins: .env AI_MODEL, then the agent's own model field.
+     'default' and '' mean "you decide". */
+  const explicit = String(env.AI_MODEL || (agent?.model && agent.model !== 'default' ? agent.model : '')).trim();
+  if (explicit && explicit !== exclude && !refresh) return explicit;
+  try {
+    const models = await listGeminiModels(env, { refresh });
+    const others = exclude ? models.filter(m => !String(m.name).endsWith(exclude)) : models;
+    return pickGeminiModel(others) || explicit || null;
+  } catch {
+    return explicit || null;
+  }
+}
+
 async function callAI(env, agent, messages, maxTokens, testProvider = null) {
   if (testProvider) return await testProvider(messages, agent);
   const settingsProvider = String(env.AI_PROVIDER || '').trim().toLowerCase();
   const provider = String(agent.provider && agent.provider !== 'default' ? agent.provider : settingsProvider || 'workers_ai').toLowerCase();
-  const model = agent.model || (provider === 'gemini' ? 'gemini-2.0-flash' : provider === 'workers_ai' ? '@cf/meta/llama-3.1-8b-instruct' : 'gpt-4o-mini');
+  /* The fallback name is only a last resort when the provider's list cannot be
+     read; it is never trusted blindly for Gemini (see the retry below). */
+  const model = agent.model && agent.model !== 'default'
+    ? agent.model
+    : (provider === 'gemini' ? (await resolveGeminiModel(env, agent)) || 'gemini-flash-latest'
+      : provider === 'workers_ai' ? '@cf/meta/llama-3.1-8b-instruct' : 'gpt-4o-mini');
   if (provider === 'workers_ai') {
     if (!env.AI?.run) throw new AgentError('NOT_CONFIGURED', 'Workers AI binding با نام AI تنظیم نشده است');
     const result = await env.AI.run(model, { messages, max_tokens: maxTokens, temperature: 0.2 });
@@ -520,11 +591,27 @@ async function callAI(env, agent, messages, maxTokens, testProvider = null) {
   if (provider === 'gemini') {
     // Gemini API generateContent; RPM/TPM/RPD limits are account/project specific.
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-    const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.AI_API_KEY }, body: JSON.stringify({ systemInstruction: { parts: [{ text: messages[0]?.content || '' }] }, contents: [{ role: 'user', parts: [{ text: messages.slice(1).map(m => m.content).join('\n') }] }], generationConfig: { temperature: 0.2, maxOutputTokens: maxTokens, responseMimeType: 'application/json' } }) });
-    const data = await response.json().catch(() => ({}));
+    const body = JSON.stringify({ systemInstruction: { parts: [{ text: messages[0]?.content || '' }] }, contents: [{ role: 'user', parts: [{ text: messages.slice(1).map(m => m.content).join('\n') }] }], generationConfig: { temperature: 0.2, maxOutputTokens: maxTokens, responseMimeType: 'application/json' } });
+    const geminiUrl = name => `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(name)}:generateContent`;
+    let usedModel = model;
+    let response = await fetch(geminiUrl(usedModel), { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.AI_API_KEY }, body });
+    let data = await response.json().catch(() => ({}));
+    /* A retired model answers 404/400 with "no longer available". Ask the provider
+       which models exist right now and retry once with the best of them, rather
+       than leaving the owner with a dead pipeline and a version number to type. */
+    if (!response.ok && (response.status === 404 || /no longer available|not found|not supported/i.test(String(data?.error?.message || '')))) {
+      const fresh = await resolveGeminiModel(env, agent, { refresh: true, exclude: usedModel });
+      if (fresh && fresh !== usedModel) {
+        usedModel = fresh;
+        response = await fetch(geminiUrl(usedModel), { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.AI_API_KEY }, body });
+        data = await response.json().catch(() => ({}));
+      }
+    }
     if (!response.ok) {
       if (response.status === 429 || /quota|rate.?limit|resource.?exhausted/i.test(JSON.stringify(data))) throw new AgentError('QUOTA_EXHAUSTED', 'سهمیه Gemini تمام شده یا محدودیت نرخ فعال است', 3600);
-      throw new AgentError('AI_HTTP_ERROR', `Gemini HTTP ${response.status}: ${str(data?.error?.message, 500)}`);
+      const detail = str(data?.error?.message, 500);
+      if (response.status === 404) throw new AgentError('AI_MODEL_RETIRED', `مدل «${usedModel}» دیگر در دسترس نیست و مدل جایگزینی هم پیدا نشد. یک بار دیگر تلاش کنید یا در .env مقدار AI_MODEL را دستی بگذارید. (${detail})`);
+      throw new AgentError('AI_HTTP_ERROR', `Gemini HTTP ${response.status}: ${detail}`);
     }
     const text = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');
     return { text, usage: { prompt_tokens: asInt(data.usageMetadata?.promptTokenCount, estimateTokens(JSON.stringify(messages))), completion_tokens: asInt(data.usageMetadata?.candidatesTokenCount, estimateTokens(text)) } };

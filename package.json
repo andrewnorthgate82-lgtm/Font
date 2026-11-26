@@ -13,7 +13,7 @@
     "dev": "node scripts/start-nasra.mjs --dev",
     "setup": "node scripts/setup.mjs",
     "doctor": "node scripts/doctor.mjs",
-    "test": "node --test tests/runtime.test.mjs tests/autopilot.test.mjs tests/telegram-control.test.mjs tests/media-upload.test.mjs tests/trend.test.mjs tests/machine-status.test.mjs",
+    "test": "node --test tests/runtime.test.mjs tests/autopilot.test.mjs tests/telegram-control.test.mjs tests/media-upload.test.mjs tests/trend.test.mjs tests/machine-status.test.mjs tests/gemini-models.test.mjs",
     "check": "node --check worker.js && node --check server/index.mjs && node --check server/http-server.mjs && node --check server/autopilot.mjs && node --check server/media-store.mjs && node --check server/image-provider.mjs && node --check scripts/doctor.mjs && node --check scripts/start-nasra.mjs && node --check scripts/setup-env.mjs && node --check server/telegram-control.mjs && node --check scripts/setup.mjs && node --check scripts/wake.mjs && node --check scripts/telegram-status.mjs && node --check server/media-upload.mjs && node --check server/telegram-media.mjs && node --check scripts/build-zip.mjs",
     "preview": "node dev-preview.mjs",
     "fake-telegram": "node tests/fake-telegram.mjs",

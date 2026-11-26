@@ -168,6 +168,9 @@ export function workerEnv(config, source = process.env) {
     AI_PROVIDER: source.AI_PROVIDER || '',
     AI_API_KEY: source.AI_API_KEY || '',
     AI_BASE_URL: source.AI_BASE_URL || '',
+    /* Optional override. Empty means 'ask the provider which models exist' — the
+       only value that does not go stale when a provider retires a name. */
+    AI_MODEL: source.AI_MODEL || '',
     GAS_URL: source.GAS_URL || '',
     GAS_KEY: source.GAS_KEY || '',
     IG_APP_SECRET: source.IG_APP_SECRET || '',
