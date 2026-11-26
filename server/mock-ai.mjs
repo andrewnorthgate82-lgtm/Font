@@ -17,6 +17,21 @@ function mockAgentOutput(systemPrompt, userText) {
   const format = input.content?.selected_format || 'post';
   const common = { risk_flags: [], needs_info: [] };
   if (id === 'trend_scout') return { topics: [{ title: 'چک‌لیست سه‌مرحله‌ای برای بررسی یک پیام مشکوک', why_now: 'ورودی آزمایشی پیش‌نمایش؛ پیش از انتشار باید منبع واقعی اضافه شود.', pillar: 'شایعه‌شکنی و راستی‌آزمایی', source_refs: [], sensitivity: 'کم', urgency: 'این‌هفته' }], ...common };
+  if (id === 'trend_hunter') return { opportunities: [{
+    source_item_id: input.sources?.[0]?.id || '',
+    platform: 'instagram',
+    trend_pattern: 'ریلز کوتاه «قبل و بعد»',
+    format: 'reel',
+    angle_title: 'نمونهٔ آزمایشی: چطور یک تیتر کلیک‌طعمه را در ۱۵ ثانیه بو ببریم',
+    why_now: 'ورودی آزمایشی پیش‌نمایش؛ عدد واقعی از منبع خوانده می‌شود.',
+    audience_fit: 'مخاطب سوادرسانه‌ای نسرا',
+    engagement_evidence: input.sources?.[0]?.engagement?.views ? `بازدید: ${input.sources[0].engagement.views}` : 'عدد در دسترس نبود',
+    confidence: 'کم',
+    urgency: 'این‌هفته',
+    adaptation_notes: 'قالب را اقتباس کنید، متن را از نو بنویسید.',
+    reuse_verdict: 'اقتباس با ذکر منبع',
+    do_not_copy: 'کپی عین ویدیو و صدا'
+  }], ...common };
   if (id === 'ideation') return { ideas: [
     { format: 'post', hook: 'قبل از بازنشر، این سه نشانه را ببین', angle: 'یک چک‌لیست کوتاه و قابل ذخیره', key_message: 'مکث و بررسی منبع، تصمیم رسانه‌ای بهتری می‌سازد.', cta: 'چک‌لیست را برای دوستت بفرست', effort: 'کم', why_it_may_work: { hypothesis: 'فرضیه برای آزمایش: چک‌لیست‌های کوتاه ذخیره بیشتری می‌گیرند.', confidence: 'کم' } },
     { format: 'carousel', hook: 'سه سؤال پیش از باور کردن یک خبر', angle: 'اسلایدهای گام‌به‌گام', key_message: 'منبع، تاریخ و تصویر را جدا بررسی کن.', cta: 'ذخیره کن و مرور کن', effort: 'متوسط', why_it_may_work: { hypothesis: 'فرضیه برای آزمایش: ساختار مرحله‌ای خوانایی را بیشتر می‌کند.', confidence: 'کم' } },

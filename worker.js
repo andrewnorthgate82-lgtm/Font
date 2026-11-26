@@ -543,6 +543,12 @@ async function callAI(env, agent, messages, maxTokens, testProvider = null) {
   throw new AgentError('NOT_CONFIGURED', `ارائه‌دهنده AI ناشناخته است: ${provider}`);
 }
 
+/*
+ * Trend freshness window: how many days a trend item stays in the idea-finding
+ * context. A viral post from three weeks ago is a lesson, not a trend.
+ */
+const TREND_WINDOW_DAYS = 10;
+
 async function buildAgentInput(db, agent, contentId = null, mode = null, feedback = '', extra = null) {
   const [playbook, brand, specs, settings] = await Promise.all([
     dbFirst(db, 'SELECT * FROM playbook_versions WHERE is_active=1 ORDER BY version DESC LIMIT 1'),
@@ -551,7 +557,13 @@ async function buildAgentInput(db, agent, contentId = null, mode = null, feedbac
     generalSettings(db)
   ]);
   const content = contentId ? await dbFirst(db, 'SELECT * FROM content_items WHERE id=?', [contentId]) : null;
-  const sourceRows = await dbAll(db, 'SELECT si.id,si.source_id,si.title,si.raw_text,si.published_at FROM source_items si JOIN sources s ON s.id=si.source_id WHERE s.enabled=1 ORDER BY si.created_at DESC LIMIT 30');
+  /* Freshness matters for trends: an 88th-place item from three weeks ago is not
+     a trend. Trend sources get a short window plus their engagement hints. */
+  const sourceRows = await dbAll(db, `SELECT si.id,si.source_id,si.title,si.raw_text,si.published_at,si.pillar_hint,si.engagement_json,s.source_type,s.title AS source_title,s.trust_tier,si.created_at,
+      CAST((julianday('now') - julianday(si.created_at)) AS INTEGER) AS age_days
+    FROM source_items si JOIN sources s ON s.id=si.source_id
+    WHERE s.enabled=1 AND (s.source_type <> 'trend' OR julianday('now') - julianday(si.created_at) <= ${TREND_WINDOW_DAYS})
+    ORDER BY si.created_at DESC LIMIT 40`);
   const recentTopics = await dbAll(db, 'SELECT id,title,pillar,created_at FROM topic_candidates ORDER BY created_at DESC LIMIT 20');
   const metricRows = await dbAll(db, 'SELECT scope,format,posted_hour_tehran,posted_weekday_jalali,reach,views,interactions,saves,shares,follows,metric_date FROM metrics ORDER BY metric_date DESC LIMIT 60');
   const input = {
@@ -561,7 +573,15 @@ async function buildAgentInput(db, agent, contentId = null, mode = null, feedbac
     // Specs are data from the verified DB table, not model memory.
     platform_specs: specs.map(s => ({ ...s, spec_value: parseJson(s.spec_value_json, {}) })),
     content: content ? { id: content.id, title: content.title, pillar: content.pillar, selected_format: content.selected_format, selected_idea_index: content.selected_idea_index, ideation: parseJson(content.ideation_json), script: parseJson(content.script_json), fact_check: parseJson(content.fact_check_json), production: parseJson(content.production_json, {}), media_links: parseJson(content.media_links_json, []), editorial: parseJson(content.editorial_json), owner_notes: content.owner_notes ? wrapUntrusted(content.owner_notes, 3000) : '', scheduled_jalali: content.scheduled_jalali, target_platforms: parseJson(content.target_platforms_json, []) } : null,
-    sources: sourceRows.map(s => ({ id: s.id, source_id: s.source_id, title: s.title, published_at: s.published_at, data: externalData(s.raw_text, s.id) })),
+    sources: sourceRows.map(s => ({
+      id: s.id, source_id: s.source_id, source_type: s.source_type, source_title: s.source_title,
+      trust_tier: s.trust_tier, pillar_hint: s.pillar_hint, age_days: s.age_days,
+      published_at: s.published_at,
+      /* engagement is measured, never guessed: whatever the owner pasted from the
+         platform's own view counter. Empty means "unknown", not zero. */
+      engagement: parseJson(s.engagement_json, {}) || {},
+      data: externalData(s.raw_text, s.id)
+    })),
     recent_topics: recentTopics,
     metrics_summary: metricRows,
     scheduling_context: { timezone: 'Asia/Tehran', now_jalali: (() => { const now = utcToJalali(); return `${now.date} ${now.time}`; })(), default_posting_hours: settings.default_posting_hours || ['13:30', '21:00'] },
@@ -599,7 +619,10 @@ async function runAgent(env, db, agentId, options = {}) {
   if (!agent.enabled && !options.ignoreDisabled) throw new AgentError('AGENT_DISABLED', `${agent.name_fa} غیرفعال است`);
   const settings = await generalSettings(db);
   const input = options.input || await buildAgentInput(db, agent, options.contentId, options.mode, options.feedback || '', options.extra || null);
-  const systemPrompt = String(agent.system_prompt || '');
+  /* An agent may define itself by its own id; a seeded prompt that predates a
+     section header would otherwise reach the model with no schema at all. The
+     id line costs one paragraph and makes the contract explicit either way. */
+  const systemPrompt = `## ${agent.id}\n` + String(agent.system_prompt || '');
   if (!systemPrompt) throw new AgentError('PROMPT_MISSING', 'system prompt در جدول agents خالی است');
   const userText = JSON.stringify(compactAgentInput(input));
   const inputHash = await sha256Hex(`${agent.id}|${agent.version}|${systemPrompt}|${userText}`);
@@ -958,6 +981,37 @@ async function processAgentJob(env, db, job, options = {}) {
       seen.add(title);
       const id = uid('topic');
       await dbRun(db, 'INSERT INTO topic_candidates (id,title,why_now,pillar,source_refs_json,sensitivity,urgency,risk_flags_json,needs_info_json,status,agent_run_id,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', [id, title, str(topic.why_now, 2000), str(topic.pillar, 300), json(topic.source_refs || []), str(topic.sensitivity || 'کم', 30), str(topic.urgency || 'این‌هفته', 30), json(parsed.risk_flags || []), json(topic.needs_info || parsed.needs_info || []), 'NEW', result.run.id, isoNow()]);
+    }
+    return result;
+  }
+  /*
+   * trend_hunter answers a different question — "what shape is working elsewhere
+   * right now" — so its output lands as topics too, with the source engagement
+   * folded into why_now. It must not be quietly dropped just because the shape
+   * differs from trend_scout's.
+   */
+  if (agentId === 'trend_hunter') {
+    const items = Array.isArray(parsed.opportunities) ? parsed.opportunities : [];
+    const existing = await dbAll(db, 'SELECT title FROM topic_candidates ORDER BY created_at DESC LIMIT 200');
+    const seen = new Set(existing.map(row => String(row.title || '').trim()));
+    for (const item of items.slice(0, 6)) {
+      const title = str(item.angle_title, 500).trim();
+      if (!title || seen.has(title)) continue;
+      seen.add(title);
+      const why = [
+        str(item.why_now, 800),
+        item.trend_pattern ? `الگوی ترند: ${str(item.trend_pattern, 300)}` : '',
+        item.format ? `قالب پیشنهادی: ${str(item.format, 30)}` : '',
+        item.engagement_evidence ? `شاهد عددی: ${str(item.engagement_evidence, 300)}` : 'شاهد عددی: ثبت نشده',
+        item.confidence ? `اطمینان: ${str(item.confidence, 40)}` : '',
+        item.audience_fit ? `تناسب با مخاطب: ${str(item.audience_fit, 300)}` : '',
+        item.reuse_verdict ? `حق بازنشر: ${str(item.reuse_verdict, 300)}` : '',
+        item.do_not_copy ? `کپی نکنید: ${str(item.do_not_copy, 300)}` : '',
+        item.adaptation_notes ? `اقتباس: ${str(item.adaptation_notes, 400)}` : ''
+      ].filter(Boolean).join(' · ');
+      const id = uid('topic');
+      await dbRun(db, 'INSERT INTO topic_candidates (id,title,why_now,pillar,source_refs_json,sensitivity,urgency,risk_flags_json,needs_info_json,status,agent_run_id,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+        [id, title, why.slice(0, 2000), 'ترند روز', json(item.source_item_id ? [String(item.source_item_id)] : []), 'کم', str(item.urgency || 'این‌هفته', 30), json(parsed.risk_flags || []), json(parsed.needs_info || []), 'NEW', result.run.id, isoNow()]);
     }
     return result;
   }
@@ -1868,6 +1922,28 @@ function xmlText(value) {
   return String(value || '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/<[^>]+>/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim();
 }
 function xmlTag(block, tag) { const match = block.match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, 'i')); return match ? xmlText(match[1]) : ''; }
+/*
+ * Owner-pasted engagement numbers. Stored as measured data, so:
+ *   - only these keys are kept (no free-form blob reaches the model),
+ *   - values must be positive numbers or a human string like "1.2M",
+ *   - anything unparseable is dropped rather than defaulted to zero, because
+ *     "unknown" and "no views" are different facts and the trend agent is told
+ *     to treat them differently.
+ */
+const ENGAGEMENT_KEYS = ['views', 'likes', 'comments', 'saves', 'shares', 'reach', 'approx_traffic'];
+function engagementOf(body = {}) {
+  const raw = body.engagement && typeof body.engagement === 'object' ? body.engagement : body;
+  const out = {};
+  for (const key of ENGAGEMENT_KEYS) {
+    const value = raw[key];
+    if (value === undefined || value === null || value === '') continue;
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) { out[key] = value; continue; }
+    const text = str(value, 40).trim();
+    if (/^[0-9][0-9.,]*\s*(k|m|b|هزار|میلیون|میلیارد|K|M|B)?$/i.test(text)) out[key] = text;
+  }
+  return out;
+}
+
 function safeFeedUrl(value) {
   const checked = validateHttpUrl(value);
   if (!checked.ok) return false;
@@ -1878,7 +1954,10 @@ function safeFeedUrl(value) {
   return true;
 }
 async function fetchRssSources(env, db) {
-  const sources = await dbAll(db, "SELECT * FROM sources WHERE enabled=1 AND source_type='rss' ORDER BY created_at ASC LIMIT 3");
+  /* 'trend' sources with a feed URL are fetched the same way: Google Trends ships
+     its daily list as RSS, so one parser covers both. A trend source with no URL
+     is a manual notebook and is skipped (not an error). */
+  const sources = await dbAll(db, "SELECT * FROM sources WHERE enabled=1 AND source_type IN ('rss','trend') AND identifier <> '' ORDER BY created_at ASC LIMIT 5");
   const summary = [];
   for (const source of sources) {
     if (!safeFeedUrl(source.identifier)) { summary.push({ source_id: source.id, ok: false, error: 'invalid_or_private_feed_url' }); continue; }
@@ -1899,8 +1978,14 @@ async function fetchRssSources(env, db) {
         const published = xmlTag(block, 'pubDate') || xmlTag(block, 'published') || xmlTag(block, 'updated');
         const publishedIso = published && !Number.isNaN(new Date(published).getTime()) ? new Date(published).toISOString() : null;
         const description = xmlTag(block, 'description') || xmlTag(block, 'summary') || xmlTag(block, 'content');
-        const raw = `Title: ${title}\nLink: ${link}\nPublished: ${published}\n${description}`.slice(0, 20000);
-        await dbRun(db, 'INSERT INTO source_items (id,source_id,external_ref,title,raw_text,published_at,created_at) VALUES (?,?,?,?,?,?,?)', [uid('item'), source.id, str(guid, 1000), str(title, 500), raw, publishedIso, isoNow()]);
+        /* Google Trends states an approximate search volume in ht:approx_traffic.
+           It is the publisher's own number, so it is stored as measured data —
+           never estimated. Anything absent stays absent. */
+        const traffic = xmlTag(block, 'ht:approx_traffic');
+        const engagement = traffic ? { approx_traffic: traffic } : {};
+        const trafficLine = traffic ? `\nSearch volume: ${traffic}` : '';
+        const raw = `Title: ${title}\nLink: ${link}\nPublished: ${published}${trafficLine}\n${description}`.slice(0, 20000);
+        await dbRun(db, 'INSERT INTO source_items (id,source_id,external_ref,title,raw_text,published_at,pillar_hint,created_at,engagement_json) VALUES (?,?,?,?,?,?,?,?,?)', [uid('item'), source.id, str(guid, 1000), str(title, 500), raw, publishedIso, 'ترند روز', isoNow(), JSON.stringify(engagement)]);
         seen.add(guid); imported++;
       }
       await dbRun(db, 'UPDATE sources SET last_fetched_at=? WHERE id=?', [isoNow(), source.id]);
@@ -2003,6 +2088,14 @@ async function runCron(env, db) {
     specialSlot = true;
     try { await fetchRssSources(env, db); } catch (error) { await audit(db, 'system', 'daily_rss_partial_failure', 'source', null, { message: str(error.message, 400) }); }
     await enqueueJob(db, 'agent', { agentId: 'trend_scout', contentId: null, mode: 'daily' }, { idempotencyKey: `daily-trend:${day}`, priority: 4 });
+    /* Trend ideas only make sense while they are still fresh, so they ride the
+       same 07:00 slot: one slot, two questions ("what is news" / "what is viral").
+       Skipped when no trend source is switched on — a job that would answer
+       "no data" every morning is noise, not a feature. */
+    const trendSources = await dbFirst(db, "SELECT COUNT(*) AS n FROM sources WHERE enabled=1 AND source_type='trend'");
+    if (asInt(trendSources?.n, 0) > 0) {
+      await enqueueJob(db, 'agent', { agentId: 'trend_hunter', contentId: null, mode: 'daily' }, { idempotencyKey: `daily-trend-hunter:${day}`, priority: 5 });
+    }
   }
   if (p.hour === 8 && await cronOnce(db, 'daily_digest', day)) {
     specialSlot = true;
@@ -2183,7 +2276,14 @@ async function handleApi(request, env, db, ctx, url) {
 
   if (path === '/api/topics' && method === 'GET') return jsonResponse({ ok: true, data: await dbAll(db, 'SELECT * FROM topic_candidates ORDER BY created_at DESC LIMIT 100') });
   if (path === '/api/topics/run' && method === 'POST') {
-    const job = await enqueueJob(db, 'agent', { agentId: 'trend_scout', contentId: null, mode: 'manual' }, { idempotencyKey: `manual-trend:${Date.now()}`, priority: 2 });
+    /* Two different jobs: "what should we talk about" (trend_scout) and "what is
+       already working elsewhere" (trend_hunter). Asked explicitly, never guessed. */
+    let agentId = 'trend_scout';
+    try {
+      const body = await requestJson(request, 4000);
+      if (body && str(body.mode, 40) === 'trend') agentId = 'trend_hunter';
+    } catch { /* no body: the default run */ }
+    const job = await enqueueJob(db, 'agent', { agentId, contentId: null, mode: 'manual' }, { idempotencyKey: `manual-${agentId}:${Date.now()}`, priority: 2 });
     ctx?.waitUntil?.(processJobById(env, db, job.id));
     return jsonResponse({ ok: true, data: { queued: true, job_id: job.id } }, 202);
   }
@@ -2316,7 +2416,8 @@ async function handleApi(request, env, db, ctx, url) {
     const body = await requestJson(request, 50000);
     if (!str(body.raw_text).trim()) throw new HttpError(400, 'TEXT_REQUIRED', 'متن آیتم منبع لازم است');
     const id = uid('item');
-    await dbRun(db, 'INSERT INTO source_items (id,source_id,external_ref,title,raw_text,published_at,pillar_hint,created_at) VALUES (?,?,?,?,?,?,?,?)', [id, parts[2], str(body.external_ref || '', 1000), str(body.title || 'آیتم بدون عنوان', 500), str(body.raw_text, 20000), body.published_at || null, str(body.pillar_hint || '', 300), isoNow()]);
+    const engagement = engagementOf(body);
+    await dbRun(db, 'INSERT INTO source_items (id,source_id,external_ref,title,raw_text,published_at,pillar_hint,created_at,engagement_json) VALUES (?,?,?,?,?,?,?,?,?)', [id, parts[2], str(body.external_ref || '', 1000), str(body.title || 'آیتم بدون عنوان', 500), str(body.raw_text, 20000), body.published_at || null, str(body.pillar_hint || '', 300), isoNow(), JSON.stringify(engagement)]);
     return jsonResponse({ ok: true, data: await dbFirst(db, 'SELECT * FROM source_items WHERE id=?', [id]) }, 201);
   }
 
