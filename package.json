@@ -19,7 +19,8 @@
     "fake-telegram": "node tests/fake-telegram.mjs",
     "wake": "node scripts/wake.mjs",
     "telegram:status": "node scripts/telegram-status.mjs",
-    "setup:auto": "node scripts/setup.mjs --non-interactive"
+    "setup:auto": "node scripts/setup.mjs --non-interactive",
+    "zip": "node scripts/build-zip.mjs nasra-laptop.zip"
   },
   "keywords": [
     "nasra",
