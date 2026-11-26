@@ -2503,7 +2503,13 @@ async function telegramControlCommand(env, db, chatId, text) {
     chatId: String(chatId || ''),
     heartbeat: env.NASRA_HEARTBEAT || { present: false, stale: true },
     paused,
-    autopilot: policy ? { policy: policy.policy, platforms: policy.platforms } : null
+    autopilot: policy ? { policy: policy.policy, platforms: policy.platforms } : null,
+    /* Same facts the boot log prints, so /status answers "can it produce
+       anything?" without opening the panel. */
+    capabilities: {
+      ai_provider: String(env.AI_PROVIDER || '').trim() && String(env.AI_API_KEY || '').trim() ? env.AI_PROVIDER : '',
+      publish_guard: String(env.PUBLISH_GUARD_MODE || 'dry_run')
+    }
   });
   if (decision.ignored === 'not_owner') {
     await audit(db, 'system', 'telegram_command_ignored', 'telegram', String(chatId), { command: base });

@@ -119,6 +119,9 @@ export function handleCommand({
   heartbeat = { present: false, stale: true },
   paused = false,
   autopilot = null,
+  /* Optional, so tests and older callers stay valid: when present, /status also
+     says whether the AI key loaded and which publish guard is active. */
+  capabilities = null,
   now = Date.now()
 } = {}) {
   const raw = String(text || '').trim();
@@ -175,6 +178,11 @@ export function handleCommand({
     const lines = ['وضعیت نسرا اصفهان', ''];
     lines.push(`استودیو: ${heartbeat?.present && !heartbeat.stale ? 'روشن' : 'خاموش یا بی‌پاسخ'}`);
     lines.push(`انتشار: ${paused ? 'متوقف' : 'آزاد'}`);
+    /* Whether the AI key is loaded decides if anything can be produced at all,
+       and it is the one thing an owner cannot check from the chat otherwise. */
+    if (capabilities && capabilities.ai_provider) lines.push(`هوش مصنوعی متن: وصل (${String(capabilities.ai_provider).slice(0, 30)})`);
+    else if (capabilities) lines.push('هوش مصنوعی متن: وصل نیست — محتوایی ساخته نمی‌شود');
+    if (capabilities && capabilities.publish_guard) lines.push(`گارد انتشار: ${capabilities.publish_guard}`);
     if (autopilot) {
       lines.push(`اتوپایلوت: ${autopilot.policy || 'off'}${autopilot.running ? ' (در حال اجرا)' : ''}`);
       if (Array.isArray(autopilot.platforms) && autopilot.platforms.length) lines.push(`مقصد: ${autopilot.platforms.join('، ')}`);
