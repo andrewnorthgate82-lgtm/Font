@@ -344,6 +344,47 @@ async function handleOps(req, res, url) {
        takes the same forced path as /now in Telegram. */
     return sendJson(res, 200, { ok: true, data: await autopilot.tick({ force: true }) });
   }
+  /*
+   * "Why is the page empty?" is the owner's most common question, and until now
+   * nothing in the panel could answer it: a queued job, a failed agent run and a
+   * key that was never set all looked identical — an empty card. These two routes
+   * make the machine's own record visible, read-only.
+   */
+  if (url.pathname === '/api/ops/jobs' && req.method === 'GET') {
+    const jobs = await db.prepare(
+      `SELECT id,job_type,agent_id,status,attempts,max_attempts,last_error,run_after,created_at,updated_at
+       FROM jobs ORDER BY created_at DESC LIMIT 30`
+    ).all();
+    const runs = await db.prepare(
+      `SELECT id,agent_id,mode,status,cached,total_tokens,error_message,created_at
+       FROM agent_runs ORDER BY created_at DESC LIMIT 30`
+    ).all();
+    const counts = await db.prepare("SELECT status, COUNT(*) AS n FROM jobs GROUP BY status").all();
+    /* Whether an AI key exists is a config fact, not a secret: the panel needs it
+       to explain an empty queue instead of leaving the owner guessing. */
+    /* The DB may hold the key (the panel lets the owner paste it there), so check
+       both places before telling them it is missing. */
+    /* Keys live in .env for this deployment (agents.provider/model are per-agent
+       overrides). Check the same rule validateConfig uses for its warning. */
+    const aiConfigured = Boolean(env.AI_PROVIDER && (env.AI_PROVIDER === 'workers_ai' || env.AI_API_KEY));
+    let mockMode = String(process.env.MOCK_AI || '') === '1';
+    return sendJson(res, 200, {
+      ok: true,
+      data: { jobs: jobs.results || jobs, runs: runs.results || runs, counts: counts.results || counts, ai_missing: !aiConfigured && !mockMode, mock_ai: mockMode }
+    });
+  }
+  if (url.pathname === '/api/ops/retry' && req.method === 'POST') {
+    /* A retry is a deliberate owner action; it only revives jobs that already
+       gave up, never one that is currently running. */
+    const body = await readJsonBody(req);
+    const id = String(body.id || '');
+    if (!id) return sendJson(res, 400, { ok: false, error: { code: 'JOB_ID_REQUIRED', message: 'شناسه کار لازم است' } });
+    const job = await db.prepare('SELECT id,status FROM jobs WHERE id=?').bind(id).first();
+    if (!job) return sendJson(res, 404, { ok: false, error: { code: 'JOB_NOT_FOUND', message: 'کار یافت نشد' } });
+    await db.prepare("UPDATE jobs SET status='QUEUED', attempts=0, last_error=NULL, run_after=?, locked_at=NULL, updated_at=? WHERE id=?")
+      .bind(new Date().toISOString(), new Date().toISOString(), id).run();
+    return sendJson(res, 200, { ok: true, data: { id, status: 'QUEUED' } });
+  }
   if (url.pathname === '/api/ops/media' && req.method === 'GET') {
     return sendJson(res, 200, {
       ok: true,

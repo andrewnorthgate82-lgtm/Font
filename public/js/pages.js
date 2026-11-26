@@ -82,13 +82,47 @@ async function approvalsPage() {
   return page(html, () => { bindGateForms(); $('#approval-refresh')?.addEventListener('click', renderRoute); });
 }
 
+
+/*
+ * "Why is it empty?" — the questions the panel could not answer before.
+ * Read-only view of the machine's own queue and last agent runs, with the two
+ * causes that actually stop this product: no AI key, or a job that gave up.
+ */
+function machineStatusCard(status) {
+  if (!status) return '';
+  const jobs = status.jobs || [];
+  const runs = status.runs || [];
+  const failed = jobs.filter(j => ['FAILED', 'ERROR', 'RETRY'].includes(String(j.status)));
+  const queued = jobs.filter(j => String(j.status) === 'QUEUED');
+  const noKey = runs.some(r => /not_configured|AI_NOT_CONFIGURED|no usable ai|provider/i.test(String(r.error_message || ''))) || Boolean(status.ai_missing);
+  const rows = [];
+  if (noKey) rows.push(notice('هیچ کلید هوش مصنوعی وصل نیست؛ عامل‌ها در صف می‌مانند و سوژه‌ای ساخته نمی‌شود. کلید را در «تنظیمات → عامل‌ها» وارد کنید.', 'danger'));
+  if (failed.length) {
+    rows.push(`<div class="list-item"><strong>${faDigits(failed.length)} کار ناموفق</strong><p class="small muted">${escapeHtml(failed[0].last_error || 'خطای نامشخص')}</p>${failed.slice(0, 3).map(j => `<div class="row" style="margin-top:6px"><span class="small ltr">${escapeHtml(j.agent_id || j.job_type)} · ${escapeHtml(j.id)}</span><button class="btn ghost small-btn" data-job-retry="${escapeHtml(j.id)}">تلاش دوباره</button></div>`).join('')}</div>`);
+  }
+  if (!failed.length && queued.length) rows.push(notice(`${faDigits(queued.length)} کار در صف است و تا چند ثانیه دیگر اجرا می‌شود. اگر بیش از یک دقیقه صف ماند، یعنی کلید هوش مصنوعی یا اتصال مشکل دارد.`, 'info'));
+  if (!rows.length) rows.push(notice('صف خالی و سالم است؛ هیچ کار ناموفقی نیست.', 'info'));
+  const lastRuns = runs.slice(0, 4);
+  return card('وضعیت ماشین — چرا خالی است؟', `${rows.join('')}${lastRuns.length ? `<div class="list" style="margin-top:10px">${lastRuns.map(r => `<div class="list-item"><div class="spread"><strong class="ltr">${escapeHtml(r.agent_id)}</strong><span class="badge">${escapeHtml(r.status)}</span></div><p class="small muted">${formatJalali(r.created_at)} · ${faDigits(r.total_tokens || 0)} توکن${r.cached ? ' · از کش' : ''}${r.error_message ? ` · ${escapeHtml(String(r.error_message).slice(0, 160))}` : ''}</p></div>`).join('')}</div>` : ''}`);
+}
+
 async function pipelinePage() {
   const r = await api('/api/content'); const items = r.data || [];
   const topicResponse = await api('/api/topics').catch(() => ({ data: [] })); const topics = (topicResponse.data || []).filter(t => !t.content_id).slice(0, 12);
+  const machine = await api('/api/ops/jobs').catch(() => ({ data: null }));
   const groups = [['ایده و سناریو', ['IDEATION_PENDING', 'GATE1_PENDING', 'SCRIPTING', 'FACT_CHECKING', 'FACTCHECK_FAIL', 'GATE2_PENDING']], ['تولید و رسانه', ['PRODUCTION', 'MEDIA_PENDING']], ['تحریریه و تأیید نهایی', ['EDITORIAL', 'TECH_CHECKING', 'GATE3_PENDING']], ['تقویم و انتشار', ['SCHEDULING', 'SCHEDULED', 'PUBLISHING']], ['پایان‌یافته', ['PUBLISHED', 'REJECTED', 'ERROR', 'QUOTA_EXHAUSTED']]];
-  const html = `${intro('کانبان خط تولید', 'وضعیت‌ها توسط state machine قطعی تغییر می‌کنند، نه توسط مدل. برای دیدن نسخه‌ها و Diff روی هر کارت بزنید.', '<button class="btn primary" id="pipeline-new">＋ محتوای جدید</button><button class="btn ghost" id="pipeline-trend">سوژه‌یابی</button>')}${topics.length ? card('سوژه‌های پیشنهادی (خبر و ترند)', `<div class="list">${topics.map(t => `<div class="list-item spread"><div><strong>${escapeHtml(t.title)}</strong><p class="small muted">${escapeHtml(t.why_now || '')} · ${escapeHtml(t.pillar || '')} · حساسیت: ${escapeHtml(t.sensitivity || 'کم')}</p></div><button class="btn subtle small-btn" data-topic-ideate="${escapeHtml(t.id)}">ساخت ایده و شروع گیت ۱</button></div>`).join('')}</div>`, '', '') : ''}<div class="kanban">${groups.map(([label, states]) => { const rows = items.filter(c => states.includes(c.state)); return `<div class="kanban-col"><h4>${label}<span class="badge">${faDigits(rows.length)}</span></h4>${rows.length ? rows.map(c => `<article class="kanban-card"><h5>${escapeHtml(c.title)}</h5><p>${format(c.selected_format)} · نسخه ${faDigits(c.current_version)}</p><div class="spread" style="margin-top:8px">${stateBadge(c.state)}${contentButton(c.id, 'جزئیات')}</div><p style="margin-top:7px">${relativeTime(c.updated_at)}</p></article>`).join('') : '<div class="small muted">موردی نیست</div>'}</div>`; }).join('')}</div>`;
+  const html = `${intro('کانبان خط تولید', 'وضعیت‌ها توسط state machine قطعی تغییر می‌کنند، نه توسط مدل. برای دیدن نسخه‌ها و Diff روی هر کارت بزنید.', '<button class="btn primary" id="pipeline-new">＋ محتوای جدید</button><button class="btn ghost" id="pipeline-trend">سوژه‌یابی</button>')}${machineStatusCard(machine.data)}${topics.length ? card('سوژه‌های پیشنهادی (خبر و ترند)', `<div class="list">${topics.map(t => `<div class="list-item spread"><div><strong>${escapeHtml(t.title)}</strong><p class="small muted">${escapeHtml(t.why_now || '')} · ${escapeHtml(t.pillar || '')} · حساسیت: ${escapeHtml(t.sensitivity || 'کم')}</p></div><button class="btn subtle small-btn" data-topic-ideate="${escapeHtml(t.id)}">ساخت ایده و شروع گیت ۱</button></div>`).join('')}</div>`, '', '') : ''}<div class="kanban">${groups.map(([label, states]) => { const rows = items.filter(c => states.includes(c.state)); return `<div class="kanban-col"><h4>${label}<span class="badge">${faDigits(rows.length)}</span></h4>${rows.length ? rows.map(c => `<article class="kanban-card"><h5>${escapeHtml(c.title)}</h5><p>${format(c.selected_format)} · نسخه ${faDigits(c.current_version)}</p><div class="spread" style="margin-top:8px">${stateBadge(c.state)}${contentButton(c.id, 'جزئیات')}</div><p style="margin-top:7px">${relativeTime(c.updated_at)}</p></article>`).join('') : '<div class="small muted">موردی نیست</div>'}</div>`; }).join('')}</div>`;
   return page(html, () => {
     $('#pipeline-new')?.addEventListener('click', newContentModal);
+    $$('[data-job-retry]').forEach(b => b.addEventListener('click', async () => {
+      b.disabled = true;
+      try {
+        await api('/api/ops/retry', { method: 'POST', body: { id: b.dataset.jobRetry } });
+        await api('/api/ops/scheduler/tick', { method: 'POST', body: {} }).catch(() => {});
+        toast('کار دوباره در صف قرار گرفت', 'success');
+        setTimeout(() => renderRoute().catch(() => {}), 5000);
+      } catch (e) { showError(e); b.disabled = false; }
+    }));
     $('#pipeline-trend')?.addEventListener('click', async () => { try { await api('/api/topics/run', { method: 'POST', body: {} }); toast('سوژه‌یابی در صف قرار گرفت', 'success'); } catch (e) { showError(e); } });
     $$('[data-topic-ideate]').forEach(b => b.addEventListener('click', async () => { b.disabled = true; try { const result = await api(`/api/topics/${encodeURIComponent(b.dataset.topicIdeate)}/ideate`, { method: 'POST', body: {} }); toast('محتوا ساخته شد و ایده‌پردازی شروع شد', 'success'); navigate(`content/${encodeURIComponent(result.data.content_id)}`); } catch (e) { showError(e); b.disabled = false; } }));
   });
