@@ -320,7 +320,9 @@ async function handleOps(req, res, url) {
     return sendJson(res, 200, { ok: true, data: policySummary(next) });
   }
   if (url.pathname === '/api/ops/autopilot/tick' && req.method === 'POST') {
-    return sendJson(res, 200, { ok: true, data: await autopilot.tick() });
+    /* The panel's "اجرای یک چرخه" button is the owner asking for work now, so it
+       takes the same forced path as /now in Telegram. */
+    return sendJson(res, 200, { ok: true, data: await autopilot.tick({ force: true }) });
   }
   if (url.pathname === '/api/ops/media' && req.method === 'GET') {
     return sendJson(res, 200, {
@@ -407,6 +409,22 @@ if (config.autopilotEnabled) {
    * it run immediately instead of at the next full interval — without increasing
    * how often the pipeline itself runs.
    */
+  /* Talk to the owner without going through worker.js: this is a runtime-only
+     message and it must never look like a publication to the guard. */
+  const notifyOwner = async text => {
+    if (!process.env.TG_BOT_TOKEN || !process.env.TG_OWNER_CHAT_ID) return;
+    try {
+      await fetch(`https://api.telegram.org/bot${process.env.TG_BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: process.env.TG_OWNER_CHAT_ID, text: String(text).slice(0, 900) }),
+        signal: AbortSignal.timeout(10_000)
+      });
+    } catch (error) {
+      console.warn('[autopilot] could not notify the owner:', error?.message || error);
+    }
+  };
+
   const intervalMs = Math.max(5_000, config.autopilotIntervalMs);
   const WATCH_MS = Math.min(15_000, intervalMs);
   let lastRun = 0;
@@ -415,16 +433,28 @@ if (config.autopilotEnabled) {
       let due = true;
       try {
         const wake = await consumeTickRequest(db);
-        if (wake.requested) {
+        const forced = Boolean(wake.requested);
+        if (forced) {
           console.log('[autopilot] manual tick requested from Telegram — running now');
         } else {
           due = Date.now() - lastRun >= intervalMs;
         }
-        if (due) {
-          const summary = await autopilot.tick();
+        if (due || forced) {
+          const summary = await autopilot.tick({ force: forced });
           lastRun = Date.now();
           if (summary?.created || summary?.approved || summary?.posters) {
             console.log(`[autopilot] tick created=${summary.created} approved=${summary.approved} posters=${summary.posters} escalated=${summary.escalated}`);
+          }
+          /* /now is a question as much as an instruction. A per-minute loop stays
+             quiet, but a tick the owner asked for has to answer, including when
+             the answer is "nothing to write about yet". */
+          if (forced) {
+            const lines = ['نتیجه چرخه اتوپایلوت'];
+            lines.push(`محتوای ساخته‌شده: ${summary?.created || 0}`);
+            if (summary?.reason) lines.push(`دلیل: ${summary.reason}`);
+            else if (summary?.skipped) lines.push(`رد شد: ${summary.skipped}`);
+            else if (!summary?.created) lines.push('هیچ محتوای تازه‌ای ساخته نشد.');
+            await notifyOwner(lines.join('\n'));
           }
         }
       } catch (error) {

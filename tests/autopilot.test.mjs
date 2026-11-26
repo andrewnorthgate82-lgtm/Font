@@ -404,3 +404,30 @@ test('PNG output from the image model is converted to JPEG before publishing', a
   assert.equal(isJpeg(Buffer.from('not a jpeg')), false);
   assert.ok(encodeJpeg({ width: 1, height: 1, data: Buffer.from([1, 2, 3, 255]) }).length > 100);
 });
+
+/* ------------------------------------------------------ forced tick (/now) */
+
+test('/now creates content outside the calendar slots, and says why when it cannot', async () => {
+  const dir = tempDir();
+  const db = openSqliteD1({ file: path.join(dir, 'db.sqlite'), schemaFile: SCHEMA });
+  const now = new Date().toISOString();
+  /* Slots that are definitely not due right now: an unforced tick must stay idle. */
+  await db.prepare('INSERT INTO studio_settings (key,value_json,updated_at) VALUES (?,?,?)')
+    .bind('autopilot', JSON.stringify({ policy: 'assisted', enabled: true, daily_slots: ['03:17'], platforms: ['telegram'] }), now).run();
+  const autopilot = new Autopilot({ db, worker, env: { DB: db, SESSION_SECRET: 'a'.repeat(64) }, config: {}, logger: { log() {}, warn() {}, error() {} } });
+
+  /* 1. Nothing to write about: a forced tick must explain that, not stay silent. */
+  const empty = await autopilot.tick({ force: true });
+  assert.equal(empty.created, 0);
+  assert.match(String(empty.reason), /سوژه/, 'the owner is told the topic queue is empty');
+
+  /* 2. A topic exists: the forced tick takes it into the pipeline even though no
+        calendar slot is due. Without this /now at 15:00 does nothing. */
+  await db.prepare('INSERT INTO topic_candidates (id,title,why_now,pillar,source_refs_json,sensitivity,urgency,risk_flags_json,needs_info_json,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+    .bind('topic_now', 'چک‌لیست بررسی پیام مشکوک', 'برای آزمون', 'سواد خبری', '[]', 'کم', 'این‌هفته', '[]', '[]', 'NEW', now).run();
+  const forced = await autopilot.tick({ force: true });
+  assert.equal(forced.created, 1, 'a forced cycle must produce the item the owner asked for');
+  const rows = await db.prepare('SELECT COUNT(*) AS n FROM content_items').first();
+  assert.equal(rows.n, 1);
+  db.close();
+});

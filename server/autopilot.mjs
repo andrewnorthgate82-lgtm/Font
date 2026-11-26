@@ -360,12 +360,19 @@ export class Autopilot {
 
   /* ------------------------------------------------------------------ tick */
 
-  async tick() {
+  /**
+   * force: the owner pressed /now. A scheduled tick only fills the calendar slot
+   * that is due in the next twenty minutes; a forced one is a request to produce
+   * something now, so it also takes a topic through the pipeline when no slot is
+   * due. Without this, /now at 15:00 answers "cycle ran" and creates nothing,
+   * which is exactly what the owner saw.
+   */
+  async tick({ force = false } = {}) {
     if (this.stopped) return { skipped: 'stopped' };
     if (this.inFlight) return { skipped: 'overlap' };
     this.inFlight = true;
     const started = this.clock();
-    const summary = { created: 0, approved: 0, escalated: 0, posters: 0, slots: [] };
+    const summary = { created: 0, approved: 0, escalated: 0, posters: 0, slots: [], reason: '' };
     try {
       const policy = await this.policy();
       if (!policy.enabled || policy.policy === 'off') {
@@ -387,7 +394,15 @@ export class Autopilot {
         if (!this.#slotDue(slot)) continue;
         if (!(await this.#claimSlot(`${day}-${slot}`))) continue;
         summary.slots.push(slot);
-        const created = await this.#createForSlot(policy, slot);
+        const created = await this.#createForSlot(policy, slot, summary);
+        if (created) summary.created += 1;
+      }
+
+      /* 1a. A forced tick works outside the calendar, because "now" is the
+         owner's instruction and waiting for 21:00 is not what they asked for.
+         It still respects max_new_per_day inside #createForSlot. */
+      if (force && !summary.slots.length) {
+        const created = await this.#createForSlot(policy, 'now', summary);
         if (created) summary.created += 1;
       }
 
@@ -462,13 +477,16 @@ export class Autopilot {
    * available and no AI key is configured, no content is invented — a title is
    * never made up in code.
    */
-  async #createForSlot(policy, slot) {
+  async #createForSlot(policy, slot, summary = null) {
     const today = this.#tehranDayKey();
     const createdToday = await this.#first(
       'SELECT COUNT(*) AS n FROM content_items WHERE created_at>=?',
       [new Date(this.clock() - DAY).toISOString()]
     );
-    if (Number(createdToday?.n || 0) >= policy.max_new_per_day) return null;
+    if (Number(createdToday?.n || 0) >= policy.max_new_per_day) {
+      if (summary) summary.reason = 'به سقف محتوای روزانه رسیده‌اید (max_new_per_day).';
+      return null;
+    }
 
     const platformCsv = policy.platforms.join(',');
     const topic = await this.#first(
@@ -484,7 +502,12 @@ export class Autopilot {
       topicId = topic.id;
       try { sourceRefs = JSON.parse(topic.source_refs_json || '[]'); } catch { sourceRefs = []; }
     }
-    if (!title) return null;
+    if (!title) {
+      /* The single most common reason an empty studio stays empty: there is
+         nothing to write about. Say it instead of returning nothing. */
+      if (summary) summary.reason = 'هیچ سوژه‌ای در صف نیست. اول یک موضوع اضافه کنید (پنل → کتابخانه منابع / سوژه‌ها).';
+      return null;
+    }
 
     /* Ask worker.js for the content the same way the UI does. Nothing is faked. */
     const { response, payload } = await this.#callWorker('/api/content', {
@@ -497,7 +520,9 @@ export class Autopilot {
       }
     });
     if (!response.ok) {
-      this.logger.warn?.(`[autopilot] content creation rejected: ${payload?.error?.message || response.status}`);
+      const why = payload?.error?.message || `HTTP ${response.status}`;
+      if (summary) summary.reason = `ساخت محتوا رد شد: ${String(why).slice(0, 200)}`;
+      this.logger.warn?.(`[autopilot] content creation rejected: ${why}`);
       return null;
     }
     const contentId = payload?.data?.id;
