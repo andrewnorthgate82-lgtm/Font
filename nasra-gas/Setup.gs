@@ -248,8 +248,8 @@ var INSTALL_MARKERS = [
   ['Registration', ['menuMyReports_', 'menuMyTeachers_', 'handleRoleCb_', 'myReportText_', 'mySidesRow_']],
   ['ReportForm', ['startReport_', 'showStep_', 'platformOptions_', 'resetTypeFields_', 'handleFormMedia_']],
   ['Review', ['publishReport_', 'sendReportToReview_', 'scoreKb_', 'resendForReview_']],
-  ['Admin', ['handleAdminCb_', 'reportEditFields_', 'handleSampleCb_', 'extraChannels_', 'monthScores_', 'showCityRoles_']],
-  ['Automation', ['installPhase4', 'excelSheets_', 'dailyJobs', 'nightlyBackup', 'sideQuality_', 'sendStaffExcel_']],
+  ['Admin', ['handleAdminCb_', 'reportEditFields_', 'handleSampleCb_', 'extraChannels_', 'monthScores_', 'showCityRoles_', 'handleSpanCb_']],
+  ['Automation', ['installPhase4', 'excelSheets_', 'dailyJobs', 'nightlyBackup', 'sideQuality_', 'sendStaffExcel_', 'makeSpan_']],
   ['Setup', ['setup', 'ensureSheets_', 'setWebhook']],
   ['Tests', ['runTests']]
 ];

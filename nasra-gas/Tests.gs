@@ -470,9 +470,11 @@ function runTests() {
 
   check('۲۳) دکمه‌های فاز ۴ (ماه/شهرستان/خواهر-برادر/نقش) حداکثر ۶۴ بایت + هر نوع کلاس یک برگه', function () {
     var datas = ['A:xm:5', 'A:xs:1405:12', 'A:xa:1405:12', 'A:xc:1405:12:3', 'A:xg:1405:12:32', 'A:xf:1405:12:32:s', 'A:xf:1405:12:32:a',
-      'A:uq:99999', 'A:uQ:99999:4', 'A:uQ:99999:x', 'po:4', 'A:uf', 'A:un', 'A:uR:32', 'A:uP:32:4', 'A:uP:32:x', 'A:ux', 'A:uX:4', 'A:uX:a', 'rq:999999', 'A:rq:999999'];
+      'A:uq:99999', 'A:uQ:99999:4', 'A:uQ:99999:x', 'po:4', 'A:uf', 'A:un', 'A:uR:32', 'A:uP:32:4', 'A:uP:32:x', 'A:ux', 'A:uX:4', 'A:uX:a', 'rq:999999', 'A:rq:999999',
+      'A:sr', 'A:sa', 'A:sd:140508', 'A:se:14050701', 'A:sf:14050701:140508', 'A:sR:14050701:14050820', 'A:xf:14050701:14050820:32:s'];
     function collect(kb) { kb.inline_keyboard.forEach(function (row) { row.forEach(function (b) { datas.push(b.callback_data); }); }); }
-    collect(excelMonthPickerKb_(0)); collect(excelMonthPickerKb_(5));
+    collect(excelMonthPickerKb_(0)); collect(excelMonthPickerKb_(5)); collect(spanMenuKb_());
+    collect(ikb_(spanMonthRows_('A:sf:14050701:', null))); collect(ikb_(spanDayRows_(1405, 1, 1, 'A:sR:14050101:')));
     collect(adminCitiesKb_('A:xg:1405:12:', 'A:xc:1405:12:', 0, [], null, {}));
     datas.forEach(function (d) { ok(unescape(encodeURIComponent(d)).length <= 64, 'طول ' + d); });
     eq(XL_SHEETS.map(function (s) { return s.type; }).join(','), CFG.CLASS_TYPES.join(','), 'هر هشتگ نوع کلاس برگه خودش را دارد');
@@ -701,6 +703,33 @@ function runTests() {
     ok(txt.indexOf('• #7') !== -1 && txt.indexOf('بدون موضوع') !== -1 && txt.indexOf('⚠️ پیامش در این گروه نیست') !== -1 && txt.indexOf('📨') !== -1, 'متن یادآوری:\n' + txt);
     var row = pendingRowBtns_({ report_id: 7, review_chat_id: '', review_info_id: '' }, 'rq:7');
     eq(row.length + '|' + row[0].callback_data, '1|rq:7', 'بدون پیام در گروه ← فقط ارسال دوباره');
+  });
+
+  check('۳۲) آمار و اکسل بازه دلخواه (از تاریخ تا تاریخ، بر اساس تاریخ برگزاری)', function () {
+    eq(JSON.stringify(makeSpan_('14050701', '14050730')), '{"from":14050701,"to":14050730}', 'بازه معتبر');
+    ok(!makeSpan_(14050730, 14050701) && !makeSpan_(14051231, 14051231) && !makeSpan_(14051301, 14051302) && !makeSpan_('1405071', '14050730'), 'برعکس / روز یا ماه نامعتبر ← رد');
+    eq(JSON.stringify(parseSpanInput_('۱۴۰۵/۰۷/۰۱ تا ۱۴۰۵/۰۷/۳۰')), '{"from":14050701,"to":14050730}', 'ارقام فارسی + «تا»');
+    eq(JSON.stringify(parseSpanInput_('1405-7-30 1405.7.1')), '{"from":14050701,"to":14050730}', 'خط تیره/نقطه + ترتیب برعکس ← جابه‌جا');
+    eq(parseSpanInput_('1405/07/01').to, Math.max(14050701, todayKey_()), 'یک تاریخ ← تا امروز');
+    ok(!parseSpanInput_('سلام') && !parseSpanInput_('1405/07/40 تا 1405/08/01'), 'متن نامعتبر ← null');
+    var sp = makeSpan_(14050715, 14050725);
+    eq(spanDays_(sp) + '|' + periodName_(sp) + '|' + periodRangeText_(sp), '11|بازه دلخواه (11 روز)|از 1405/07/15 تا 1405/07/25', 'نام و متن بازه');
+    eq(spanDays_(makeSpan_(14051225, 14060105)), 5 + (isValidJalali_(1405, 12, 30) ? 6 : 5), 'بازه از روی پایان سال');
+    function R(id, y, m, d, st, city, score, type) { return { report_id: id, status: st || 'approved', city_id: city || 1, event_year: y, event_month: m, event_day: d, class_type: '#' + (type || 'حضوری'), participants: 10, score: score || '' }; }
+    var reps = [R(1, 1405, 7, 14), R(2, 1405, 7, 15), R(3, 1405, 7, 25, 'approved', 2, 4), R(4, 1405, 7, 26), R(5, 1405, 7, 20, 'rejected', 1, 2), R(6, 1405, 7, 18, 'pending'),
+      { report_id: 7, status: 'approved', city_id: 1, event_jalali: '1405/07/16', class_type: '#مجازی', participants: 5, score: 5 }];
+    eq(reps.filter(function (r) { return inPeriod_(r, sp); }).map(function (r) { return r.report_id; }).join(','), '2,3,5,6,7', 'دو سر بازه شامل + تاریخ متنی event_jalali');
+    ok(inPeriod_(R(9, 1405, 7, 21), 1405, 8) && !inPeriod_(R(9, 1405, 7, 21), 1405, 7), 'ماهانه مثل قبل (۲۱ مهر ← آبان)');
+    var cities = [{ city_id: 1, name: 'کاشان' }, { city_id: 2, name: 'اردستان' }, { city_id: 3, name: 'نایین' }];
+    var st = monthStats_(reps, cities, sp);
+    eq(st.total + '|' + st.people + '|' + st.zero.join(','), '3|25|نایین', 'آمار بازه: فقط تاییدشده‌ها');
+    var sc = monthScores_(reps, sp);
+    eq(sc[1].avg + '|' + sc[1].cover + '|' + sc[2].score, '3.5|2|0.8', 'نمره بازه (ردشده در میانگین، بخش فقط از تاییدشده)');
+    eq(excelPick_(reps, {}, sp, 0, 0, 'a').length, 3, 'اکسل بازه');
+    eq(JSON.stringify(validPeriodArgs_('14050715', '14050725')) + '|' + JSON.stringify(validPeriodArgs_('1405', '8')) + '|' + validPeriodArgs_('14050725', '14050715'),
+      '{"span":{"from":14050715,"to":14050725}}|{"jy":1405,"jm":8}|null', 'آرگومان دکمه‌های اکسل: بازه یا ماه');
+    var days = spanDayRows_(1405, 7, 10, 'A:sR:14050710:'), flat = [].concat.apply([], days);
+    eq(flat.length + '|' + flat[0].callback_data + '|' + flat[flat.length - 1].text, '21|A:sR:14050710:14050710|30', 'روزهای مهر از ۱۰ تا ۳۰');
   });
 
   if (failed.length) {

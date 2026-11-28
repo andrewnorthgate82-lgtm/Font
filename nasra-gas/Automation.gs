@@ -72,21 +72,53 @@ function reportPeriodOf_(jy, jm, jd) { // تاریخ برگزاری ← گزار
   if (!jy || jm < 1 || jm > 12 || !jd) return null;
   return jd > PERIOD_END_DAY ? nextJalaliMonth_(jy, jm) : { jy: jy, jm: jm };
 }
-function reportPeriodOfRow_(r) {
+function reportEventDate_(r) { // تاریخ برگزاری گزارش {jy,jm,jd} یا null
   var y = num_(r.event_year), m = num_(r.event_month), d = num_(r.event_day);
   if (!(y && m && d)) {
     var p = parseJalaliInput_(String(cellToStr_(r.event_jalali) || ''));
     if (p) { y = p.jy; m = p.jm; d = p.jd; }
   }
-  return reportPeriodOf_(y, m, d);
+  return (y && m && d) ? { jy: y, jm: m, jd: d } : null;
 }
-function inPeriod_(r, jy, jm) { var p = reportPeriodOfRow_(r); return !!p && p.jy === num_(jy) && p.jm === num_(jm); }
+function reportPeriodOfRow_(r) { var d = reportEventDate_(r); return d ? reportPeriodOf_(d.jy, d.jm, d.jd) : null; }
+// jy می‌تواند «بازه دلخواه» هم باشد (پایین‌تر: makeSpan_) ← همه آمارها و اکسل‌ها بدون تغییر روی بازه هم کار می‌کنند
+function inPeriod_(r, jy, jm) {
+  if (isSpan_(jy)) { var d = reportEventDate_(r), k = d ? dateKey_(d.jy, d.jm, d.jd) : 0; return k >= jy.from && k <= jy.to; }
+  var p = reportPeriodOfRow_(r); return !!p && p.jy === num_(jy) && p.jm === num_(jm);
+}
 function periodRange_(jy, jm) {
   var pv = prevJalaliMonth_(jy, jm);
   return { from: formatJalali_(pv.jy, pv.jm, PERIOD_END_DAY + 1), to: formatJalali_(jy, jm, PERIOD_END_DAY) };
 }
-function periodName_(jy, jm) { return JALALI_MONTHS[jm - 1] + ' ' + jy; }
-function periodRangeText_(jy, jm) { var r = periodRange_(jy, jm); return 'از ' + r.from + ' تا ' + r.to; }
+function periodName_(jy, jm) { return isSpan_(jy) ? 'بازه دلخواه (' + spanDays_(jy) + ' روز)' : JALALI_MONTHS[jm - 1] + ' ' + jy; }
+function periodRangeText_(jy, jm) {
+  if (isSpan_(jy)) return 'از ' + keyText_(jy.from) + ' تا ' + keyText_(jy.to);
+  var r = periodRange_(jy, jm); return 'از ' + r.from + ' تا ' + r.to;
+}
+
+// ---------- بازه دلخواه (پنل ← 📊 آمار ماهانه ← 🗓 بازه دلخواه) ----------
+// بازه = { from, to } با کلید ۸ رقمی شمسی yyyymmdd (مثل 14050701)؛ هر دو سر جزو بازه‌اند؛ ملاک = تاریخ برگزاری برنامه.
+function dateKey_(jy, jm, jd) { return num_(jy) * 10000 + num_(jm) * 100 + num_(jd); }
+function keyToJalali_(k) { k = num_(k); return { jy: Math.floor(k / 10000), jm: Math.floor(k / 100) % 100, jd: k % 100 }; }
+function keyText_(k) { var d = keyToJalali_(k); return formatJalali_(d.jy, d.jm, d.jd); }
+function validDateKey_(k) {
+  if (!/^\d{8}$/.test(String(k))) return 0;
+  var d = keyToJalali_(k);
+  return d.jy >= 1300 && d.jy <= 1500 && isValidJalali_(d.jy, d.jm, d.jd) ? num_(k) : 0;
+}
+function makeSpan_(a, b) { a = validDateKey_(a); b = validDateKey_(b); return a && b && a <= b ? { from: a, to: b } : null; }
+function isSpan_(x) { return !!x && typeof x === 'object' && x.from > 0 && x.to > 0; }
+function spanDays_(sp) { var a = keyToJalali_(sp.from), b = keyToJalali_(sp.to); return j2d_(b.jy, b.jm, b.jd) - j2d_(a.jy, a.jm, a.jd) + 1; }
+function todayKey_() { var t = todayJalali_(); return dateKey_(t.jy, t.jm, t.jd); }
+function offsetKey_(days) { var d = jalaliOffset_(days); return dateKey_(d.jy, d.jm, d.jd); }
+// متن تایپ‌شده ← بازه: «1405/07/01 تا 1405/07/30» (ارقام فارسی، - یا . هم قبول) ؛ یک تاریخ ← از آن روز تا امروز ؛ برعکس ← جابه‌جا
+function parseSpanInput_(raw) {
+  var s = toEnDigits_(String(raw || '')), re = /(\d{4})\s*[\/\-.\u066B]\s*(\d{1,2})\s*[\/\-.\u066B]\s*(\d{1,2})/g, m, keys = [];
+  while ((m = re.exec(s)) && keys.length < 3) keys.push(validDateKey_(dateKey_(m[1], m[2], m[3])));
+  if (!keys.length || keys.length > 2 || keys.indexOf(0) !== -1) return null;
+  if (keys.length === 1) keys.push(Math.max(keys[0], todayKey_()));
+  return makeSpan_(Math.min(keys[0], keys[1]), Math.max(keys[0], keys[1]));
+}
 function currentPeriod_() { var t = todayJalali_(); return reportPeriodOf_(t.jy, t.jm, t.jd); }
 
 // ---------- خواهر / برادر از روی نقش فرستنده ----------
@@ -294,7 +326,7 @@ function tgSendDocument_(chatId, blob, caption) {
   } catch (e) { log_('error', 'telegram:sendDocument', e && e.message, ''); return false; }
 }
 function safeFileName_(s) { return String(s).replace(/[\\\/:*?"<>|\r\n]+/g, ' ').replace(/\s+/g, ' ').trim(); }
-// فایل اکسل یک دوره — cityId=0 همه شهرستان‌ها (همیشه تجمیعی)؛ side: 'a' تجمیعی، 's' خواهران، 'b' برادران
+// فایل اکسل یک دوره (یا بازه دلخواه به‌جای jy) — cityId=0 همه شهرستان‌ها (همیشه تجمیعی)؛ side: 'a' تجمیعی، 's' خواهران، 'b' برادران
 function sendExcel_(chatId, jy, jm, cityId, side) {
   cityId = num_(cityId);
   side = (cityId && (side === 's' || side === 'b')) ? side : 'a';
@@ -304,7 +336,8 @@ function sendExcel_(chatId, jy, jm, cityId, side) {
   var list = excelPick_(reports, posByTg, jy, jm, cityId, side);
   var sheets = excelSheets_(list, cachedTable_('cities', 'Cities'), channelId, chat && chat.username ? chat.username : '');
   var scope = cityId ? (city ? city.name : 'شهرستان ' + cityId) + ' - ' + EXCEL_SIDE_FA[side] : 'همه شهرستان‌ها';
-  var fileName = safeFileName_('گزارش ' + periodName_(jy, jm) + ' - ' + scope) + '.xlsx';
+  var fileTag = isSpan_(jy) ? 'بازه ' + keyText_(jy.from).replace(/\//g, '-') + ' تا ' + keyText_(jy.to).replace(/\//g, '-') : periodName_(jy, jm);
+  var fileName = safeFileName_('گزارش ' + fileTag + ' - ' + scope) + '.xlsx';
   var parts = xlsxBook_(sheets);
   var blob = Utilities.zip(parts.map(function (p) { return Utilities.newBlob(p.content, 'application/xml', p.name); }), fileName);
   blob.setContentType('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

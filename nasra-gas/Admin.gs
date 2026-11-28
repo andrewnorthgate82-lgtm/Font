@@ -4,6 +4,7 @@
 // و ادمین‌ها (فقط سوپرادمین: افزودن/حذف دسترسی).
 // فاز ۳ (همراه Automation.gs): پیام همگانی و «بکاپ و کارهای خودکار» (فقط سوپرادمین) + فایل اکسل ماهانه (همه ادمین‌ها).
 // فاز ۴: آمار و اکسل بر اساس دوره ۲۱ تا ۲۰؛ اکسل پنج‌برگه‌ای برای یک شهرستان (خواهر/برادر/تجمیعی) یا همه؛ تعیین نقش کاربر.
+// آمار و اکسل «بازه دلخواه» (از تاریخ … تا تاریخ …): دکمه 🗓 بازه دلخواه در آمار ماهانه و در انتخاب ماه فایل اکسل.
 // همه کال‌بک‌های پنل با «A:» شروع می‌شوند (کوتاه‌تر از ۶۴ بایت). حالت‌های ورود متن با «adm:» در Sessions.
 
 var ADM_PER_PAGE = 8;
@@ -237,6 +238,7 @@ function handleAdminCb_(cb, s, data) {
 
   // آمار + فایل اکسل ماه
   if (p === 's') { tgAnswerCb_(cb.id); showMonthStats_(chatId, num_(a), num_(b), mid); return; }
+  if (/^(sr|sa|sd|se|sf|sR)$/.test(p)) { handleSpanCb_(cb, s, p, a, b, chatId, tg, mid); return; }
   if (/^(sx|xm|xs|xc|xg|xa|xf)$/.test(p)) { handleExcelCb_(cb, parts, chatId, mid); return; }
 
   // فاز ۳: پیام همگانی و بکاپ/خودکارها (فقط سوپرادمین)
@@ -383,6 +385,16 @@ function handleAdminText_(msg, s) {
     var res = applyReportEdit_(num_(d.rid), patch.patch);
     tgSend_(chatId, res.ok ? '✅ کپشن پست کانال به‌روز شد.' + (res.warn ? '\n⚠️ ' + res.warn : '') : '⚠️ ' + res.msg);
     showReportCard_(chatId, num_(d.rid), 0);
+    return;
+  }
+  if (st === 'adm:span') {
+    var sp = parseSpanInput_(text);
+    if (!sp) {
+      tgSend_(chatId, '⚠️ تاریخ‌ها را نفهمیدم. مثل این بنویسید:\n1405/07/01 تا 1405/07/30\n(سال چهاررقمی، ماه و روز درست)', ikb_([[btn_('🗓 بازه دلخواه', 'A:sr'), btn_('🏠 پنل اصلی', 'A:m')]]));
+      return; // حالت می‌ماند تا دوباره بنویسد
+    }
+    clearSession_(chatId, tg);
+    showSpanStats_(chatId, sp, 0);
     return;
   }
   if (st === 'adm:findUser') {
@@ -668,8 +680,9 @@ function deletePublishedReport_(rid, adminTg) {
 }
 
 // ---------- آمار ----------
+// jy می‌تواند «بازه دلخواه» باشد (Automation.gs ← makeSpan_)؛ آن‌وقت همه اعداد و نمره روی همان بازه حساب می‌شوند
 function monthStatsText_(reports, jy, jm) {
-  var st = monthStats_(reports, getCities_(), jy, jm);
+  var st = monthStats_(reports, getCities_(), jy, jm), span = isSpan_(jy);
   var pending = reports.filter(function (r) { return r.status === 'pending'; }).length;
   var sides = sideCounts_(reports, positionsByTg_(readTable_('Users')), jy, jm, 0);
   var lines = ['📊 گزارش ' + periodName_(jy, jm) + ' — تاییدشده‌ها',
@@ -680,9 +693,9 @@ function monthStatsText_(reports, jy, jm) {
     lines.push((i === 0 ? '🏆 ' : (i + 1) + ') ') + r.name + ': ⭐️ ' + r.score + ' از 5 — ' + r.count + ' گزارش (' + r.people + ' نفر)' +
       ' — ' + r.cover + ' بخش از 5' + (r.scored ? '، میانگین امتیاز ' + r.avg : '، بدون امتیاز'));
   });
-  if (st.rows.length) lines.push('', '⭐️ نمره ماه = میانگین امتیاز گزارش‌ها × (بخش‌های کارشده ÷ 5)');
+  if (st.rows.length) lines.push('', '⭐️ نمره ' + (span ? 'بازه' : 'ماه') + ' = میانگین امتیاز گزارش‌ها × (بخش‌های کارشده ÷ 5)');
   var noScore = reports.filter(function (r) { return (r.status === 'approved' || r.status === 'rejected') && inPeriod_(r, jy, jm) && !num_(r.score); }).length;
-  if (noScore) lines.push('⚠️ گزارش‌های این دوره که هنوز امتیاز نگرفته‌اند: ' + noScore + ' (در نمره حساب نمی‌شوند؛ از دکمه‌های ۱ تا ۵ زیر همان گزارش در گروه بررسی)');
+  if (noScore) lines.push('⚠️ گزارش‌های این ' + (span ? 'بازه' : 'دوره') + ' که هنوز امتیاز نگرفته‌اند: ' + noScore + ' (در نمره حساب نمی‌شوند؛ از دکمه‌های ۱ تا ۵ زیر همان گزارش در گروه بررسی)');
   if (st.zero.length) lines.push('', '⚪️ بدون گزارش (' + st.zero.length + ' شهرستان): ' + st.zero.join('، '));
   lines.push('', '⏳ در انتظار بررسی (همه ماه‌ها): ' + pending);
   return lines.join('\n');
@@ -693,7 +706,114 @@ function showMonthStats_(chatId, jy, jm, mid) {
   var text = monthStatsText_(readTable_('Reports'), jy, jm);
   var pv = prevJalaliMonth_(jy, jm), nx = nextJalaliMonth_(jy, jm), nav = [btn_('⬅️ ' + JALALI_MONTHS[pv.jm - 1], 'A:s:' + pv.jy + ':' + pv.jm)];
   if (nx.jy < t.jy || (nx.jy === t.jy && nx.jm <= t.jm)) nav.push(btn_(JALALI_MONTHS[nx.jm - 1] + ' ➡️', 'A:s:' + nx.jy + ':' + nx.jm));
-  panelOut_(chatId, mid, text, ikb_([nav, [btn_('📥 فایل اکسل', 'A:xm:0')], homeRow_()]));
+  panelOut_(chatId, mid, text, ikb_([nav, [btn_('🗓 بازه دلخواه', 'A:sr'), btn_('📥 فایل اکسل', 'A:xm:0')], homeRow_()]));
+}
+
+// ---------- آمار بازه دلخواه ----------
+// sr منو (گزینه‌های آماده + تایپ دو تاریخ) ← sa ماه شروع ← sd روز شروع ← se ماه پایان ← sf روز پایان ← sR آمار بازه
+// همه تاریخ‌ها داخل خود دکمه‌اند (کلید ۸ رقمی) ← بدون نیاز به حافظه جلسه؛ طولانی‌ترین: A:sf:14050701:140508
+var SPAN_MONTHS_BACK = 24;
+function showSpanStats_(chatId, sp, mid) {
+  var cur = currentPeriod_(), ft = sp.from + ':' + sp.to;
+  panelOut_(chatId, mid, monthStatsText_(readTable_('Reports'), sp), ikb_([[btn_('📥 فایل اکسل این بازه', 'A:xs:' + ft)],
+    [btn_('🗓 بازه دیگر', 'A:sr'), btn_('📊 آمار ماهانه', 'A:s:' + cur.jy + ':' + cur.jm)], homeRow_()]));
+}
+function spanMenuText_() {
+  return '🗓 آمار بازه دلخواه\nآمار و فایل اکسل برای هر بازه‌ای که بخواهید (بر اساس تاریخ برگزاری برنامه‌ها؛ روز اول و آخر هم حساب می‌شوند).\n\n' +
+    '• یکی از گزینه‌های آماده را بزنید،\n• یا «📅 انتخاب از تقویم»،\n• یا دو تاریخ را همین‌جا بنویسید و بفرستید؛ مثلاً:\n1405/07/01 تا 1405/07/30\n(فقط یک تاریخ = از آن روز تا امروز)';
+}
+function spanMenuKb_() {
+  var t = todayKey_(), cur = currentPeriod_(), p2 = prevJalaliMonth_(cur.jy, cur.jm), p3 = prevJalaliMonth_(p2.jy, p2.jm), r3 = periodRange_(p3.jy, p3.jm);
+  var from3 = parseJalaliInput_(r3.from), yStart = dateKey_(keyToJalali_(t).jy, 1, 1);
+  return ikb_([
+    [btn_('📆 ۷ روز اخیر', 'A:sR:' + offsetKey_(-6) + ':' + t), btn_('📆 ۳۰ روز اخیر', 'A:sR:' + offsetKey_(-29) + ':' + t)],
+    [btn_('🗓 سه دوره اخیر (' + JALALI_MONTHS[p3.jm - 1] + ' تا ' + JALALI_MONTHS[cur.jm - 1] + ')', 'A:sR:' + dateKey_(from3.jy, from3.jm, from3.jd) + ':' + t)],
+    [btn_('🗓 از اول سال ' + keyToJalali_(t).jy + ' تا امروز', 'A:sR:' + yStart + ':' + t)],
+    [btn_('📅 انتخاب از تقویم', 'A:sa')],
+    [btn_('↩️ آمار ماهانه', 'A:s:' + cur.jy + ':' + cur.jm), btn_('🏠 پنل اصلی', 'A:m')]]);
+}
+// «140508» ← {jy,jm} اگر معتبر و آینده نباشد
+function spanMonthArg_(v) {
+  if (!/^\d{6}$/.test(String(v))) return null;
+  var y = Math.floor(num_(v) / 100), m = num_(v) % 100, t = todayJalali_();
+  if (y < 1300 || m < 1 || m > 12 || y * 100 + m > t.jy * 100 + t.jm) return null;
+  return { jy: y, jm: m };
+}
+// دکمه ماه‌ها از ماه جاری به عقب تا ماه stop (یا حداکثر SPAN_MONTHS_BACK ماه)؛ سه‌تا در هر ردیف
+function spanMonthRows_(prefix, stop) {
+  var t = todayJalali_(), y = t.jy, m = t.jm, rows = [], row = [], pv;
+  for (var i = 0; i < SPAN_MONTHS_BACK; i++) {
+    row.push(btn_(JALALI_MONTHS[m - 1] + ' ' + y, prefix + (y * 100 + m)));
+    if (row.length === 3) { rows.push(row); row = []; }
+    if (stop && y === stop.jy && m === stop.jm) break;
+    pv = prevJalaliMonth_(y, m); y = pv.jy; m = pv.jm;
+  }
+  if (row.length) rows.push(row);
+  return rows;
+}
+// دکمه روزهای یک ماه، از minD تا آخر ماه (و نه بعد از امروز)؛ هفت‌تا در هر ردیف
+function spanDayRows_(jy, jm, minD, prefix) {
+  var t = todayJalali_(), max = daysInJalaliMonth_(jy, jm), rows = [], row = [];
+  if (jy === t.jy && jm === t.jm) max = Math.min(max, t.jd);
+  for (var d = Math.max(1, minD || 1); d <= max; d++) {
+    row.push(btn_(String(d), prefix + dateKey_(jy, jm, d)));
+    if (row.length === 7) { rows.push(row); row = []; }
+  }
+  if (row.length) rows.push(row);
+  return rows;
+}
+function handleSpanCb_(cb, s, p, a, b, chatId, tg, mid) {
+  var bad = function () { tgAnswerCb_(cb.id, 'تاریخ نامعتبر است؛ دوباره از «🗓 بازه دلخواه» انتخاب کنید.', true); };
+  if (p === 'sr') {
+    s.state = 'adm:span'; s.data = {}; saveSession_(chatId, tg, s); // تایپ دو تاریخ هم پذیرفته می‌شود
+    tgAnswerCb_(cb.id);
+    panelOut_(chatId, mid, spanMenuText_(), spanMenuKb_());
+    return;
+  }
+  if (p === 'sa') {
+    tgAnswerCb_(cb.id);
+    var ra = spanMonthRows_('A:sd:', null);
+    ra.push([btn_('↩️ بازگشت', 'A:sr'), btn_('🏠 پنل اصلی', 'A:m')]);
+    panelOut_(chatId, mid, '📅 شروع بازه — ماه را انتخاب کنید:', ikb_(ra));
+    return;
+  }
+  if (p === 'sd') {
+    var ms = spanMonthArg_(a);
+    if (!ms) { bad(); return; }
+    tgAnswerCb_(cb.id);
+    var rd = spanDayRows_(ms.jy, ms.jm, 1, 'A:se:');
+    rd.push([btn_('↩️ ماه دیگر', 'A:sa'), btn_('🏠 پنل اصلی', 'A:m')]);
+    panelOut_(chatId, mid, '📅 شروع بازه — ' + JALALI_MONTHS[ms.jm - 1] + ' ' + ms.jy + '\nروز را انتخاب کنید:', ikb_(rd));
+    return;
+  }
+  if (p === 'se') {
+    var f = validDateKey_(a), fj = keyToJalali_(f), tk = todayKey_();
+    if (!f || f > tk) { bad(); return; }
+    tgAnswerCb_(cb.id);
+    var re = [[btn_('✅ تا امروز (' + keyText_(tk) + ')', 'A:sR:' + f + ':' + tk)], [btn_('✅ فقط همین یک روز', 'A:sR:' + f + ':' + f)]]
+      .concat(spanMonthRows_('A:sf:' + f + ':', fj));
+    re.push([btn_('↩️ تغییر شروع', 'A:sd:' + (fj.jy * 100 + fj.jm)), btn_('🏠 پنل اصلی', 'A:m')]);
+    panelOut_(chatId, mid, '✅ شروع بازه: ' + keyText_(f) + '\n📅 پایان بازه — ماه را انتخاب کنید:', ikb_(re));
+    return;
+  }
+  if (p === 'sf') {
+    var f2 = validDateKey_(a), f2j = keyToJalali_(f2), me = spanMonthArg_(b);
+    if (!f2 || !me || me.jy * 100 + me.jm < f2j.jy * 100 + f2j.jm) { bad(); return; }
+    tgAnswerCb_(cb.id);
+    var same = me.jy === f2j.jy && me.jm === f2j.jm;
+    var rf = spanDayRows_(me.jy, me.jm, same ? f2j.jd : 1, 'A:sR:' + f2 + ':');
+    rf.push([btn_('↩️ ماه دیگر', 'A:se:' + f2), btn_('🏠 پنل اصلی', 'A:m')]);
+    panelOut_(chatId, mid, '✅ شروع بازه: ' + keyText_(f2) + '\n📅 پایان بازه — ' + JALALI_MONTHS[me.jm - 1] + ' ' + me.jy + '\nروز را انتخاب کنید:', ikb_(rf));
+    return;
+  }
+  if (p === 'sR') {
+    var sp = makeSpan_(a, b);
+    if (!sp) { bad(); return; }
+    tgAnswerCb_(cb.id);
+    showSpanStats_(chatId, sp, mid);
+    return;
+  }
+  tgAnswerCb_(cb.id);
 }
 
 // ---------- کاربران ----------
@@ -1030,7 +1150,11 @@ function showAutomation_(chatId, mid) {
 }
 
 // ---------- فایل اکسل: انتخاب ماه ← یک شهرستان / همه شهرستان‌ها ← (برای یک شهرستان) خواهر / برادر / تجمیعی ----------
-function validPeriodArgs_(y, m) { y = num_(y); m = num_(m); return (y >= 1300 && y <= 1500 && m >= 1 && m <= 12) ? { jy: y, jm: m } : null; }
+// «1405:8» ← ماه (دوره ۲۱ تا ۲۰) ؛ «14050701:14050730» ← بازه دلخواه { span }
+function validPeriodArgs_(y, m) {
+  if (/^\d{8}$/.test(String(y))) { var sp = makeSpan_(y, m); return sp ? { span: sp } : null; }
+  y = num_(y); m = num_(m); return (y >= 1300 && y <= 1500 && m >= 1 && m <= 12) ? { jy: y, jm: m } : null;
+}
 function excelMonthPickerKb_(page) {
   var cur = currentPeriod_(), y = cur.jy, m = cur.jm, i, pv, rows = [], row = [];
   page = Math.max(0, Math.min(num_(page), 5));
@@ -1044,6 +1168,7 @@ function excelMonthPickerKb_(page) {
   if (page < 5) nav.push(btn_('⬅️ ماه‌های قدیمی‌تر', 'A:xm:' + (page + 1)));
   if (page > 0) nav.push(btn_('ماه‌های جدیدتر ➡️', 'A:xm:' + (page - 1)));
   if (nav.length) rows.push(nav);
+  rows.push([btn_('🗓 بازه دلخواه', 'A:sr')]);
   rows.push([btn_('📊 آمار ماهانه', 'A:s:' + cur.jy + ':' + cur.jm), btn_('🏠 پنل اصلی', 'A:m')]);
   return ikb_(rows);
 }
@@ -1057,14 +1182,15 @@ function handleExcelCb_(cb, parts, chatId, mid) {
     return;
   }
   var per = validPeriodArgs_(parts[2], parts[3]);
-  if (!per) { tgAnswerCb_(cb.id, 'ماه نامعتبر است.', true); return; }
-  var y = per.jy, m = per.jm, ym = y + ':' + m, title = 'گزارش ' + periodName_(y, m), range = '🗓 برنامه‌های ' + periodRangeText_(y, m);
+  if (!per) { tgAnswerCb_(cb.id, 'ماه یا بازه نامعتبر است.', true); return; }
+  // y: سال دوره یا خود «بازه» (همه توابع آمار/اکسل هر دو را می‌فهمند)؛ ym: همان دو بخش داخل دکمه‌ها
+  var y = per.span || per.jy, m = per.span ? 0 : per.jm, ym = per.span ? per.span.from + ':' + per.span.to : y + ':' + m, title = 'گزارش ' + periodName_(y, m), range = '🗓 برنامه‌های ' + periodRangeText_(y, m);
   if (p === 'xs' || p === 'sx') { // sx: دکمه قدیمی «فایل اکسل همین ماه»
     tgAnswerCb_(cb.id);
     var n = excelPick_(readTable_('Reports'), null, y, m, 0, 'a').length;
     panelOut_(chatId, mid, '📥 فایل اکسل — ' + title + '\n' + range + '\nتاییدشده‌ها در همه شهرستان‌ها: ' + n + ' گزارش\n\nفایل برای کدام شهرستان؟',
       ikb_([[btn_('🏙 یک شهرستان', 'A:xc:' + ym + ':0'), btn_('🗂 همه شهرستان‌ها', 'A:xa:' + ym)],
-        [btn_('↩️ انتخاب ماه دیگر', 'A:xm:0'), btn_('🏠 پنل اصلی', 'A:m')]]));
+        [per.span ? btn_('↩️ آمار این بازه', 'A:sR:' + ym) : btn_('↩️ انتخاب ماه دیگر', 'A:xm:0'), btn_('🏠 پنل اصلی', 'A:m')]]));
     return;
   }
   if (p === 'xc') {

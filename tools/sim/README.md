@@ -11,3 +11,4 @@
     node tools/sim/scenario_users.js   # پنل ← کاربران: جستجو با شماره / ناحیه ← نقش
     node tools/sim/load_order.js       # ترتیب بارگذاری فایل‌ها (باید 0 باشد)
     node tools/sim/scenario_pending.js # یادآوری گزارش‌های در انتظار: لینک / ارسال دوباره
+    node tools/sim/scenario_span.js    # آمار و اکسل بازه دلخواه: گزینه آماده / تقویم / تایپ دو تاریخ
